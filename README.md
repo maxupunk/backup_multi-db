@@ -1,0 +1,191 @@
+# 🗄️ DB Backup Manager
+
+Um sistema **self-hosted** e **open source** para gerenciamento, agendamento e armazenamento de backups de múltiplos bancos de dados remotos.
+
+![Status](https://img.shields.io/badge/status-em%20desenvolvimento-yellow)
+![License](https://img.shields.io/badge/license-MIT-blue)
+
+## ✨ Funcionalidades
+
+- 🔗 **Gerenciamento de Conexões** - CRUD completo para conexões de banco de dados
+- 🔒 **Segurança** - Senhas criptografadas com AES-256-GCM
+- ⏰ **Agendamento Flexível** - Backups automáticos a cada 1h, 6h, 12h ou 24h
+- 📦 **Engine de Backup** - Integração com `mysqldump` e `pg_dump`
+- 🗂️ **Retenção Inteligente (GFS)** - Política Grandfather-Father-Son modificada
+- 📱 **PWA Ready** - Interface responsiva preparada para Progressive Web App
+
+## 🏗️ Stack Tecnológica
+
+| Camada             | Tecnologia                     |
+| ------------------ | ------------------------------ |
+| **Backend**        | AdonisJS v6 (TypeScript)       |
+| **Frontend**       | Vue 3 + Vuetify 3 (TypeScript) |
+| **Banco de Dados** | SQLite (via Lucid ORM)         |
+| **Build Tool**     | Vite                           |
+
+## 🗃️ Bancos de Dados Suportados
+
+- ✅ MySQL
+- ✅ MariaDB
+- ✅ PostgreSQL
+
+## 📋 Pré-requisitos
+
+- **Node.js** >= 20.x
+- **npm** >= 10.x
+- **mysqldump** (para MySQL/MariaDB) - incluído no MySQL Client
+- **pg_dump** (para PostgreSQL) - incluído no PostgreSQL Client
+
+## 🚀 Instalação
+
+### 1. Clone o repositório
+
+```bash
+git clone https://github.com/seu-usuario/db-backup-manager.git
+cd db-backup-manager
+```
+
+### 2. Instale as dependências
+
+```bash
+# Backend
+cd backend
+npm install
+
+# Frontend
+cd ../frontend
+npm install
+```
+
+### 3. Configure o ambiente
+
+```bash
+cd backend
+cp .env.example .env
+
+# Gerar chave da aplicação
+node ace generate:key
+
+# Gerar chave de criptografia para senhas dos bancos
+# Copie o resultado para DB_ENCRYPTION_KEY no .env
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
+
+### 4. Execute as migrations
+
+```bash
+cd backend
+node ace migration:run
+```
+
+### 5. Inicie o desenvolvimento
+
+```bash
+# Terminal 1 - Backend (porta 3333)
+cd backend
+npm run dev
+
+# Terminal 2 - Frontend (porta 3000)
+cd frontend
+npm run dev
+```
+
+Acesse: **http://localhost:3000**
+
+## 📁 Estrutura do Projeto
+
+```
+db-backup-manager/
+├── backend/              # AdonisJS v6 API
+│   ├── app/
+│   │   ├── controllers/
+│   │   ├── models/
+│   │   ├── services/
+│   │   └── validators/
+│   ├── config/
+│   ├── database/
+│   │   └── migrations/
+│   ├── public/           # Build do frontend (produção)
+│   └── storage/
+│       ├── backups/      # Arquivos de backup
+│       └── database/     # SQLite
+├── frontend/             # Vue 3 + Vuetify SPA
+│   └── src/
+│       ├── components/
+│       ├── pages/
+│       ├── services/
+│       └── stores/
+└── CHECKLIST.md
+```
+
+## 🔐 Política de Retenção (GFS Modificado)
+
+O sistema implementa uma política de retenção Grandfather-Father-Son modificada:
+
+| Período       | Retenção                                 |
+| ------------- | ---------------------------------------- |
+| Durante o dia | Baseado na frequência (1h, 6h, 12h, 24h) |
+| Fim do dia    | Último backup do dia                     |
+| Fim da semana | Último backup da semana                  |
+| Fim do mês    | Último backup do mês                     |
+| Fim do ano    | Último backup do ano                     |
+
+## 🛠️ Scripts Disponíveis
+
+### Backend
+
+```bash
+npm run dev        # Desenvolvimento com HMR
+npm run build      # Build para produção
+npm run typecheck  # Verificação de tipos
+npm run lint       # ESLint
+npm run test       # Testes
+```
+
+### Frontend
+
+```bash
+npm run dev        # Desenvolvimento com Vite
+npm run build      # Build para produção (output: ../backend/public)
+npm run lint       # ESLint
+```
+
+## 📖 API Endpoints
+
+### Conexões
+
+| Método | Endpoint                      | Descrição         |
+| ------ | ----------------------------- | ----------------- |
+| GET    | `/api/connections`            | Listar conexões   |
+| POST   | `/api/connections`            | Criar conexão     |
+| GET    | `/api/connections/:id`        | Obter conexão     |
+| PUT    | `/api/connections/:id`        | Atualizar conexão |
+| DELETE | `/api/connections/:id`        | Deletar conexão   |
+| POST   | `/api/connections/:id/test`   | Testar conexão    |
+| POST   | `/api/connections/:id/backup` | Iniciar backup    |
+
+### Backups
+
+| Método | Endpoint                    | Descrição       |
+| ------ | --------------------------- | --------------- |
+| GET    | `/api/backups`              | Listar backups  |
+| GET    | `/api/backups/:id/download` | Download backup |
+| DELETE | `/api/backups/:id`          | Deletar backup  |
+
+## 🤝 Contribuindo
+
+Contribuições são bem-vindas! Por favor, leia o [CONTRIBUTING.md](CONTRIBUTING.md) para detalhes.
+
+1. Fork o projeto
+2. Crie sua branch (`git checkout -b feature/nova-funcionalidade`)
+3. Commit suas mudanças (`git commit -m 'feat: adiciona nova funcionalidade'`)
+4. Push para a branch (`git push origin feature/nova-funcionalidade`)
+5. Abra um Pull Request
+
+## 📄 Licença
+
+Este projeto está sob a licença MIT. Veja o arquivo [LICENSE](LICENSE) para mais detalhes.
+
+---
+
+**Desenvolvido com ❤️ para a comunidade open source**
