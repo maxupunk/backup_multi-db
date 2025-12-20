@@ -133,14 +133,14 @@
               <v-divider class="my-6" />
 
               <!-- Actions -->
-              <div class="d-flex flex-column flex-sm-row justify-end ga-3">
-                <v-btn :block="!smAndUp" to="/connections" variant="outlined">
+              <div class="actions-bar d-flex justify-end ga-3">
+                <v-btn :block="!mdAndUp" to="/connections" variant="outlined">
                   Cancelar
                 </v-btn>
 
                 <v-btn
                   v-if="isEditing"
-                  :block="!smAndUp"
+                  :block="!mdAndUp"
                   color="info"
                   :loading="testing"
                   prepend-icon="mdi-connection"
@@ -151,7 +151,7 @@
                 </v-btn>
 
                 <v-btn
-                  :block="!smAndUp"
+                  :block="!mdAndUp"
                   color="primary"
                   :loading="saving"
                   :prepend-icon="isEditing ? 'mdi-content-save' : 'mdi-plus'"
@@ -174,12 +174,12 @@
           </v-card-title>
 
           <v-card-text>
-            <v-list density="compact">
+            <v-list class="tips-list" density="compact">
               <v-list-item>
                 <template #prepend>
                   <v-icon color="success" icon="mdi-shield-check" size="20" />
                 </template>
-                <v-list-item-title class="text-body-2">
+                <v-list-item-title class="text-body-2 tips-text">
                   Senhas são criptografadas com AES-256
                 </v-list-item-title>
               </v-list-item>
@@ -188,7 +188,7 @@
                 <template #prepend>
                   <v-icon color="info" icon="mdi-backup-restore" size="20" />
                 </template>
-                <v-list-item-title class="text-body-2">
+                <v-list-item-title class="text-body-2 tips-text">
                   Use um usuário com permissão de leitura
                 </v-list-item-title>
               </v-list-item>
@@ -197,7 +197,7 @@
                 <template #prepend>
                   <v-icon color="warning" icon="mdi-clock" size="20" />
                 </template>
-                <v-list-item-title class="text-body-2">
+                <v-list-item-title class="text-body-2 tips-text">
                   Backups são comprimidos com gzip
                 </v-list-item-title>
               </v-list-item>
@@ -252,7 +252,7 @@
   const route = useRoute()
   const router = useRouter()
   const showNotification = inject<(msg: string, type: string) => void>('showNotification')
-  const { smAndUp } = useDisplay()
+  const { mdAndUp } = useDisplay()
 
   const formRef = ref()
   const showPassword = ref(false)
@@ -409,3 +409,27 @@ function getConnectionId(): number {
     loadConnection()
   })
 </script>
+
+<style scoped>
+  .actions-bar {
+    flex-direction: column;
+  }
+
+  @media (min-width: 960px) {
+    .actions-bar {
+      flex-direction: row;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+  }
+
+  .tips-list :deep(.v-list-item) {
+    align-items: flex-start;
+  }
+
+  .tips-text {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: unset;
+  }
+</style>
