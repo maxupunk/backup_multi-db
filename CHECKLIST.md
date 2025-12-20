@@ -136,6 +136,7 @@
 
 ### Destinos de Armazenamento
 
+- [ ] Local filesystem
 - [ ] Suporte a S3/MinIO
 - [ ] Suporte a Google Cloud Storage
 - [ ] Suporte a Azure Blob Storage
@@ -315,7 +316,7 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 - ✅ **Scheduler (agendamento) - COMPLETO**
 - ✅ **Lógica de retenção GFS - COMPLETO**
 - ✅ Frontend Dashboard, Conexões e Backups
-- ⏳ PWA (manifest, service workers)
+- ✅ PWA (manifest, service workers)
 - ✅ Rate limiting
 - ⏳ Documentação completa da API
 
