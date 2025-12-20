@@ -114,7 +114,7 @@
 
 - [x] Implementar validação de inputs (VineJS)
 - [x] Configurar CORS
-- [ ] Implementar rate limiting
+- [x] Implementar rate limiting
 - [x] Sanitizar dados de entrada
 - [ ] Logs de auditoria
 
@@ -314,7 +314,7 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 - ✅ **Lógica de retenção GFS - COMPLETO**
 - ✅ Frontend Dashboard, Conexões e Backups
 - ⏳ PWA (manifest, service workers)
-- ⏳ Rate limiting
+- ✅ Rate limiting
 - ⏳ Documentação completa da API
 
 ```

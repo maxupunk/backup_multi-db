@@ -1,16 +1,8 @@
-/*
-|--------------------------------------------------------------------------
-| Routes file
-|--------------------------------------------------------------------------
-|
-| The routes file is used for defining the HTTP routes.
-|
-*/
-
 import router from '@adonisjs/core/services/router'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import app from '@adonisjs/core/services/app'
+import { middleware } from '#start/kernel'
 
 // Lazy loading dos controllers
 const ConnectionsController = () => import('#controllers/connections_controller')
@@ -23,7 +15,7 @@ const BackupsController = () => import('#controllers/backups_controller')
 */
 router
   .group(() => {
-    // Health check
+    // Health check (sem rate limiting)
     router.get('/health', async () => {
       return {
         status: 'ok',
@@ -34,8 +26,16 @@ router
 
     // ==================== Connections ====================
     router.resource('connections', ConnectionsController).apiOnly()
-    router.post('connections/:id/test', [ConnectionsController, 'test'])
-    router.post('connections/:id/backup', [ConnectionsController, 'backup'])
+
+    // Test connection - rateLimit estrito (10 req/min)
+    router
+      .post('connections/:id/test', [ConnectionsController, 'test'])
+      .use(middleware.rateLimit({ limiter: 'strict' }))
+
+    // Backup manual - rateLimit de backup (5 req/5min)
+    router
+      .post('connections/:id/backup', [ConnectionsController, 'backup'])
+      .use(middleware.rateLimit({ limiter: 'backup' }))
 
     // ==================== Backups ====================
     router.get('backups', [BackupsController, 'index'])
@@ -87,6 +87,7 @@ router
     })
   })
   .prefix('/api')
+  .use(middleware.rateLimit({ limiter: 'global' }))
 
 /*
 |--------------------------------------------------------------------------
