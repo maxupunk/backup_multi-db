@@ -355,7 +355,10 @@
         connectionId: filters.connectionId || undefined,
         status: filters.status || undefined,
       })
-      backups.value = response.data?.data ?? []
+      backups.value = (response.data?.data ?? []).map((backup) => ({
+        ...backup,
+        protected: Boolean((backup as Backup & { protected: unknown }).protected),
+      }))
     } catch (error) {
       console.error('Erro ao carregar backups:', error)
       showNotification?.('Erro ao carregar backups', 'error')
