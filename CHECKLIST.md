@@ -34,74 +34,74 @@
 
 ### 3. API REST - Conexões (CRUD)
 
-- [ ] POST /api/connections - Criar conexão
-- [ ] GET /api/connections - Listar conexões
-- [ ] GET /api/connections/:id - Obter conexão específica
-- [ ] PUT /api/connections/:id - Atualizar conexão
-- [ ] DELETE /api/connections/:id - Deletar conexão
-- [ ] POST /api/connections/:id/test - Testar conexão (Ping)
+- [x] POST /api/connections - Criar conexão
+- [x] GET /api/connections - Listar conexões
+- [x] GET /api/connections/:id - Obter conexão específica
+- [x] PUT /api/connections/:id - Atualizar conexão
+- [x] DELETE /api/connections/:id - Deletar conexão
+- [x] POST /api/connections/:id/test - Testar conexão (Ping)
 
 ### 4. API REST - Backups
 
-- [ ] POST /api/connections/:id/backup - Iniciar backup manual
-- [ ] GET /api/backups - Listar todos os backups
-- [ ] GET /api/connections/:id/backups - Listar backups de uma conexão
-- [ ] GET /api/backups/:id/download - Download do arquivo de backup
-- [ ] DELETE /api/backups/:id - Deletar backup
+- [x] POST /api/connections/:id/backup - Iniciar backup manual
+- [x] GET /api/backups - Listar todos os backups
+- [x] GET /api/connections/:id/backups - Listar backups de uma conexão
+- [x] GET /api/backups/:id/download - Download do arquivo de backup
+- [x] DELETE /api/backups/:id - Deletar backup
 
 ### 5. Engine de Backup
 
-- [ ] Criar serviço `BackupService`
-- [ ] Implementar executor para `mysqldump` (MySQL/MariaDB)
-- [ ] Implementar executor para `pg_dump` (PostgreSQL)
-- [ ] Implementar streaming de output para arquivo
-- [ ] Configurar diretório de armazenamento de backups
-- [ ] Implementar compressão (gzip)
+- [x] Criar serviço `BackupService`
+- [x] Implementar executor para `mysqldump` (MySQL/MariaDB)
+- [x] Implementar executor para `pg_dump` (PostgreSQL)
+- [x] Implementar streaming de output para arquivo
+- [x] Configurar diretório de armazenamento de backups
+- [x] Implementar compressão (gzip)
 
 ### 6. Scheduler (Agendamento)
 
-- [ ] Configurar AdonisJS Scheduler
-- [ ] Implementar agendamento dinâmico por conexão (1h, 6h, 12h, 24h)
-- [ ] Criar jobs de backup agendados
-- [ ] Implementar logs de execução
+- [x] Configurar AdonisJS Scheduler
+- [x] Implementar agendamento dinâmico por conexão (1h, 6h, 12h, 24h)
+- [x] Criar jobs de backup agendados
+- [x] Implementar logs de execução
 
 ### 7. Lógica de Retenção (GFS Modificado)
 
-- [ ] Criar serviço `RetentionService`
-- [ ] Implementar lógica de pruning:
-  - [ ] Durante o dia: manter baseado na frequência
-  - [ ] Fim do dia: manter último backup do dia
-  - [ ] Fim da semana: manter último backup da semana
-  - [ ] Fim do mês: manter último backup do mês
-  - [ ] Fim do ano: manter último backup do ano
-- [ ] Criar job de limpeza automática
-- [ ] Implementar marcação de backups protegidos
+- [x] Criar serviço `RetentionService` (completo)
+- [x] Implementar lógica de pruning:
+  - [x] Durante o dia: manter baseado na frequência
+  - [x] Fim do dia: manter último backup do dia
+  - [x] Fim da semana: manter último backup da semana
+  - [x] Fim do mês: manter último backup do mês
+  - [x] Fim do ano: manter último backup do ano
+- [x] Criar job de limpeza automática
+- [x] Implementar marcação de backups protegidos
 
 ### 8. Frontend - Dashboard
 
-- [ ] Criar layout base (Vuetify)
-- [ ] Implementar tema dark/light
-- [ ] Criar página Dashboard
-  - [ ] Card de resumo (total conexões, backups hoje, espaço usado)
-  - [ ] Lista de conexões com status do último backup
-  - [ ] Indicadores visuais (sucesso/erro/pendente)
+- [x] Criar layout base (Vuetify)
+- [x] Implementar tema dark/light
+- [x] Criar página Dashboard
+  - [x] Card de resumo (total conexões, backups hoje, espaço usado)
+  - [x] Lista de conexões com status do último backup
+  - [x] Indicadores visuais (sucesso/erro/pendente)
 - [ ] Implementar auto-refresh
 
 ### 9. Frontend - Gerenciamento de Conexões
 
-- [ ] Criar página de listagem de conexões
-- [ ] Criar formulário de criação/edição de conexão
-- [ ] Implementar validação de formulário
-- [ ] Implementar botão de teste de conexão
-- [ ] Criar modal de confirmação para exclusão
+- [x] Criar página de listagem de conexões
+- [x] Criar formulário de criação/edição de conexão
+- [x] Implementar validação de formulário
+- [x] Implementar botão de teste de conexão
+- [x] Criar modal de confirmação para exclusão
 
 ### 10. Frontend - Histórico de Backups
 
-- [ ] Criar página de histórico de backups
-- [ ] Implementar filtros (por conexão, por status, por data)
-- [ ] Implementar paginação
-- [ ] Adicionar botão de download
-- [ ] Mostrar tempo de execução e tamanho do arquivo
+- [x] Criar página de histórico de backups
+- [x] Implementar filtros (por conexão, por status, por data)
+- [x] Implementar paginação
+- [x] Adicionar botão de download
+- [x] Mostrar tempo de execução e tamanho do arquivo
 
 ### 11. PWA (Progressive Web App)
 
@@ -112,15 +112,15 @@
 
 ### 12. Segurança e Validação
 
-- [ ] Implementar validação de inputs (VineJS)
-- [ ] Configurar CORS
+- [x] Implementar validação de inputs (VineJS)
+- [x] Configurar CORS
 - [ ] Implementar rate limiting
-- [ ] Sanitizar dados de entrada
+- [x] Sanitizar dados de entrada
 - [ ] Logs de auditoria
 
 ### 13. Documentação
 
-- [ ] Criar README.md completo
+- [x] Criar README.md completo
 - [ ] Documentar API (OpenAPI/Swagger)
 - [ ] Guia de instalação
 - [ ] Guia de contribuição (CONTRIBUTING.md)
@@ -176,7 +176,9 @@
 backup_multi-db/
 ├── backend/                     # AdonisJS v6
 │   ├── app/
-│   │   ├── controllers/         # (a criar)
+│   │   ├── controllers/
+│   │   │   ├── backups_controller.ts    ✅ Criado
+│   │   │   └── connections_controller.ts ✅ Criado
 │   │   ├── exceptions/
 │   │   ├── middleware/
 │   │   ├── models/
@@ -184,14 +186,16 @@ backup_multi-db/
 │   │   │   ├── connection.ts    ✅ Criado
 │   │   │   └── user.ts          (padrão AdonisJS)
 │   │   ├── services/
-│   │   │   └── encryption_service.ts  ✅ Criado
-│   │   └── validators/          # (a criar)
+│   │   │   ├── backup_service.ts       ✅ Criado
+│   │   │   └── encryption_service.ts   ✅ Criado
+│   │   └── validators/
+│   │       └── connection_validator.ts ✅ Criado
 │   ├── config/
 │   │   ├── app.ts
 │   │   ├── auth.ts
 │   │   ├── bodyparser.ts
 │   │   ├── cors.ts
-│   │   ├── database.ts          ✅ Configurado SQLite
+│   │   ├── database.ts          ✅ SQLite configurado
 │   │   ├── hash.ts
 │   │   ├── logger.ts
 │   │   └── static.ts            ✅ Configurado
@@ -199,7 +203,10 @@ backup_multi-db/
 │   │   └── migrations/
 │   │       ├── 1_create_connections_table.ts  ✅ Criado
 │   │       └── 2_create_backups_table.ts      ✅ Criado
-│   ├── public/                  # Vue build output (produção)
+│   ├── public/                  # Vue build output ✅
+│   │   ├── assets/
+│   │   ├── favicon.ico
+│   │   └── index.html
 │   ├── start/
 │   │   ├── env.ts               ✅ Configurado
 │   │   ├── kernel.ts
@@ -212,15 +219,29 @@ backup_multi-db/
 ├── frontend/                    # Vue 3 + Vuetify
 │   ├── src/
 │   │   ├── components/
+│   │   ├── layouts/
+│   │   │   └── default.vue      ✅ Navigation drawer + theme
 │   │   ├── pages/
-│   │   ├── services/            # (a criar)
-│   │   ├── stores/              # (a criar)
+│   │   │   ├── index.vue        ✅ Dashboard
+│   │   │   ├── connections/
+│   │   │   │   ├── index.vue    ✅ Listagem
+│   │   │   │   └── [id].vue     ✅ Form create/edit
+│   │   │   ├── backups/
+│   │   │   │   └── index.vue    ✅ Histórico
+│   │   │   └── settings/
+│   │   │       └── index.vue    ✅ Configurações
+│   │   ├── services/
+│   │   │   └── api.ts           ✅ Cliente HTTP
+│   │   ├── types/
+│   │   │   └── api.ts           ✅ Tipos TypeScript
+│   │   ├── stores/
 │   │   └── plugins/
+│   │       └── vuetify.ts       ✅ Tema customizado
 │   ├── public/
 │   ├── vite.config.mts          ✅ Proxy + build configurado
 │   └── package.json
 ├── CHECKLIST.md                 ✅ Este arquivo
-├── README.md                    # (a criar)
+├── README.md                    ✅ Documentação
 └── LICENSE                      # (a criar)
 ```
 
@@ -229,7 +250,7 @@ backup_multi-db/
 ```bash
 # Backend
 cd backend
-npm run dev          # Iniciar em modo desenvolvimento
+npm run dev          # Iniciar em modo desenvolvimento (porta 3333)
 npm run build        # Build para produção
 npm run typecheck    # Verificar tipos TypeScript
 node ace migration:run        # Executar migrations
@@ -239,11 +260,17 @@ node ace migration:rollback   # Reverter última migration
 cd frontend
 npm run dev          # Iniciar em modo desenvolvimento (porta 3000)
 npm run build        # Build para produção (output: ../backend/public)
+npm run type-check   # Verificar tipos TypeScript
 npm run lint         # Verificar lint
 
 # Desenvolvimento Simultâneo
 # Terminal 1: cd backend && npm run dev     (porta 3333)
 # Terminal 2: cd frontend && npm run dev    (porta 3000 - com proxy para API)
+
+# Produção (após build do frontend)
+cd backend
+npm run dev          # ou: node bin/server.js
+# Acesse: http://localhost:3333
 ```
 
 ### Variáveis de Ambiente (.env)
@@ -256,7 +283,40 @@ node ace generate:key
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
 
+### Endpoints da API
+
+| Método | Endpoint                      | Descrição                 |
+| ------ | ----------------------------- | ------------------------- |
+| GET    | `/api/health`                 | Health check              |
+| GET    | `/api/stats`                  | Estatísticas do dashboard |
+| GET    | `/api/connections`            | Listar conexões           |
+| POST   | `/api/connections`            | Criar conexão             |
+| GET    | `/api/connections/:id`        | Obter conexão             |
+| PUT    | `/api/connections/:id`        | Atualizar conexão         |
+| DELETE | `/api/connections/:id`        | Remover conexão           |
+| POST   | `/api/connections/:id/test`   | Testar conexão            |
+| POST   | `/api/connections/:id/backup` | Executar backup           |
+| GET    | `/api/backups`                | Listar backups            |
+| GET    | `/api/backups/:id`            | Detalhes do backup        |
+| GET    | `/api/backups/:id/download`   | Download do backup        |
+| DELETE | `/api/backups/:id`            | Remover backup            |
+
 ---
 
-**Última atualização:** 2025-12-19 18:55
-**Progresso:** Fase 1 - Seção 1 e 2 concluídas ✅
+**Última atualização:** 2025-12-20 12:23
+**Progresso:** Fase 1 - ~85% concluída ✅
+
+- ✅ Estrutura do projeto
+- ✅ Banco de dados e migrations
+- ✅ API REST completa
+- ✅ Engine de backup
+- ✅ **Scheduler (agendamento) - COMPLETO**
+- ✅ **Lógica de retenção GFS - COMPLETO**
+- ✅ Frontend Dashboard, Conexões e Backups
+- ⏳ PWA (manifest, service workers)
+- ⏳ Rate limiting
+- ⏳ Documentação completa da API
+
+```
+
+```

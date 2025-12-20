@@ -1,0 +1,345 @@
+<template>
+    <div>
+        <!-- Header -->
+        <div class="d-flex align-center mb-6">
+            <v-btn icon="mdi-arrow-left" variant="text" class="mr-4" to="/connections" />
+            <div>
+                <h1 class="text-h4 font-weight-bold mb-1">
+                    {{ isEditing ? 'Editar Conexão' : 'Nova Conexão' }}
+                </h1>
+                <p class="text-body-2 text-medium-emphasis">
+                    {{ isEditing ? 'Atualize os dados da conexão' : 'Configure uma nova conexão de banco de dados' }}
+                </p>
+            </div>
+        </div>
+
+        <v-row>
+            <v-col cols="12" md="8">
+                <v-card>
+                    <v-card-text>
+                        <v-form ref="formRef" @submit.prevent="submit">
+                            <!-- Basic Info -->
+                            <h3 class="text-h6 mb-4">Informações Básicas</h3>
+
+                            <v-row>
+                                <v-col cols="12" sm="8">
+                                    <v-text-field v-model="form.name" label="Nome da Conexão *"
+                                        placeholder="Ex: Produção MySQL" prepend-inner-icon="mdi-label"
+                                        :rules="[rules.required]" />
+                                </v-col>
+
+                                <v-col cols="12" sm="4">
+                                    <v-select v-model="form.type" label="Tipo de Banco *" :items="databaseTypes"
+                                        prepend-inner-icon="mdi-database" :rules="[rules.required]"
+                                        @update:model-value="onTypeChange" />
+                                </v-col>
+                            </v-row>
+
+                            <v-divider class="my-6" />
+
+                            <!-- Connection Details -->
+                            <h3 class="text-h6 mb-4">Dados de Conexão</h3>
+
+                            <v-row>
+                                <v-col cols="12" sm="8">
+                                    <v-text-field v-model="form.host" label="Host *"
+                                        placeholder="localhost ou IP do servidor" prepend-inner-icon="mdi-server"
+                                        :rules="[rules.required]" />
+                                </v-col>
+
+                                <v-col cols="12" sm="4">
+                                    <v-text-field v-model.number="form.port" label="Porta *" type="number"
+                                        prepend-inner-icon="mdi-ethernet" :rules="[rules.required, rules.port]" />
+                                </v-col>
+
+                                <v-col cols="12">
+                                    <v-text-field v-model="form.database" label="Nome do Banco de Dados *"
+                                        placeholder="Nome do database a ser backupeado"
+                                        prepend-inner-icon="mdi-database" :rules="[rules.required]" />
+                                </v-col>
+
+                                <v-col cols="12" sm="6">
+                                    <v-text-field v-model="form.username" label="Usuário *"
+                                        prepend-inner-icon="mdi-account" :rules="[rules.required]" />
+                                </v-col>
+
+                                <v-col cols="12" sm="6">
+                                    <v-text-field v-model="form.password"
+                                        :label="isEditing ? 'Nova Senha (deixe vazio para manter)' : 'Senha *'"
+                                        :type="showPassword ? 'text' : 'password'" prepend-inner-icon="mdi-lock"
+                                        :append-inner-icon="showPassword ? 'mdi-eye-off' : 'mdi-eye'"
+                                        :rules="isEditing ? [] : [rules.required]"
+                                        @click:append-inner="showPassword = !showPassword" />
+                                </v-col>
+                            </v-row>
+
+                            <v-divider class="my-6" />
+
+                            <!-- Scheduling -->
+                            <h3 class="text-h6 mb-4">Agendamento</h3>
+
+                            <v-row>
+                                <v-col cols="12" sm="6">
+                                    <v-switch v-model="form.scheduleEnabled" label="Habilitar backup automático"
+                                        color="primary" hide-details />
+                                </v-col>
+
+                                <v-col cols="12" sm="6">
+                                    <v-select v-model="form.scheduleFrequency" label="Frequência"
+                                        :items="scheduleFrequencies" :disabled="!form.scheduleEnabled"
+                                        prepend-inner-icon="mdi-clock-outline" clearable />
+                                </v-col>
+                            </v-row>
+
+                            <v-divider class="my-6" />
+
+                            <!-- Actions -->
+                            <div class="d-flex justify-end gap-3">
+                                <v-btn variant="outlined" to="/connections">
+                                    Cancelar
+                                </v-btn>
+
+                                <v-btn v-if="isEditing" variant="tonal" color="info" prepend-icon="mdi-connection"
+                                    :loading="testing" @click="testConnection">
+                                    Testar Conexão
+                                </v-btn>
+
+                                <v-btn type="submit" color="primary" :loading="saving"
+                                    :prepend-icon="isEditing ? 'mdi-content-save' : 'mdi-plus'">
+                                    {{ isEditing ? 'Salvar Alterações' : 'Criar Conexão' }}
+                                </v-btn>
+                            </div>
+                        </v-form>
+                    </v-card-text>
+                </v-card>
+            </v-col>
+
+            <!-- Sidebar Info -->
+            <v-col cols="12" md="4">
+                <v-card class="mb-4">
+                    <v-card-title class="d-flex align-center">
+                        <v-icon icon="mdi-information" class="mr-2" color="info" />
+                        Dicas
+                    </v-card-title>
+
+                    <v-card-text>
+                        <v-list density="compact">
+                            <v-list-item>
+                                <template #prepend>
+                                    <v-icon icon="mdi-shield-check" size="20" color="success" />
+                                </template>
+                                <v-list-item-title class="text-body-2">
+                                    Senhas são criptografadas com AES-256
+                                </v-list-item-title>
+                            </v-list-item>
+
+                            <v-list-item>
+                                <template #prepend>
+                                    <v-icon icon="mdi-backup-restore" size="20" color="info" />
+                                </template>
+                                <v-list-item-title class="text-body-2">
+                                    Use um usuário com permissão de leitura
+                                </v-list-item-title>
+                            </v-list-item>
+
+                            <v-list-item>
+                                <template #prepend>
+                                    <v-icon icon="mdi-clock" size="20" color="warning" />
+                                </template>
+                                <v-list-item-title class="text-body-2">
+                                    Backups são comprimidos com gzip
+                                </v-list-item-title>
+                            </v-list-item>
+                        </v-list>
+                    </v-card-text>
+                </v-card>
+
+                <!-- Port reference -->
+                <v-card>
+                    <v-card-title class="d-flex align-center">
+                        <v-icon icon="mdi-ethernet" class="mr-2" />
+                        Portas Padrão
+                    </v-card-title>
+
+                    <v-card-text>
+                        <v-list density="compact">
+                            <v-list-item>
+                                <template #prepend>
+                                    <v-chip size="small" color="orange" label class="mr-2">MySQL</v-chip>
+                                </template>
+                                <v-list-item-title>3306</v-list-item-title>
+                            </v-list-item>
+
+                            <v-list-item>
+                                <template #prepend>
+                                    <v-chip size="small" color="teal" label class="mr-2">MariaDB</v-chip>
+                                </template>
+                                <v-list-item-title>3306</v-list-item-title>
+                            </v-list-item>
+
+                            <v-list-item>
+                                <template #prepend>
+                                    <v-chip size="small" color="blue" label class="mr-2">PostgreSQL</v-chip>
+                                </template>
+                                <v-list-item-title>5432</v-list-item-title>
+                            </v-list-item>
+                        </v-list>
+                    </v-card-text>
+                </v-card>
+            </v-col>
+        </v-row>
+    </div>
+</template>
+
+<script lang="ts" setup>
+import { ref, reactive, computed, onMounted, inject } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { connectionsApi } from '@/services/api'
+import type { DatabaseType, ScheduleFrequency } from '@/types/api'
+
+const route = useRoute()
+const router = useRouter()
+const showNotification = inject<(msg: string, type: string) => void>('showNotification')
+
+const formRef = ref()
+const showPassword = ref(false)
+const saving = ref(false)
+const testing = ref(false)
+const loading = ref(false)
+
+const isEditing = computed(() => !!(route.params as { id?: string }).id)
+
+// Helper para obter o ID da conexão de forma segura
+function getConnectionId(): number {
+    const params = route.params as { id?: string }
+    return Number(params.id)
+}
+
+const form = reactive({
+    name: '',
+    type: 'mysql' as DatabaseType,
+    host: 'localhost',
+    port: 3306,
+    database: '',
+    username: '',
+    password: '',
+    scheduleEnabled: false,
+    scheduleFrequency: null as ScheduleFrequency | null,
+})
+
+const databaseTypes = [
+    { title: 'MySQL', value: 'mysql' },
+    { title: 'MariaDB', value: 'mariadb' },
+    { title: 'PostgreSQL', value: 'postgresql' },
+]
+
+const scheduleFrequencies = [
+    { title: 'A cada 1 hora', value: '1h' },
+    { title: 'A cada 6 horas', value: '6h' },
+    { title: 'A cada 12 horas', value: '12h' },
+    { title: 'A cada 24 horas', value: '24h' },
+]
+
+const defaultPorts: Record<DatabaseType, number> = {
+    mysql: 3306,
+    mariadb: 3306,
+    postgresql: 5432,
+}
+
+const rules = {
+    required: (v: string) => !!v || 'Campo obrigatório',
+    port: (v: number) => (v > 0 && v <= 65535) || 'Porta inválida',
+}
+
+function onTypeChange(type: DatabaseType) {
+    form.port = defaultPorts[type]
+}
+
+async function loadConnection() {
+    if (!isEditing.value) return
+
+    loading.value = true
+    try {
+        const response = await connectionsApi.get(getConnectionId())
+        const connection = response.data
+        if (connection) {
+            form.name = connection.name
+            form.type = connection.type
+            form.host = connection.host
+            form.port = connection.port
+            form.database = connection.database
+            form.username = connection.username
+            form.scheduleEnabled = connection.scheduleEnabled
+            form.scheduleFrequency = connection.scheduleFrequency
+        }
+    } catch (error) {
+        showNotification?.('Erro ao carregar conexão', 'error')
+        router.push('/connections')
+    } finally {
+        loading.value = false
+    }
+}
+
+async function submit() {
+    const { valid } = await formRef.value.validate()
+    if (!valid) return
+
+    saving.value = true
+    try {
+        if (isEditing.value) {
+            const payload: Record<string, unknown> = {
+                name: form.name,
+                type: form.type,
+                host: form.host,
+                port: form.port,
+                database: form.database,
+                username: form.username,
+                scheduleEnabled: form.scheduleEnabled,
+                scheduleFrequency: form.scheduleFrequency,
+            }
+
+            // Apenas enviar senha se foi alterada
+            if (form.password) {
+                payload.password = form.password
+            }
+
+            await connectionsApi.update(getConnectionId(), payload)
+            showNotification?.('Conexão atualizada com sucesso', 'success')
+        } else {
+            await connectionsApi.create({
+                ...form,
+                scheduleFrequency: form.scheduleFrequency || undefined,
+            })
+            showNotification?.('Conexão criada com sucesso', 'success')
+        }
+
+        router.push('/connections')
+    } catch (error) {
+        showNotification?.(
+            isEditing.value ? 'Erro ao atualizar conexão' : 'Erro ao criar conexão',
+            'error'
+        )
+    } finally {
+        saving.value = false
+    }
+}
+
+async function testConnection() {
+    testing.value = true
+    try {
+        const response = await connectionsApi.test(getConnectionId())
+        showNotification?.(
+            `Conexão bem-sucedida! Latência: ${response.data?.latencyMs}ms`,
+            'success'
+        )
+    } catch (error) {
+        showNotification?.('Falha ao testar conexão', 'error')
+    } finally {
+        testing.value = false
+    }
+}
+
+onMounted(() => {
+    loadConnection()
+})
+</script>

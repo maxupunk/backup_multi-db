@@ -12,6 +12,10 @@ import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import app from '@adonisjs/core/services/app'
 
+// Lazy loading dos controllers
+const ConnectionsController = () => import('#controllers/connections_controller')
+const BackupsController = () => import('#controllers/backups_controller')
+
 /*
 |--------------------------------------------------------------------------
 | API Routes
@@ -28,16 +32,59 @@ router
       }
     })
 
-    // TODO: Connections CRUD
-    // router.resource('connections', ConnectionsController).apiOnly()
-    // router.post('connections/:id/test', [ConnectionsController, 'test'])
-    // router.post('connections/:id/backup', [ConnectionsController, 'backup'])
+    // ==================== Connections ====================
+    router.resource('connections', ConnectionsController).apiOnly()
+    router.post('connections/:id/test', [ConnectionsController, 'test'])
+    router.post('connections/:id/backup', [ConnectionsController, 'backup'])
 
-    // TODO: Backups
-    // router.get('backups', [BackupsController, 'index'])
-    // router.get('connections/:connectionId/backups', [BackupsController, 'byConnection'])
-    // router.get('backups/:id/download', [BackupsController, 'download'])
-    // router.delete('backups/:id', [BackupsController, 'destroy'])
+    // ==================== Backups ====================
+    router.get('backups', [BackupsController, 'index'])
+    router.get('connections/:connectionId/backups', [BackupsController, 'byConnection'])
+    router.get('backups/:id', [BackupsController, 'show'])
+    router.get('backups/:id/download', [BackupsController, 'download'])
+    router.delete('backups/:id', [BackupsController, 'destroy'])
+
+    // ==================== Dashboard Stats ====================
+    router.get('/stats', async () => {
+      const Connection = (await import('#models/connection')).default
+      const Backup = (await import('#models/backup')).default
+      const { DateTime } = await import('luxon')
+
+      const today = DateTime.now().startOf('day')
+
+      const [totalConnections, activeConnections, totalBackups, backupsToday, recentBackups] =
+        await Promise.all([
+          Connection.query().count('* as total').first(),
+          Connection.query().where('status', 'active').count('* as total').first(),
+          Backup.query().count('* as total').first(),
+          Backup.query().where('createdAt', '>=', today.toSQL()).count('* as total').first(),
+          Backup.query()
+            .preload('connection')
+            .orderBy('createdAt', 'desc')
+            .limit(5),
+        ])
+
+      return {
+        success: true,
+        data: {
+          connections: {
+            total: Number(totalConnections?.$extras.total ?? 0),
+            active: Number(activeConnections?.$extras.total ?? 0),
+          },
+          backups: {
+            total: Number(totalBackups?.$extras.total ?? 0),
+            today: Number(backupsToday?.$extras.total ?? 0),
+          },
+          recentBackups: recentBackups.map((backup) => ({
+            id: backup.id,
+            connectionName: backup.connection?.name ?? 'N/A',
+            status: backup.status,
+            fileSize: backup.fileSize,
+            createdAt: backup.createdAt,
+          })),
+        },
+      }
+    })
   })
   .prefix('/api')
 
