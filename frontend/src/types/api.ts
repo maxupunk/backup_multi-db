@@ -224,17 +224,17 @@ export interface BackupResult {
 /**
  * Ações auditáveis no sistema
  */
-export type AuditAction =
-  | 'connection.created'
-  | 'connection.updated'
-  | 'connection.deleted'
-  | 'connection.tested'
-  | 'backup.started'
-  | 'backup.completed'
-  | 'backup.failed'
-  | 'backup.deleted'
-  | 'backup.downloaded'
-  | 'settings.updated'
+export type AuditAction
+  = | 'connection.created'
+    | 'connection.updated'
+    | 'connection.deleted'
+    | 'connection.tested'
+    | 'backup.started'
+    | 'backup.completed'
+    | 'backup.failed'
+    | 'backup.deleted'
+    | 'backup.downloaded'
+    | 'settings.updated'
 
 /**
  * Tipos de entidades auditáveis

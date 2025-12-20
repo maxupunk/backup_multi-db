@@ -4,10 +4,10 @@
 
 import type {
   ApiResponse,
-  AuditLog,
-  AuditStats,
   AuditAction,
   AuditEntityType,
+  AuditLog,
+  AuditStats,
   AuditStatus,
   Backup,
   BackupResult,
@@ -15,12 +15,12 @@ import type {
   ConnectionTestResult,
   CreateConnectionPayload,
   DashboardStats,
-  PaginatedResponse,
-  UpdateConnectionPayload,
   LoginPayload,
+  PaginatedResponse,
   RegisterPayload,
+  UpdateConnectionPayload,
 } from '@/types/api'
-import type { AuthResponse } from '@/types/auth'
+import type { AuthResponse, User } from '@/types/auth'
 
 const API_BASE = '/api'
 
@@ -28,10 +28,10 @@ const API_BASE = '/api'
  * Classe de erro customizada para erros da API
  */
 export class ApiError extends Error {
-  constructor(
+  constructor (
     message: string,
     public statusCode: number,
-    public data?: unknown
+    public data?: unknown,
   ) {
     super(message)
     this.name = 'ApiError'
@@ -41,19 +41,21 @@ export class ApiError extends Error {
 /**
  * Função auxiliar para fazer requests
  */
-async function request<T>(
+async function request<T> (
   endpoint: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
 ): Promise<T> {
   const url = `${API_BASE}${endpoint}`
 
   const token = localStorage.getItem('token')
-  const authHeader = token ? { Authorization: `Bearer ${token}` } : {}
+  const authHeaderValue = token ? `Bearer ${token}` : null
 
-  const defaultHeaders: HeadersInit = {
+  const defaultHeaders: Record<string, string> = {
     'Content-Type': 'application/json',
-    Accept: 'application/json',
-    ...authHeader,
+    'Accept': 'application/json',
+  }
+  if (authHeaderValue) {
+    defaultHeaders.Authorization = authHeaderValue
   }
 
   const response = await fetch(url, {
@@ -70,7 +72,7 @@ async function request<T>(
     throw new ApiError(
       data.message || data.error || 'Erro na requisição',
       response.status,
-      data
+      data,
     )
   }
 
@@ -84,7 +86,7 @@ export const connectionsApi = {
   /**
    * Lista todas as conexões
    */
-  async list(params?: {
+  async list (params?: {
     page?: number
     limit?: number
     type?: string
@@ -93,30 +95,40 @@ export const connectionsApi = {
   }): Promise<PaginatedResponse<Connection>> {
     const searchParams = new URLSearchParams()
 
-    if (params?.page) searchParams.set('page', params.page.toString())
-    if (params?.limit) searchParams.set('limit', params.limit.toString())
-    if (params?.type) searchParams.set('type', params.type)
-    if (params?.status) searchParams.set('status', params.status)
-    if (params?.search) searchParams.set('search', params.search)
+    if (params?.page) {
+      searchParams.set('page', params.page.toString())
+    }
+    if (params?.limit) {
+      searchParams.set('limit', params.limit.toString())
+    }
+    if (params?.type) {
+      searchParams.set('type', params.type)
+    }
+    if (params?.status) {
+      searchParams.set('status', params.status)
+    }
+    if (params?.search) {
+      searchParams.set('search', params.search)
+    }
 
     const query = searchParams.toString()
     return request<PaginatedResponse<Connection>>(
-      `/connections${query ? `?${query}` : ''}`
+      `/connections${query ? `?${query}` : ''}`,
     )
   },
 
   /**
    * Obtém uma conexão específica
    */
-  async get(id: number): Promise<ApiResponse<Connection>> {
+  async get (id: number): Promise<ApiResponse<Connection>> {
     return request<ApiResponse<Connection>>(`/connections/${id}`)
   },
 
   /**
    * Cria uma nova conexão
    */
-  async create(
-    payload: CreateConnectionPayload
+  async create (
+    payload: CreateConnectionPayload,
   ): Promise<ApiResponse<Connection>> {
     return request<ApiResponse<Connection>>('/connections', {
       method: 'POST',
@@ -127,9 +139,9 @@ export const connectionsApi = {
   /**
    * Atualiza uma conexão
    */
-  async update(
+  async update (
     id: number,
-    payload: UpdateConnectionPayload
+    payload: UpdateConnectionPayload,
   ): Promise<ApiResponse<Connection>> {
     return request<ApiResponse<Connection>>(`/connections/${id}`, {
       method: 'PUT',
@@ -140,7 +152,7 @@ export const connectionsApi = {
   /**
    * Remove uma conexão
    */
-  async delete(id: number): Promise<ApiResponse> {
+  async delete (id: number): Promise<ApiResponse> {
     return request<ApiResponse>(`/connections/${id}`, {
       method: 'DELETE',
     })
@@ -149,19 +161,19 @@ export const connectionsApi = {
   /**
    * Testa a conexão
    */
-  async test(id: number): Promise<ApiResponse<ConnectionTestResult>> {
+  async test (id: number): Promise<ApiResponse<ConnectionTestResult>> {
     return request<ApiResponse<ConnectionTestResult>>(
       `/connections/${id}/test`,
       {
         method: 'POST',
-      }
+      },
     )
   },
 
   /**
    * Inicia um backup manual
    */
-  async backup(id: number): Promise<ApiResponse<BackupResult>> {
+  async backup (id: number): Promise<ApiResponse<BackupResult>> {
     return request<ApiResponse<BackupResult>>(`/connections/${id}/backup`, {
       method: 'POST',
     })
@@ -175,7 +187,7 @@ export const backupsApi = {
   /**
    * Lista todos os backups
    */
-  async list(params?: {
+  async list (params?: {
     page?: number
     limit?: number
     status?: string
@@ -183,29 +195,36 @@ export const backupsApi = {
   }): Promise<PaginatedResponse<Backup>> {
     const searchParams = new URLSearchParams()
 
-    if (params?.page) searchParams.set('page', params.page.toString())
-    if (params?.limit) searchParams.set('limit', params.limit.toString())
-    if (params?.status) searchParams.set('status', params.status)
-    if (params?.connectionId)
+    if (params?.page) {
+      searchParams.set('page', params.page.toString())
+    }
+    if (params?.limit) {
+      searchParams.set('limit', params.limit.toString())
+    }
+    if (params?.status) {
+      searchParams.set('status', params.status)
+    }
+    if (params?.connectionId) {
       searchParams.set('connectionId', params.connectionId.toString())
+    }
 
     const query = searchParams.toString()
     return request<PaginatedResponse<Backup>>(
-      `/backups${query ? `?${query}` : ''}`
+      `/backups${query ? `?${query}` : ''}`,
     )
   },
 
   /**
    * Obtém um backup específico
    */
-  async get(id: number): Promise<ApiResponse<Backup>> {
+  async get (id: number): Promise<ApiResponse<Backup>> {
     return request<ApiResponse<Backup>>(`/backups/${id}`)
   },
 
   /**
    * Remove um backup
    */
-  async delete(id: number): Promise<ApiResponse> {
+  async delete (id: number): Promise<ApiResponse> {
     return request<ApiResponse>(`/backups/${id}`, {
       method: 'DELETE',
     })
@@ -214,7 +233,7 @@ export const backupsApi = {
   /**
    * Retorna a URL de download do backup
    */
-  getDownloadUrl(id: number): string {
+  getDownloadUrl (id: number): string {
     return `${API_BASE}/backups/${id}/download`
   },
 }
@@ -226,7 +245,7 @@ export const statsApi = {
   /**
    * Obtém estatísticas do dashboard
    */
-  async get(): Promise<ApiResponse<DashboardStats>> {
+  async get (): Promise<ApiResponse<DashboardStats>> {
     return request<ApiResponse<DashboardStats>>('/stats')
   },
 }
@@ -238,7 +257,7 @@ export const auditLogsApi = {
   /**
    * Lista logs de auditoria com filtros e paginação
    */
-  async list(params?: {
+  async list (params?: {
     page?: number
     limit?: number
     action?: AuditAction
@@ -247,17 +266,33 @@ export const auditLogsApi = {
     status?: AuditStatus
     startDate?: string
     endDate?: string
-  }): Promise<{ success: boolean; data: AuditLog[]; meta: { total: number; perPage: number; currentPage: number; lastPage: number } }> {
+  }): Promise<{ success: boolean, data: AuditLog[], meta: { total: number, perPage: number, currentPage: number, lastPage: number } }> {
     const searchParams = new URLSearchParams()
 
-    if (params?.page) searchParams.set('page', params.page.toString())
-    if (params?.limit) searchParams.set('limit', params.limit.toString())
-    if (params?.action) searchParams.set('action', params.action)
-    if (params?.entityType) searchParams.set('entityType', params.entityType)
-    if (params?.entityId) searchParams.set('entityId', params.entityId.toString())
-    if (params?.status) searchParams.set('status', params.status)
-    if (params?.startDate) searchParams.set('startDate', params.startDate)
-    if (params?.endDate) searchParams.set('endDate', params.endDate)
+    if (params?.page) {
+      searchParams.set('page', params.page.toString())
+    }
+    if (params?.limit) {
+      searchParams.set('limit', params.limit.toString())
+    }
+    if (params?.action) {
+      searchParams.set('action', params.action)
+    }
+    if (params?.entityType) {
+      searchParams.set('entityType', params.entityType)
+    }
+    if (params?.entityId) {
+      searchParams.set('entityId', params.entityId.toString())
+    }
+    if (params?.status) {
+      searchParams.set('status', params.status)
+    }
+    if (params?.startDate) {
+      searchParams.set('startDate', params.startDate)
+    }
+    if (params?.endDate) {
+      searchParams.set('endDate', params.endDate)
+    }
 
     const query = searchParams.toString()
     return request(`/audit-logs${query ? `?${query}` : ''}`)
@@ -266,18 +301,17 @@ export const auditLogsApi = {
   /**
    * Obtém um log de auditoria específico
    */
-  async get(id: number): Promise<ApiResponse<AuditLog>> {
+  async get (id: number): Promise<ApiResponse<AuditLog>> {
     return request<ApiResponse<AuditLog>>(`/audit-logs/${id}`)
   },
 
   /**
    * Obtém estatísticas de auditoria
    */
-  async stats(): Promise<ApiResponse<AuditStats>> {
+  async stats (): Promise<ApiResponse<AuditStats>> {
     return request<ApiResponse<AuditStats>>('/audit-logs/stats')
   },
 }
-
 
 /**
  * Serviço de API para Gerenciamento de Usuários
@@ -286,28 +320,34 @@ export const usersApi = {
   /**
    * Lista usuários com paginação e filtros
    */
-  async list(params?: {
+  async list (params?: {
     page?: number
     limit?: number
     active?: boolean | string
-  }): Promise<PaginatedResponse<any>> {
+  }): Promise<PaginatedResponse<User>> {
     const searchParams = new URLSearchParams()
-    if (params?.page) searchParams.set('page', params.page.toString())
-    if (params?.limit) searchParams.set('limit', params.limit.toString())
-    if (params?.active !== undefined) searchParams.set('active', String(params.active))
+    if (params?.page) {
+      searchParams.set('page', params.page.toString())
+    }
+    if (params?.limit) {
+      searchParams.set('limit', params.limit.toString())
+    }
+    if (params?.active !== undefined) {
+      searchParams.set('active', String(params.active))
+    }
 
     const query = searchParams.toString()
-    return request<PaginatedResponse<any>>(`/users${query ? `?${query}` : ''}`)
+    return request<PaginatedResponse<User>>(`/users${query ? `?${query}` : ''}`)
   },
 
   /**
    * Alterna status do usuário (aprovar/desativar)
    */
-  async toggleStatus(id: number): Promise<ApiResponse<any>> {
+  async toggleStatus (id: number): Promise<ApiResponse<any>> {
     return request<ApiResponse<any>>(`/users/${id}/status`, {
-      method: 'PATCH'
+      method: 'PATCH',
     })
-  }
+  },
 }
 
 /**
@@ -317,7 +357,7 @@ export const authApi = {
   /**
    * Realiza login
    */
-  async login(payload: LoginPayload): Promise<ApiResponse<AuthResponse>> {
+  async login (payload: LoginPayload): Promise<ApiResponse<AuthResponse>> {
     return request<ApiResponse<AuthResponse>>('/auth/login', {
       method: 'POST',
       body: JSON.stringify(payload),
@@ -327,7 +367,7 @@ export const authApi = {
   /**
    * Realiza registro
    */
-  async register(payload: RegisterPayload): Promise<ApiResponse<AuthResponse>> {
+  async register (payload: RegisterPayload): Promise<ApiResponse<AuthResponse>> {
     return request<ApiResponse<AuthResponse>>('/auth/register', {
       method: 'POST',
       body: JSON.stringify(payload),
@@ -337,14 +377,14 @@ export const authApi = {
   /**
    * Obtém usuário atual
    */
-  async me(): Promise<ApiResponse<any>> {
+  async me (): Promise<ApiResponse<any>> {
     return request<ApiResponse<any>>('/auth/me')
   },
 
   /**
    * Realiza logout
    */
-  async logout(): Promise<ApiResponse> {
+  async logout (): Promise<ApiResponse> {
     return request<ApiResponse>('/auth/logout', {
       method: 'POST',
     })
@@ -354,7 +394,7 @@ export const authApi = {
 /**
  * Health check da API
  */
-export async function healthCheck(): Promise<{
+export async function healthCheck (): Promise<{
   status: string
   timestamp: string
   version: string

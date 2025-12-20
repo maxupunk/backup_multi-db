@@ -1,7 +1,7 @@
 <template>
-    <v-main class="bg-background">
-        <router-view />
-    </v-main>
+  <v-main class="bg-background">
+    <router-view />
+  </v-main>
 </template>
 
 <script lang="ts" setup>

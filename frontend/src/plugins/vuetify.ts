@@ -4,31 +4,31 @@
  * Framework documentation: https://vuetifyjs.com
  */
 
-// Styles
-import '@mdi/font/css/materialdesignicons.css'
-import 'vuetify/styles'
-
 // Composables
 import { createVuetify, type ThemeDefinition } from 'vuetify'
+// Styles
+import '@mdi/font/css/materialdesignicons.css'
+
+import 'vuetify/styles'
 
 // Tema escuro customizado
 const darkTheme: ThemeDefinition = {
   dark: true,
   colors: {
-    background: '#0a0e17',
-    surface: '#111827',
+    'background': '#0a0e17',
+    'surface': '#111827',
     'surface-bright': '#1f2937',
     'surface-light': '#374151',
     'surface-variant': '#1e293b',
     'on-surface-variant': '#94a3b8',
-    primary: '#3b82f6',
+    'primary': '#3b82f6',
     'primary-darken-1': '#2563eb',
-    secondary: '#8b5cf6',
+    'secondary': '#8b5cf6',
     'secondary-darken-1': '#7c3aed',
-    error: '#ef4444',
-    info: '#06b6d4',
-    success: '#22c55e',
-    warning: '#f59e0b',
+    'error': '#ef4444',
+    'info': '#06b6d4',
+    'success': '#22c55e',
+    'warning': '#f59e0b',
     'on-background': '#f1f5f9',
     'on-surface': '#e2e8f0',
     'on-primary': '#ffffff',
@@ -42,7 +42,7 @@ const darkTheme: ThemeDefinition = {
     'border-color': '#1e293b',
     'border-opacity': 0.12,
     'high-emphasis-opacity': 0.87,
-    'medium-emphasis-opacity': 0.60,
+    'medium-emphasis-opacity': 0.6,
     'disabled-opacity': 0.38,
     'idle-opacity': 0.04,
     'hover-opacity': 0.08,
@@ -62,20 +62,20 @@ const darkTheme: ThemeDefinition = {
 const lightTheme: ThemeDefinition = {
   dark: false,
   colors: {
-    background: '#f8fafc',
-    surface: '#ffffff',
+    'background': '#f8fafc',
+    'surface': '#ffffff',
     'surface-bright': '#ffffff',
     'surface-light': '#f1f5f9',
     'surface-variant': '#e2e8f0',
     'on-surface-variant': '#64748b',
-    primary: '#2563eb',
+    'primary': '#2563eb',
     'primary-darken-1': '#1d4ed8',
-    secondary: '#7c3aed',
+    'secondary': '#7c3aed',
     'secondary-darken-1': '#6d28d9',
-    error: '#dc2626',
-    info: '#0891b2',
-    success: '#16a34a',
-    warning: '#d97706',
+    'error': '#dc2626',
+    'info': '#0891b2',
+    'success': '#16a34a',
+    'warning': '#d97706',
     'on-background': '#0f172a',
     'on-surface': '#1e293b',
     'on-primary': '#ffffff',
@@ -89,9 +89,9 @@ const lightTheme: ThemeDefinition = {
     'border-color': '#e2e8f0',
     'border-opacity': 0.12,
     'high-emphasis-opacity': 0.87,
-    'medium-emphasis-opacity': 0.60,
+    'medium-emphasis-opacity': 0.6,
     'disabled-opacity': 0.38,
-    'idle-opacity': 0.10,
+    'idle-opacity': 0.1,
     'hover-opacity': 0.04,
     'focus-opacity': 0.12,
     'selected-opacity': 0.08,

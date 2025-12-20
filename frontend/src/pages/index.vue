@@ -9,17 +9,17 @@
         </p>
       </div>
 
-      <v-btn color="primary" prepend-icon="mdi-refresh" :loading="loading" @click="loadStats">
+      <v-btn color="primary" :loading="loading" prepend-icon="mdi-refresh" @click="loadStats">
         Atualizar
       </v-btn>
     </div>
 
     <!-- Stats Cards -->
     <v-row class="mb-6">
-      <v-col cols="12" sm="6" md="3">
+      <v-col cols="12" md="3" sm="6">
         <v-card class="stat-card">
           <v-card-text class="d-flex align-center pa-4">
-            <v-avatar color="primary" size="56" class="mr-4">
+            <v-avatar class="mr-4" color="primary" size="56">
               <v-icon icon="mdi-database" size="28" />
             </v-avatar>
             <div>
@@ -34,10 +34,10 @@
         </v-card>
       </v-col>
 
-      <v-col cols="12" sm="6" md="3">
+      <v-col cols="12" md="3" sm="6">
         <v-card class="stat-card">
           <v-card-text class="d-flex align-center pa-4">
-            <v-avatar color="success" size="56" class="mr-4">
+            <v-avatar class="mr-4" color="success" size="56">
               <v-icon icon="mdi-check-network" size="28" />
             </v-avatar>
             <div>
@@ -52,10 +52,10 @@
         </v-card>
       </v-col>
 
-      <v-col cols="12" sm="6" md="3">
+      <v-col cols="12" md="3" sm="6">
         <v-card class="stat-card">
           <v-card-text class="d-flex align-center pa-4">
-            <v-avatar color="info" size="56" class="mr-4">
+            <v-avatar class="mr-4" color="info" size="56">
               <v-icon icon="mdi-backup-restore" size="28" />
             </v-avatar>
             <div>
@@ -70,10 +70,10 @@
         </v-card>
       </v-col>
 
-      <v-col cols="12" sm="6" md="3">
+      <v-col cols="12" md="3" sm="6">
         <v-card class="stat-card">
           <v-card-text class="d-flex align-center pa-4">
-            <v-avatar color="secondary" size="56" class="mr-4">
+            <v-avatar class="mr-4" color="secondary" size="56">
               <v-icon icon="mdi-calendar-today" size="28" />
             </v-avatar>
             <div>
@@ -94,16 +94,28 @@
       <v-col cols="12" md="4">
         <v-card>
           <v-card-title class="d-flex align-center">
-            <v-icon icon="mdi-lightning-bolt" class="mr-2" color="warning" />
+            <v-icon class="mr-2" color="warning" icon="mdi-lightning-bolt" />
             Ações Rápidas
           </v-card-title>
 
           <v-card-text>
-            <v-btn block color="primary" class="mb-3" prepend-icon="mdi-plus" to="/connections/new">
+            <v-btn
+              block
+              class="mb-3"
+              color="primary"
+              prepend-icon="mdi-plus"
+              to="/connections/new"
+            >
               Nova Conexão
             </v-btn>
 
-            <v-btn block variant="outlined" color="primary" prepend-icon="mdi-backup-restore" to="/backups">
+            <v-btn
+              block
+              color="primary"
+              prepend-icon="mdi-backup-restore"
+              to="/backups"
+              variant="outlined"
+            >
               Ver Todos os Backups
             </v-btn>
           </v-card-text>
@@ -115,11 +127,11 @@
         <v-card>
           <v-card-title class="d-flex align-center justify-space-between">
             <div class="d-flex align-center">
-              <v-icon icon="mdi-history" class="mr-2" color="info" />
+              <v-icon class="mr-2" color="info" icon="mdi-history" />
               Backups Recentes
             </div>
 
-            <v-btn variant="text" size="small" to="/backups">
+            <v-btn size="small" to="/backups" variant="text">
               Ver todos
             </v-btn>
           </v-card-title>
@@ -140,7 +152,7 @@
                     {{ backup.connectionName }}
                   </td>
                   <td>
-                    <v-chip :color="getStatusColor(backup.status)" size="small" label>
+                    <v-chip :color="getStatusColor(backup.status)" label size="small">
                       {{ getStatusLabel(backup.status) }}
                     </v-chip>
                   </td>
@@ -154,10 +166,10 @@
               </tbody>
             </v-table>
 
-            <v-alert v-else type="info" variant="tonal" class="text-center">
+            <v-alert v-else class="text-center" type="info" variant="tonal">
               Nenhum backup realizado ainda.
-              <br />
-              <v-btn color="primary" variant="text" class="mt-2" to="/connections">
+              <br>
+              <v-btn class="mt-2" color="primary" to="/connections" variant="text">
                 Criar primeira conexão
               </v-btn>
             </v-alert>
@@ -169,78 +181,78 @@
 </template>
 
 <script lang="ts" setup>
-import { ref, onMounted, inject } from 'vue'
-import { statsApi } from '@/services/api'
-import type { DashboardStats, BackupStatus } from '@/types/api'
+  import type { BackupStatus, DashboardStats } from '@/types/api'
+  import { inject, onMounted, ref } from 'vue'
+  import { statsApi } from '@/services/api'
 
-const showNotification = inject<(msg: string, type: string) => void>('showNotification')
+  const showNotification = inject<(msg: string, type: string) => void>('showNotification')
 
-const loading = ref(false)
-const stats = ref<DashboardStats | null>(null)
+  const loading = ref(false)
+  const stats = ref<DashboardStats | null>(null)
 
-async function loadStats() {
-  loading.value = true
-  try {
-    const response = await statsApi.get()
-    stats.value = response.data ?? null
-  } catch (error) {
-    console.error('Erro ao carregar estatísticas:', error)
-    showNotification?.('Erro ao carregar estatísticas', 'error')
-  } finally {
-    loading.value = false
-  }
-}
-
-function getStatusColor(status: BackupStatus): string {
-  const colors: Record<BackupStatus, string> = {
-    pending: 'warning',
-    running: 'info',
-    completed: 'success',
-    failed: 'error',
-    cancelled: 'grey',
-  }
-  return colors[status] ?? 'grey'
-}
-
-function getStatusLabel(status: BackupStatus): string {
-  const labels: Record<BackupStatus, string> = {
-    pending: 'Pendente',
-    running: 'Em execução',
-    completed: 'Concluído',
-    failed: 'Falhou',
-    cancelled: 'Cancelado',
-  }
-  return labels[status] ?? status
-}
-
-function formatFileSize(bytes: number | null): string {
-  if (bytes === null || bytes === undefined) return 'N/A'
-
-  const units = ['B', 'KB', 'MB', 'GB', 'TB']
-  let size = bytes
-  let unitIndex = 0
-
-  while (size >= 1024 && unitIndex < units.length - 1) {
-    size /= 1024
-    unitIndex++
+  async function loadStats () {
+    loading.value = true
+    try {
+      const response = await statsApi.get()
+      stats.value = response.data ?? null
+    } catch (error) {
+      console.error('Erro ao carregar estatísticas:', error)
+      showNotification?.('Erro ao carregar estatísticas', 'error')
+    } finally {
+      loading.value = false
+    }
   }
 
-  return `${size.toFixed(1)} ${units[unitIndex]}`
-}
+  function getStatusColor (status: BackupStatus): string {
+    const colors: Record<BackupStatus, string> = {
+      pending: 'warning',
+      running: 'info',
+      completed: 'success',
+      failed: 'error',
+      cancelled: 'grey',
+    }
+    return colors[status] ?? 'grey'
+  }
 
-function formatDate(dateString: string): string {
-  const date = new Date(dateString)
-  return date.toLocaleString('pt-BR', {
-    day: '2-digit',
-    month: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
+  function getStatusLabel (status: BackupStatus): string {
+    const labels: Record<BackupStatus, string> = {
+      pending: 'Pendente',
+      running: 'Em execução',
+      completed: 'Concluído',
+      failed: 'Falhou',
+      cancelled: 'Cancelado',
+    }
+    return labels[status] ?? status
+  }
+
+  function formatFileSize (bytes: number | null): string {
+    if (bytes === null || bytes === undefined) return 'N/A'
+
+    const units = ['B', 'KB', 'MB', 'GB', 'TB']
+    let size = bytes
+    let unitIndex = 0
+
+    while (size >= 1024 && unitIndex < units.length - 1) {
+      size /= 1024
+      unitIndex++
+    }
+
+    return `${size.toFixed(1)} ${units[unitIndex]}`
+  }
+
+  function formatDate (dateString: string): string {
+    const date = new Date(dateString)
+    return date.toLocaleString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+  }
+
+  onMounted(() => {
+    loadStats()
   })
-}
-
-onMounted(() => {
-  loadStats()
-})
 </script>
 
 <style scoped>

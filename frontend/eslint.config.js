@@ -1,3 +1,13 @@
 import vuetify from 'eslint-config-vuetify'
 
-export default vuetify()
+const config = vuetify()
+
+export default [
+  ...Array.from(config),
+  {
+    ignores: [
+      'dist/**',
+      'dev-dist/**',
+    ],
+  },
+]

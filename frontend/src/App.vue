@@ -6,5 +6,5 @@
 </template>
 
 <script lang="ts" setup>
-import ReloadPrompt from '@/components/common/ReloadPrompt.vue'
+  import ReloadPrompt from '@/components/common/ReloadPrompt.vue'
 </script>

@@ -1,9 +1,39 @@
 <template>
-  <v-navigation-drawer v-model="drawer" :rail="rail" permanent class="bg-surface">
+  <v-app-bar class="bg-surface" :elevation="0">
+    <v-app-bar-nav-icon v-if="!mdAndUp" @click="drawer = !drawer" />
+
+    <v-app-bar-title class="font-weight-bold">
+      DB Backup
+    </v-app-bar-title>
+
+    <template #append>
+      <v-btn :aria-label="isDark ? 'Ativar tema claro' : 'Ativar tema escuro'" icon @click="toggleTheme">
+        <v-icon :icon="isDark ? 'mdi-weather-night' : 'mdi-weather-sunny'" />
+      </v-btn>
+
+      <v-btn
+        v-if="authStore.user"
+        aria-label="Sair"
+        color="error"
+        icon
+        @click="handleLogout"
+      >
+        <v-icon icon="mdi-logout" />
+      </v-btn>
+    </template>
+  </v-app-bar>
+
+  <v-navigation-drawer
+    v-model="drawer"
+    class="bg-surface"
+    :permanent="mdAndUp"
+    :rail="mdAndUp && rail"
+    :temporary="!mdAndUp"
+  >
     <!-- Logo -->
     <v-list-item class="pa-4" :class="{ 'justify-center': rail }">
       <template #prepend>
-        <v-avatar color="primary" size="40" class="elevation-2">
+        <v-avatar class="elevation-2" color="primary" size="40">
           <v-icon icon="mdi-database-sync" size="24" />
         </v-avatar>
       </template>
@@ -20,18 +50,38 @@
 
     <!-- Navigation -->
     <v-list density="compact" nav>
-      <v-list-item v-for="item in navItems" :key="item.to" :to="item.to" :title="item.title" :prepend-icon="item.icon"
-        rounded="lg" class="mb-1" color="primary" />
+      <v-list-item
+        v-for="item in navItems"
+        :key="item.to"
+        class="mb-1"
+        color="primary"
+        :prepend-icon="item.icon"
+        rounded="lg"
+        :title="item.title"
+        :to="item.to"
+      />
     </v-list>
 
     <template #append>
       <v-divider class="mb-2" />
 
       <!-- User Profile -->
-      <v-list-item v-if="authStore.user" :title="rail ? '' : (authStore.user.fullName || 'Usuário')"
-        :subtitle="rail ? '' : authStore.user.email" prepend-icon="mdi-account-circle" class="mx-2 mb-2" rounded="lg">
-        <template #append v-if="!rail">
-          <v-btn icon="mdi-logout" size="small" variant="text" color="error" @click="handleLogout">
+      <v-list-item
+        v-if="authStore.user"
+        class="mx-2 mb-2"
+        prepend-icon="mdi-account-circle"
+        rounded="lg"
+        :subtitle="rail ? '' : authStore.user.email"
+        :title="rail ? '' : (authStore.user.fullName || 'Usuário')"
+      >
+        <template v-if="!rail" #append>
+          <v-btn
+            color="error"
+            icon="mdi-logout"
+            size="small"
+            variant="text"
+            @click="handleLogout"
+          >
             <v-icon icon="mdi-logout" />
             <v-tooltip activator="parent" location="top">Sair</v-tooltip>
           </v-btn>
@@ -41,95 +91,121 @@
       <v-divider v-if="authStore.user" class="mb-2" />
 
       <!-- Theme Toggle -->
-      <v-list-item :title="rail ? '' : 'Tema'" :prepend-icon="isDark ? 'mdi-weather-night' : 'mdi-weather-sunny'"
-        @click="toggleTheme" rounded="lg" class="mx-2 mb-2" />
+      <v-list-item
+        class="mx-2 mb-2"
+        :prepend-icon="isDark ? 'mdi-weather-night' : 'mdi-weather-sunny'"
+        rounded="lg"
+        :title="rail ? '' : 'Tema'"
+        @click="toggleTheme"
+      />
 
       <!-- Rail Toggle -->
-      <v-list-item :title="rail ? '' : 'Recolher'" :prepend-icon="rail ? 'mdi-chevron-right' : 'mdi-chevron-left'"
-        @click="rail = !rail" rounded="lg" class="mx-2 mb-2" />
+      <v-list-item
+        v-if="mdAndUp"
+        class="mx-2 mb-2"
+        :prepend-icon="rail ? 'mdi-chevron-right' : 'mdi-chevron-left'"
+        rounded="lg"
+        :title="rail ? '' : 'Recolher'"
+        @click="rail = !rail"
+      />
     </template>
   </v-navigation-drawer>
 
   <v-main class="bg-background">
-    <v-container fluid class="pa-6">
+    <v-container :class="mdAndUp ? 'pa-6' : 'pa-3'" fluid>
       <router-view />
     </v-container>
   </v-main>
 
   <!-- Snackbar global para notificações -->
-  <v-snackbar v-model="snackbar.show" :color="snackbar.color" :timeout="snackbar.timeout" location="bottom right"
-    rounded="lg">
+  <v-snackbar
+    v-model="snackbar.show"
+    :color="snackbar.color"
+    :location="mdAndUp ? 'bottom right' : 'bottom'"
+    rounded="lg"
+    :timeout="snackbar.timeout"
+  >
     <div class="d-flex align-center">
-      <v-icon :icon="snackbar.icon" class="mr-2" />
+      <v-icon class="mr-2" :icon="snackbar.icon" />
       {{ snackbar.message }}
     </div>
 
     <template #actions>
-      <v-btn variant="text" icon="mdi-close" size="small" @click="snackbar.show = false" />
+      <v-btn icon="mdi-close" size="small" variant="text" @click="snackbar.show = false" />
     </template>
   </v-snackbar>
 </template>
 
 <script lang="ts" setup>
-import { ref, computed, provide, reactive } from 'vue'
-import { useTheme } from 'vuetify'
-import { useAuthStore } from '@/stores/auth'
-import { useRouter } from 'vue-router'
+  import { computed, provide, reactive, ref, watch } from 'vue'
+  import { useRouter } from 'vue-router'
+  import { useDisplay, useTheme } from 'vuetify'
+  import { useAuthStore } from '@/stores/auth'
 
-const theme = useTheme()
-const authStore = useAuthStore()
-const router = useRouter()
-const drawer = ref(true)
-const rail = ref(false)
+  const theme = useTheme()
+  const { mdAndUp } = useDisplay()
+  const authStore = useAuthStore()
+  const router = useRouter()
+  const drawer = ref(mdAndUp.value)
+  const rail = ref(false)
 
-const isDark = computed(() => theme.global.current.value.dark)
+  const isDark = computed(() => theme.global.current.value.dark)
 
-function toggleTheme() {
-  theme.global.name.value = isDark.value ? 'light' : 'dark'
-}
+  watch(
+    mdAndUp,
+    isDesktop => {
+      drawer.value = isDesktop
+      if (!isDesktop) rail.value = false
+    },
+    { immediate: false },
+  )
 
-async function handleLogout() {
-  await authStore.logout()
-  router.push('/login')
-}
-
-const navItems = [
-  { title: 'Dashboard', icon: 'mdi-view-dashboard', to: '/' },
-  { title: 'Conexões', icon: 'mdi-database', to: '/connections' },
-  { title: 'Backups', icon: 'mdi-backup-restore', to: '/backups' },
-  { title: 'Auditoria', icon: 'mdi-history', to: '/audit' },
-  { title: 'Usuários', icon: 'mdi-account-group', to: '/users' },
-  { title: 'Configurações', icon: 'mdi-cog', to: '/settings' },
-]
-
-// Sistema de notificações global
-const snackbar = reactive({
-  show: false,
-  message: '',
-  color: 'success',
-  icon: 'mdi-check-circle',
-  timeout: 4000,
-})
-
-function showNotification(
-  message: string,
-  type: 'success' | 'error' | 'warning' | 'info' = 'success'
-) {
-  const icons = {
-    success: 'mdi-check-circle',
-    error: 'mdi-alert-circle',
-    warning: 'mdi-alert',
-    info: 'mdi-information',
+  function toggleTheme () {
+    theme.global.name.value = isDark.value ? 'light' : 'dark'
   }
 
-  snackbar.message = message
-  snackbar.color = type
-  snackbar.icon = icons[type]
-  snackbar.show = true
-}
+  async function handleLogout () {
+    await authStore.logout()
+    router.push('/login')
+  }
 
-// Prover função de notificação globalmente
-provide('showNotification', showNotification)
+  const navItems = [
+    { title: 'Dashboard', icon: 'mdi-view-dashboard', to: '/' },
+    { title: 'Conexões', icon: 'mdi-database', to: '/connections' },
+    { title: 'Backups', icon: 'mdi-backup-restore', to: '/backups' },
+    { title: 'Auditoria', icon: 'mdi-history', to: '/audit' },
+    { title: 'Usuários', icon: 'mdi-account-group', to: '/users' },
+    { title: 'Configurações', icon: 'mdi-cog', to: '/settings' },
+  ]
+
+  // Sistema de notificações global
+  const snackbar = reactive({
+    show: false,
+    message: '',
+    color: 'success',
+    icon: 'mdi-check-circle',
+    timeout: 4000,
+  })
+
+  function showNotification (
+    message: string,
+    type: 'success' | 'error' | 'warning' | 'info' = 'success',
+  ) {
+    const icons = {
+      success: 'mdi-check-circle',
+      error: 'mdi-alert-circle',
+      warning: 'mdi-alert',
+      info: 'mdi-information',
+    }
+
+    snackbar.message = message
+    snackbar.color = type
+    snackbar.icon = icons[type]
+    snackbar.show = true
+  }
+
+  // Prover função de notificação globalmente
+  provide('showNotification', showNotification)
 </script>
 
 <style scoped>
