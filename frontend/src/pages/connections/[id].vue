@@ -65,11 +65,12 @@
 
                                 <v-col cols="12" sm="6">
                                     <v-text-field v-model="form.password"
-                                        :label="isEditing ? 'Nova Senha (deixe vazio para manter)' : 'Senha *'"
+                                        :label="isEditing ? 'Nova Senha (deixe vazio para manter)' : 'Senha'"
                                         :type="showPassword ? 'text' : 'password'" prepend-inner-icon="mdi-lock"
                                         :append-inner-icon="showPassword ? 'mdi-eye-off' : 'mdi-eye'"
-                                        :rules="isEditing ? [] : [rules.required]"
-                                        @click:append-inner="showPassword = !showPassword" />
+                                        :rules="[]"
+                                        @click:append-inner="showPassword = !showPassword"
+                                        @update:model-value="markPasswordAsModified" />
                                 </v-col>
                             </v-row>
 
@@ -206,6 +207,7 @@ const showPassword = ref(false)
 const saving = ref(false)
 const testing = ref(false)
 const loading = ref(false)
+const passwordModified = ref(false)
 
 const isEditing = computed(() => {
     const params = route.params as { id?: string }
@@ -263,6 +265,11 @@ function onTypeChange(type: DatabaseType) {
     form.port = defaultPorts[type]
 }
 
+function markPasswordAsModified() {
+    passwordModified.value = true
+}
+
+
 async function loadConnection() {
     if (!isEditing.value) return
 
@@ -306,8 +313,8 @@ async function submit() {
                 scheduleFrequency: form.scheduleFrequency,
             }
 
-            // Apenas enviar senha se foi alterada
-            if (form.password) {
+            // Enviar senha apenas se foi modificada explicitamente ou se é uma nova conexão
+            if (passwordModified.value) {
                 payload.password = form.password
             }
 

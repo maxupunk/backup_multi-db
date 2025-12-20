@@ -110,6 +110,11 @@ export default class Connection extends BaseModel {
     if (connection.$dirty.passwordEncrypted) {
       const currentValue = connection.passwordEncrypted
 
+      // Não criptografar senha vazia
+      if (!currentValue) {
+        return
+      }
+
       // Evitar dupla criptografia
       if (!EncryptionService.isEncrypted(currentValue)) {
         connection.passwordEncrypted = EncryptionService.encrypt(currentValue)
@@ -124,14 +129,15 @@ export default class Connection extends BaseModel {
    * ATENÇÃO: Use com cuidado, evite logar ou expor este valor.
    */
   getDecryptedPassword(): string {
+    if (!this.passwordEncrypted) return ''
     return EncryptionService.decrypt(this.passwordEncrypted)
   }
 
   /**
    * Define a senha (será criptografada automaticamente no beforeSave)
    */
-  setPassword(plainPassword: string): void {
-    this.passwordEncrypted = plainPassword
+  setPassword(plainPassword: string | undefined | null): void {
+    this.passwordEncrypted = plainPassword || ''
   }
 
   /**
