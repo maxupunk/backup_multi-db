@@ -18,6 +18,10 @@
             <v-text-field v-model="form.password" label="Senha" type="password" prepend-inner-icon="mdi-lock"
                 variant="outlined" :error-messages="errors.password" class="mb-4" hint="Mínimo 8 caracteres" />
 
+            <v-alert v-if="successMessage" type="success" variant="tonal" class="mb-4" closable>
+                {{ successMessage }}
+            </v-alert>
+
             <v-alert v-if="errorMessage" type="error" variant="tonal" class="mb-4" closable>
                 {{ errorMessage }}
             </v-alert>
@@ -55,6 +59,7 @@ const router = useRouter()
 
 const loading = ref(false)
 const errorMessage = ref('')
+const successMessage = ref('')
 const form = reactive({
     fullName: '',
     email: '',
@@ -75,12 +80,29 @@ async function handleRegister() {
 
     try {
         const response = await authApi.register(form)
-        if (response.success && response.data) {
-            authStore.setToken(response.data.token)
-            authStore.setUser(response.data.user)
-            router.push('/')
+        if (response.success) {
+            // Se tiver token, login automático
+            if (response.data && response.data.token) {
+                authStore.setToken(response.data.token)
+                authStore.setUser(response.data.user)
+                router.push('/')
+            } else {
+                // Caso contrário pode estar pendente de aprovação
+                // Limpar formulário
+                form.fullName = ''
+                form.email = ''
+                form.password = ''
+                errorMessage.value = ''
+
+                // Exibir mensagem de sucesso (usando errorMessage como alerta verde ou criando um novo estado)
+                // Vamos usar um alert simples ou reaproveitar errorMessage como "success" se adicionar type
+                // Por simplicidade, vou usar um alert separado se possível, ou mudar o texto do errorMessage para type success.
+                // Vou adicionar successMessage no state.
+                successMessage.value = response.message || 'Cadastro realizado. Aguarde aprovação.'
+            }
         }
     } catch (error) {
+        successMessage.value = ''
         console.error(error)
         if (error instanceof ApiError) {
             // Erro de validação

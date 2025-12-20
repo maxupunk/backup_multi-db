@@ -98,6 +98,7 @@ const navItems = [
   { title: 'Conexões', icon: 'mdi-database', to: '/connections' },
   { title: 'Backups', icon: 'mdi-backup-restore', to: '/backups' },
   { title: 'Auditoria', icon: 'mdi-history', to: '/audit' },
+  { title: 'Usuários', icon: 'mdi-account-group', to: '/users' },
   { title: 'Configurações', icon: 'mdi-cog', to: '/settings' },
 ]
 

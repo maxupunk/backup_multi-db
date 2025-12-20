@@ -9,6 +9,7 @@ const ConnectionsController = () => import('#controllers/connections_controller'
 const BackupsController = () => import('#controllers/backups_controller')
 const AuditLogsController = () => import('#controllers/audit_logs_controller')
 const AuthController = () => import('#controllers/auth_controller')
+const UsersController = () => import('#controllers/users_controller')
 import AutoSwagger from 'adonis-autoswagger'
 import swagger from '#config/swagger'
 
@@ -113,6 +114,10 @@ router
         router.get('audit-logs', [AuditLogsController, 'index'])
         router.get('audit-logs/stats', [AuditLogsController, 'stats'])
         router.get('audit-logs/:id', [AuditLogsController, 'show'])
+
+        // ==================== User Management ====================
+        router.get('users', [UsersController, 'index'])
+        router.patch('users/:id/status', [UsersController, 'toggleStatus'])
       })
       .use(middleware.auth())
   })

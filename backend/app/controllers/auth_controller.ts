@@ -9,7 +9,22 @@ export default class AuthController {
   async register({ request, response }: HttpContext) {
     const payload = await request.validateUsing(registerValidator)
 
-    const user = await User.create(payload)
+    // Verifica se existem usuários cadastrados
+    const usersCount = await User.query().count('* as total').first()
+    const totalUsers = usersCount ? Number(usersCount.$extras.total) : 0
+    const isActive = totalUsers === 0
+
+    const user = await User.create({
+      ...payload,
+      isActive,
+    })
+
+    if (!isActive) {
+      return response.created({
+        success: true,
+        message: 'Cadastro realizado. Aguarde aprovação de um administrador.',
+      })
+    }
 
     const token = await User.accessTokens.create(user)
 
@@ -34,6 +49,14 @@ export default class AuthController {
     const { email, password } = await request.validateUsing(loginValidator)
 
     const user = await User.verifyCredentials(email, password)
+
+    if (!user.isActive) {
+      return response.unauthorized({
+        success: false,
+        message: 'Sua conta aguarda aprovação.',
+      })
+    }
+
     const token = await User.accessTokens.create(user)
 
     return response.ok({

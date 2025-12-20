@@ -278,6 +278,38 @@ export const auditLogsApi = {
   },
 }
 
+
+/**
+ * Serviço de API para Gerenciamento de Usuários
+ */
+export const usersApi = {
+  /**
+   * Lista usuários com paginação e filtros
+   */
+  async list(params?: {
+    page?: number
+    limit?: number
+    active?: boolean | string
+  }): Promise<PaginatedResponse<any>> {
+    const searchParams = new URLSearchParams()
+    if (params?.page) searchParams.set('page', params.page.toString())
+    if (params?.limit) searchParams.set('limit', params.limit.toString())
+    if (params?.active !== undefined) searchParams.set('active', String(params.active))
+
+    const query = searchParams.toString()
+    return request<PaginatedResponse<any>>(`/users${query ? `?${query}` : ''}`)
+  },
+
+  /**
+   * Alterna status do usuário (aprovar/desativar)
+   */
+  async toggleStatus(id: number): Promise<ApiResponse<any>> {
+    return request<ApiResponse<any>>(`/users/${id}/status`, {
+      method: 'PATCH'
+    })
+  }
+}
+
 /**
  * Serviço de API para Autenticação
  */
