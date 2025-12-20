@@ -116,7 +116,7 @@
 - [x] Configurar CORS
 - [x] Implementar rate limiting
 - [x] Sanitizar dados de entrada
-- [ ] Logs de auditoria
+- [x] Logs de auditoria
 
 ### 13. Documentação
 
@@ -300,6 +300,9 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 | GET    | `/api/backups/:id`            | Detalhes do backup        |
 | GET    | `/api/backups/:id/download`   | Download do backup        |
 | DELETE | `/api/backups/:id`            | Remover backup            |
+| GET    | `/api/audit-logs`             | Listar logs de auditoria  |
+| GET    | `/api/audit-logs/stats`       | Estatísticas de auditoria |
+| GET    | `/api/audit-logs/:id`         | Detalhes do log           |
 
 ---
 

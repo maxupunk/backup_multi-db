@@ -1,21 +1,9 @@
 <template>
-  <v-navigation-drawer
-    v-model="drawer"
-    :rail="rail"
-    permanent
-    class="bg-surface"
-  >
+  <v-navigation-drawer v-model="drawer" :rail="rail" permanent class="bg-surface">
     <!-- Logo -->
-    <v-list-item
-      class="pa-4"
-      :class="{ 'justify-center': rail }"
-    >
+    <v-list-item class="pa-4" :class="{ 'justify-center': rail }">
       <template #prepend>
-        <v-avatar
-          color="primary"
-          size="40"
-          class="elevation-2"
-        >
+        <v-avatar color="primary" size="40" class="elevation-2">
           <v-icon icon="mdi-database-sync" size="24" />
         </v-avatar>
       </template>
@@ -32,38 +20,20 @@
 
     <!-- Navigation -->
     <v-list density="compact" nav>
-      <v-list-item
-        v-for="item in navItems"
-        :key="item.to"
-        :to="item.to"
-        :title="item.title"
-        :prepend-icon="item.icon"
-        rounded="lg"
-        class="mb-1"
-        color="primary"
-      />
+      <v-list-item v-for="item in navItems" :key="item.to" :to="item.to" :title="item.title" :prepend-icon="item.icon"
+        rounded="lg" class="mb-1" color="primary" />
     </v-list>
 
     <template #append>
       <v-divider class="mb-2" />
 
       <!-- Theme Toggle -->
-      <v-list-item
-        :title="rail ? '' : 'Tema'"
-        :prepend-icon="isDark ? 'mdi-weather-night' : 'mdi-weather-sunny'"
-        @click="toggleTheme"
-        rounded="lg"
-        class="mx-2 mb-2"
-      />
+      <v-list-item :title="rail ? '' : 'Tema'" :prepend-icon="isDark ? 'mdi-weather-night' : 'mdi-weather-sunny'"
+        @click="toggleTheme" rounded="lg" class="mx-2 mb-2" />
 
       <!-- Rail Toggle -->
-      <v-list-item
-        :title="rail ? '' : 'Recolher'"
-        :prepend-icon="rail ? 'mdi-chevron-right' : 'mdi-chevron-left'"
-        @click="rail = !rail"
-        rounded="lg"
-        class="mx-2 mb-2"
-      />
+      <v-list-item :title="rail ? '' : 'Recolher'" :prepend-icon="rail ? 'mdi-chevron-right' : 'mdi-chevron-left'"
+        @click="rail = !rail" rounded="lg" class="mx-2 mb-2" />
     </template>
   </v-navigation-drawer>
 
@@ -74,25 +44,15 @@
   </v-main>
 
   <!-- Snackbar global para notificações -->
-  <v-snackbar
-    v-model="snackbar.show"
-    :color="snackbar.color"
-    :timeout="snackbar.timeout"
-    location="bottom right"
-    rounded="lg"
-  >
+  <v-snackbar v-model="snackbar.show" :color="snackbar.color" :timeout="snackbar.timeout" location="bottom right"
+    rounded="lg">
     <div class="d-flex align-center">
       <v-icon :icon="snackbar.icon" class="mr-2" />
       {{ snackbar.message }}
     </div>
 
     <template #actions>
-      <v-btn
-        variant="text"
-        icon="mdi-close"
-        size="small"
-        @click="snackbar.show = false"
-      />
+      <v-btn variant="text" icon="mdi-close" size="small" @click="snackbar.show = false" />
     </template>
   </v-snackbar>
 </template>
@@ -115,6 +75,7 @@ const navItems = [
   { title: 'Dashboard', icon: 'mdi-view-dashboard', to: '/' },
   { title: 'Conexões', icon: 'mdi-database', to: '/connections' },
   { title: 'Backups', icon: 'mdi-backup-restore', to: '/backups' },
+  { title: 'Auditoria', icon: 'mdi-history', to: '/audit' },
   { title: 'Configurações', icon: 'mdi-cog', to: '/settings' },
 ]
 

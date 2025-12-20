@@ -7,6 +7,7 @@ import { middleware } from '#start/kernel'
 // Lazy loading dos controllers
 const ConnectionsController = () => import('#controllers/connections_controller')
 const BackupsController = () => import('#controllers/backups_controller')
+const AuditLogsController = () => import('#controllers/audit_logs_controller')
 
 /*
 |--------------------------------------------------------------------------
@@ -85,6 +86,11 @@ router
         },
       }
     })
+
+    // ==================== Audit Logs ====================
+    router.get('audit-logs', [AuditLogsController, 'index'])
+    router.get('audit-logs/stats', [AuditLogsController, 'stats'])
+    router.get('audit-logs/:id', [AuditLogsController, 'show'])
   })
   .prefix('/api')
   .use(middleware.rateLimit({ limiter: 'global' }))

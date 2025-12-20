@@ -201,3 +201,69 @@ export interface BackupResult {
   duration: string
   checksum: string
 }
+
+// ==================== Audit Logs ====================
+
+/**
+ * Ações auditáveis no sistema
+ */
+export type AuditAction =
+  | 'connection.created'
+  | 'connection.updated'
+  | 'connection.deleted'
+  | 'connection.tested'
+  | 'backup.started'
+  | 'backup.completed'
+  | 'backup.failed'
+  | 'backup.deleted'
+  | 'backup.downloaded'
+  | 'settings.updated'
+
+/**
+ * Tipos de entidades auditáveis
+ */
+export type AuditEntityType = 'connection' | 'backup' | 'settings'
+
+/**
+ * Status de resultado da ação
+ */
+export type AuditStatus = 'success' | 'failure' | 'warning'
+
+/**
+ * Interface de um log de auditoria
+ */
+export interface AuditLog {
+  id: number
+  action: AuditAction
+  actionDescription: string
+  actionIcon: string
+  entityType: AuditEntityType
+  entityId: number | null
+  entityName: string | null
+  description: string
+  details: Record<string, unknown> | null
+  status: AuditStatus
+  statusColor: string
+  errorMessage: string | null
+  ipAddress: string | null
+  userAgent?: string | null
+  createdAt: string
+}
+
+/**
+ * Estatísticas de auditoria
+ */
+export interface AuditStats {
+  total: number
+  today: number
+  lastWeek: number
+  byStatus: {
+    success: number
+    failure: number
+  }
+  byAction: {
+    action: AuditAction
+    description: string
+    count: number
+  }[]
+}

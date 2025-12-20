@@ -5,6 +5,7 @@ import { createReadStream, existsSync } from 'node:fs'
 import { unlink } from 'node:fs/promises'
 import { join } from 'node:path'
 import app from '@adonisjs/core/services/app'
+import { AuditService } from '#services/audit_service'
 
 /**
  * Controller para gerenciamento de backups
@@ -107,8 +108,9 @@ export default class BackupsController {
    * GET /api/backups/:id/download
    * Faz download do arquivo de backup
    */
-  async download({ params, response }: HttpContext) {
-    const backup = await Backup.find(params.id)
+  async download(ctx: HttpContext) {
+    const { params, response } = ctx
+    const backup = await Backup.query().where('id', params.id).preload('connection').first()
 
     if (!backup) {
       return response.notFound({
@@ -133,6 +135,13 @@ export default class BackupsController {
       })
     }
 
+    // Registrar auditoria de download
+    await AuditService.logBackupDownloaded(
+      backup.id,
+      backup.connection?.name ?? 'N/A',
+      ctx
+    )
+
     // Stream do arquivo para download
     const stream = createReadStream(fullPath)
 
@@ -150,8 +159,9 @@ export default class BackupsController {
    * DELETE /api/backups/:id
    * Remove um backup
    */
-  async destroy({ params, response }: HttpContext) {
-    const backup = await Backup.find(params.id)
+  async destroy(ctx: HttpContext) {
+    const { params, response } = ctx
+    const backup = await Backup.query().where('id', params.id).preload('connection').first()
 
     if (!backup) {
       return response.notFound({
@@ -167,6 +177,9 @@ export default class BackupsController {
       })
     }
 
+    const connectionName = backup.connection?.name ?? 'N/A'
+    const backupId = backup.id
+
     // Deletar arquivo físico se existir
     if (backup.filePath) {
       const fullPath = join(app.makePath('storage/backups'), backup.filePath)
@@ -181,6 +194,9 @@ export default class BackupsController {
     }
 
     await backup.delete()
+
+    // Registrar auditoria
+    await AuditService.logBackupDeleted(backupId, connectionName, ctx)
 
     return response.ok({
       success: true,

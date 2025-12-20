@@ -7,6 +7,7 @@ import {
   listConnectionsValidator,
 } from '#validators/connection_validator'
 import { BackupService } from '#services/backup_service'
+import { AuditService } from '#services/audit_service'
 
 /**
  * Controller para gerenciamento de conexões de banco de dados
@@ -68,7 +69,8 @@ export default class ConnectionsController {
    * POST /api/connections
    * Cria uma nova conexão
    */
-  async store({ request, response }: HttpContext) {
+  async store(ctx: HttpContext) {
+    const { request, response } = ctx
     const payload = await request.validateUsing(createConnectionValidator)
 
     const connection = new Connection()
@@ -85,6 +87,9 @@ export default class ConnectionsController {
     connection.status = 'active'
 
     await connection.save()
+
+    // Registrar auditoria
+    await AuditService.logConnectionCreated(connection.id, connection.name, ctx)
 
     return response.created({
       success: true,
@@ -138,7 +143,8 @@ export default class ConnectionsController {
    * PUT /api/connections/:id
    * Atualiza uma conexão existente
    */
-  async update({ params, request, response }: HttpContext) {
+  async update(ctx: HttpContext) {
+    const { params, request, response } = ctx
     const connection = await Connection.find(params.id)
 
     if (!connection) {
@@ -150,23 +156,56 @@ export default class ConnectionsController {
 
     const payload = await request.validateUsing(updateConnectionValidator)
 
+    // Capturar alterações para auditoria (campos não sensíveis)
+    const changes: Record<string, { from: unknown; to: unknown }> = {}
+
     // Atualiza apenas os campos fornecidos
-    if (payload.name !== undefined) connection.name = payload.name
-    if (payload.type !== undefined) connection.type = payload.type
-    if (payload.host !== undefined) connection.host = payload.host
-    if (payload.port !== undefined) connection.port = payload.port
-    if (payload.database !== undefined) connection.database = payload.database
-    if (payload.username !== undefined) connection.username = payload.username
-    if (payload.password !== undefined) connection.setPassword(payload.password)
-    if (payload.scheduleFrequency !== undefined) {
+    if (payload.name !== undefined && payload.name !== connection.name) {
+      changes.name = { from: connection.name, to: payload.name }
+      connection.name = payload.name
+    }
+    if (payload.type !== undefined && payload.type !== connection.type) {
+      changes.type = { from: connection.type, to: payload.type }
+      connection.type = payload.type
+    }
+    if (payload.host !== undefined && payload.host !== connection.host) {
+      changes.host = { from: connection.host, to: payload.host }
+      connection.host = payload.host
+    }
+    if (payload.port !== undefined && payload.port !== connection.port) {
+      changes.port = { from: connection.port, to: payload.port }
+      connection.port = payload.port
+    }
+    if (payload.database !== undefined && payload.database !== connection.database) {
+      changes.database = { from: connection.database, to: payload.database }
+      connection.database = payload.database
+    }
+    if (payload.username !== undefined && payload.username !== connection.username) {
+      changes.username = { from: connection.username, to: payload.username }
+      connection.username = payload.username
+    }
+    if (payload.password !== undefined) {
+      changes.password = { from: '***', to: '***' } // Não logar senha
+      connection.setPassword(payload.password)
+    }
+    if (payload.scheduleFrequency !== undefined && payload.scheduleFrequency !== connection.scheduleFrequency) {
+      changes.scheduleFrequency = { from: connection.scheduleFrequency, to: payload.scheduleFrequency }
       connection.scheduleFrequency = payload.scheduleFrequency
     }
-    if (payload.scheduleEnabled !== undefined) {
+    if (payload.scheduleEnabled !== undefined && payload.scheduleEnabled !== connection.scheduleEnabled) {
+      changes.scheduleEnabled = { from: connection.scheduleEnabled, to: payload.scheduleEnabled }
       connection.scheduleEnabled = payload.scheduleEnabled
     }
-    if (payload.options !== undefined) connection.options = payload.options
+    if (payload.options !== undefined) {
+      connection.options = payload.options
+    }
 
     await connection.save()
+
+    // Registrar auditoria
+    if (Object.keys(changes).length > 0) {
+      await AuditService.logConnectionUpdated(connection.id, connection.name, changes, ctx)
+    }
 
     return response.ok({
       success: true,
@@ -179,7 +218,8 @@ export default class ConnectionsController {
    * DELETE /api/connections/:id
    * Remove uma conexão e seus backups associados
    */
-  async destroy({ params, response }: HttpContext) {
+  async destroy(ctx: HttpContext) {
+    const { params, response } = ctx
     const connection = await Connection.find(params.id)
 
     if (!connection) {
@@ -189,8 +229,14 @@ export default class ConnectionsController {
       })
     }
 
+    const connectionName = connection.name
+    const connectionId = connection.id
+
     // TODO: Deletar arquivos de backup físicos antes de remover do banco
     await connection.delete()
+
+    // Registrar auditoria
+    await AuditService.logConnectionDeleted(connectionId, connectionName, ctx)
 
     return response.ok({
       success: true,
@@ -202,7 +248,8 @@ export default class ConnectionsController {
    * POST /api/connections/:id/test
    * Testa a conexão com o banco de dados remoto
    */
-  async test({ params, response }: HttpContext) {
+  async test(ctx: HttpContext) {
+    const { params, response } = ctx
     const connection = await Connection.find(params.id)
 
     if (!connection) {
@@ -221,6 +268,15 @@ export default class ConnectionsController {
       connection.lastTestedAt = DateTime.now()
 
       await connection.save()
+
+      // Registrar auditoria
+      await AuditService.logConnectionTested(
+        connection.id,
+        connection.name,
+        testResult.success,
+        testResult.error,
+        ctx
+      )
 
       if (testResult.success) {
         return response.ok({
@@ -243,6 +299,15 @@ export default class ConnectionsController {
       connection.lastError = error instanceof Error ? error.message : 'Erro desconhecido'
       connection.lastTestedAt = DateTime.now()
       await connection.save()
+
+      // Registrar auditoria de falha
+      await AuditService.logConnectionTested(
+        connection.id,
+        connection.name,
+        false,
+        error instanceof Error ? error.message : 'Erro desconhecido',
+        ctx
+      )
 
       return response.internalServerError({
         success: false,
@@ -318,7 +383,8 @@ export default class ConnectionsController {
    * POST /api/connections/:id/backup
    * Inicia um backup manual da conexão
    */
-  async backup({ params, response }: HttpContext) {
+  async backup(ctx: HttpContext) {
+    const { params, response } = ctx
     const connection = await Connection.find(params.id)
 
     if (!connection) {
@@ -339,7 +405,19 @@ export default class ConnectionsController {
       const backupService = new BackupService()
       const { backup, result } = await backupService.execute(connection, 'manual')
 
+      // Registrar auditoria de início
+      await AuditService.logBackupStarted(backup.id, connection.name, 'manual', ctx)
+
       if (result.success) {
+        // Registrar auditoria de sucesso
+        await AuditService.logBackupCompleted(
+          backup.id,
+          connection.name,
+          backup.fileSize ?? 0,
+          backup.durationSeconds ?? 0,
+          ctx
+        )
+
         return response.ok({
           success: true,
           message: 'Backup realizado com sucesso',
@@ -352,6 +430,9 @@ export default class ConnectionsController {
           },
         })
       } else {
+        // Registrar auditoria de falha
+        await AuditService.logBackupFailed(backup.id, connection.name, result.error ?? 'Erro desconhecido', ctx)
+
         return response.unprocessableEntity({
           success: false,
           message: 'Falha ao realizar backup',

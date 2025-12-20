@@ -4,6 +4,11 @@
 
 import type {
   ApiResponse,
+  AuditLog,
+  AuditStats,
+  AuditAction,
+  AuditEntityType,
+  AuditStatus,
   Backup,
   BackupResult,
   Connection,
@@ -216,6 +221,53 @@ export const statsApi = {
    */
   async get(): Promise<ApiResponse<DashboardStats>> {
     return request<ApiResponse<DashboardStats>>('/stats')
+  },
+}
+
+/**
+ * Serviço de API para logs de auditoria
+ */
+export const auditLogsApi = {
+  /**
+   * Lista logs de auditoria com filtros e paginação
+   */
+  async list(params?: {
+    page?: number
+    limit?: number
+    action?: AuditAction
+    entityType?: AuditEntityType
+    entityId?: number
+    status?: AuditStatus
+    startDate?: string
+    endDate?: string
+  }): Promise<{ success: boolean; data: AuditLog[]; meta: { total: number; perPage: number; currentPage: number; lastPage: number } }> {
+    const searchParams = new URLSearchParams()
+
+    if (params?.page) searchParams.set('page', params.page.toString())
+    if (params?.limit) searchParams.set('limit', params.limit.toString())
+    if (params?.action) searchParams.set('action', params.action)
+    if (params?.entityType) searchParams.set('entityType', params.entityType)
+    if (params?.entityId) searchParams.set('entityId', params.entityId.toString())
+    if (params?.status) searchParams.set('status', params.status)
+    if (params?.startDate) searchParams.set('startDate', params.startDate)
+    if (params?.endDate) searchParams.set('endDate', params.endDate)
+
+    const query = searchParams.toString()
+    return request(`/audit-logs${query ? `?${query}` : ''}`)
+  },
+
+  /**
+   * Obtém um log de auditoria específico
+   */
+  async get(id: number): Promise<ApiResponse<AuditLog>> {
+    return request<ApiResponse<AuditLog>>(`/audit-logs/${id}`)
+  },
+
+  /**
+   * Obtém estatísticas de auditoria
+   */
+  async stats(): Promise<ApiResponse<AuditStats>> {
+    return request<ApiResponse<AuditStats>>('/audit-logs/stats')
   },
 }
 
