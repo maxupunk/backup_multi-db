@@ -23,6 +23,8 @@ declare module 'vue-router/auto-routes' {
     '/backups/': RouteRecordInfo<'/backups/', '/backups', Record<never, never>, Record<never, never>>,
     '/connections/': RouteRecordInfo<'/connections/', '/connections', Record<never, never>, Record<never, never>>,
     '/connections/[id]': RouteRecordInfo<'/connections/[id]', '/connections/:id', { id: ParamValue<true> }, { id: ParamValue<false> }>,
+    '/login': RouteRecordInfo<'/login', '/login', Record<never, never>, Record<never, never>>,
+    '/register': RouteRecordInfo<'/register', '/register', Record<never, never>, Record<never, never>>,
     '/settings/': RouteRecordInfo<'/settings/', '/settings', Record<never, never>, Record<never, never>>,
   }
 
@@ -55,6 +57,14 @@ declare module 'vue-router/auto-routes' {
     }
     'src/pages/connections/[id].vue': {
       routes: '/connections/[id]'
+      views: never
+    }
+    'src/pages/login.vue': {
+      routes: '/login'
+      views: never
+    }
+    'src/pages/register.vue': {
+      routes: '/register'
       views: never
     }
     'src/pages/settings/index.vue': {

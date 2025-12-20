@@ -8,6 +8,9 @@ import { middleware } from '#start/kernel'
 const ConnectionsController = () => import('#controllers/connections_controller')
 const BackupsController = () => import('#controllers/backups_controller')
 const AuditLogsController = () => import('#controllers/audit_logs_controller')
+const AuthController = () => import('#controllers/auth_controller')
+import AutoSwagger from 'adonis-autoswagger'
+import swagger from '#config/swagger'
 
 /*
 |--------------------------------------------------------------------------
@@ -16,7 +19,15 @@ const AuditLogsController = () => import('#controllers/audit_logs_controller')
 */
 router
   .group(() => {
-    // Health check (sem rate limiting)
+    // Swagger UI
+    router.get('/swagger', async () => {
+      return AutoSwagger.default.docs(router.toJSON(), swagger)
+    })
+    router.get('/docs', async () => {
+      return AutoSwagger.default.ui('/api/swagger', swagger)
+    })
+
+    // Health check (sem rate limiting - exceção ao global, mas está dentro do prefixo que tem global)
     router.get('/health', async () => {
       return {
         status: 'ok',
@@ -25,72 +36,85 @@ router
       }
     })
 
-    // ==================== Connections ====================
-    router.resource('connections', ConnectionsController).apiOnly()
+    // ==================== Autenticação (Público) ====================
+    router.post('/auth/register', [AuthController, 'register'])
+    router.post('/auth/login', [AuthController, 'login'])
 
-    // Test connection - rateLimit estrito (10 req/min)
+    // ==================== Rotas Protegidas ====================
     router
-      .post('connections/:id/test', [ConnectionsController, 'test'])
-      .use(middleware.rateLimit({ limiter: 'strict' }))
+      .group(() => {
+        // Auth User
+        router.get('/auth/me', [AuthController, 'me'])
+        router.post('/auth/logout', [AuthController, 'logout'])
 
-    // Backup manual - rateLimit de backup (5 req/5min)
-    router
-      .post('connections/:id/backup', [ConnectionsController, 'backup'])
-      .use(middleware.rateLimit({ limiter: 'backup' }))
+        // ==================== Connections ====================
+        router.resource('connections', ConnectionsController).apiOnly()
 
-    // ==================== Backups ====================
-    router.get('backups', [BackupsController, 'index'])
-    router.get('connections/:connectionId/backups', [BackupsController, 'byConnection'])
-    router.get('backups/:id', [BackupsController, 'show'])
-    router.get('backups/:id/download', [BackupsController, 'download'])
-    router.delete('backups/:id', [BackupsController, 'destroy'])
+        // Test connection - rateLimit estrito (10 req/min)
+        router
+          .post('connections/:id/test', [ConnectionsController, 'test'])
+          .use(middleware.rateLimit({ limiter: 'strict' }))
 
-    // ==================== Dashboard Stats ====================
-    router.get('/stats', async () => {
-      const Connection = (await import('#models/connection')).default
-      const Backup = (await import('#models/backup')).default
-      const { DateTime } = await import('luxon')
+        // Backup manual - rateLimit de backup (5 req/5min)
+        router
+          .post('connections/:id/backup', [ConnectionsController, 'backup'])
+          .use(middleware.rateLimit({ limiter: 'backup' }))
 
-      const today = DateTime.now().startOf('day')
+        // ==================== Backups ====================
+        router.get('backups', [BackupsController, 'index'])
+        router.get('connections/:connectionId/backups', [BackupsController, 'byConnection'])
+        router.get('backups/:id', [BackupsController, 'show'])
+        router.get('backups/:id/download', [BackupsController, 'download'])
+        router.delete('backups/:id', [BackupsController, 'destroy'])
 
-      const [totalConnections, activeConnections, totalBackups, backupsToday, recentBackups] =
-        await Promise.all([
-          Connection.query().count('* as total').first(),
-          Connection.query().where('status', 'active').count('* as total').first(),
-          Backup.query().count('* as total').first(),
-          Backup.query().where('createdAt', '>=', today.toSQL()).count('* as total').first(),
-          Backup.query()
-            .preload('connection')
-            .orderBy('createdAt', 'desc')
-            .limit(5),
-        ])
+        // ==================== Dashboard Stats ====================
+        router.get('/stats', async () => {
+          const Connection = (await import('#models/connection')).default
+          const Backup = (await import('#models/backup')).default
+          const { DateTime } = await import('luxon')
 
-      return {
-        success: true,
-        data: {
-          connections: {
-            total: Number(totalConnections?.$extras.total ?? 0),
-            active: Number(activeConnections?.$extras.total ?? 0),
-          },
-          backups: {
-            total: Number(totalBackups?.$extras.total ?? 0),
-            today: Number(backupsToday?.$extras.total ?? 0),
-          },
-          recentBackups: recentBackups.map((backup) => ({
-            id: backup.id,
-            connectionName: backup.connection?.name ?? 'N/A',
-            status: backup.status,
-            fileSize: backup.fileSize,
-            createdAt: backup.createdAt,
-          })),
-        },
-      }
-    })
+          const today = DateTime.now().startOf('day')
 
-    // ==================== Audit Logs ====================
-    router.get('audit-logs', [AuditLogsController, 'index'])
-    router.get('audit-logs/stats', [AuditLogsController, 'stats'])
-    router.get('audit-logs/:id', [AuditLogsController, 'show'])
+          const [totalConnections, activeConnections, totalBackups, backupsToday, recentBackups] =
+            await Promise.all([
+              Connection.query().count('* as total').first(),
+              Connection.query().where('status', 'active').count('* as total').first(),
+              Backup.query().count('* as total').first(),
+              Backup.query().where('createdAt', '>=', today.toSQL()).count('* as total').first(),
+              Backup.query()
+                .preload('connection')
+                .orderBy('createdAt', 'desc')
+                .limit(5),
+            ])
+
+          return {
+            success: true,
+            data: {
+              connections: {
+                total: Number(totalConnections?.$extras.total ?? 0),
+                active: Number(activeConnections?.$extras.total ?? 0),
+              },
+              backups: {
+                total: Number(totalBackups?.$extras.total ?? 0),
+                today: Number(backupsToday?.$extras.total ?? 0),
+              },
+              recentBackups: recentBackups.map((backup) => ({
+                id: backup.id,
+                connectionName: backup.connection?.name ?? 'N/A',
+                status: backup.status,
+                fileSize: backup.fileSize,
+                createdAt: backup.createdAt,
+              })),
+            },
+          }
+        })
+
+        // ==================== Audit Logs ====================
+        router.get('audit-logs', [AuditLogsController, 'index'])
+        router.get('audit-logs/stats', [AuditLogsController, 'stats'])
+        router.get('audit-logs/:id', [AuditLogsController, 'show'])
+      })
+      .use(middleware.auth())
   })
   .prefix('/api')
   .use(middleware.rateLimit({ limiter: 'global' }))
@@ -117,4 +141,3 @@ router.get('*', async ({ response }) => {
     hint: 'In development, access the frontend via http://localhost:3000',
   })
 })
-

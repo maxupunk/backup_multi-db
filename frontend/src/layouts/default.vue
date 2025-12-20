@@ -27,6 +27,19 @@
     <template #append>
       <v-divider class="mb-2" />
 
+      <!-- User Profile -->
+      <v-list-item v-if="authStore.user" :title="rail ? '' : (authStore.user.fullName || 'Usuário')"
+        :subtitle="rail ? '' : authStore.user.email" prepend-icon="mdi-account-circle" class="mx-2 mb-2" rounded="lg">
+        <template #append v-if="!rail">
+          <v-btn icon="mdi-logout" size="small" variant="text" color="error" @click="handleLogout">
+            <v-icon icon="mdi-logout" />
+            <v-tooltip activator="parent" location="top">Sair</v-tooltip>
+          </v-btn>
+        </template>
+      </v-list-item>
+
+      <v-divider v-if="authStore.user" class="mb-2" />
+
       <!-- Theme Toggle -->
       <v-list-item :title="rail ? '' : 'Tema'" :prepend-icon="isDark ? 'mdi-weather-night' : 'mdi-weather-sunny'"
         @click="toggleTheme" rounded="lg" class="mx-2 mb-2" />
@@ -60,8 +73,12 @@
 <script lang="ts" setup>
 import { ref, computed, provide, reactive } from 'vue'
 import { useTheme } from 'vuetify'
+import { useAuthStore } from '@/stores/auth'
+import { useRouter } from 'vue-router'
 
 const theme = useTheme()
+const authStore = useAuthStore()
+const router = useRouter()
 const drawer = ref(true)
 const rail = ref(false)
 
@@ -69,6 +86,11 @@ const isDark = computed(() => theme.global.current.value.dark)
 
 function toggleTheme() {
   theme.global.name.value = isDark.value ? 'light' : 'dark'
+}
+
+async function handleLogout() {
+  await authStore.logout()
+  router.push('/login')
 }
 
 const navItems = [

@@ -17,7 +17,10 @@ import type {
   DashboardStats,
   PaginatedResponse,
   UpdateConnectionPayload,
+  LoginPayload,
+  RegisterPayload,
 } from '@/types/api'
+import type { AuthResponse } from '@/types/auth'
 
 const API_BASE = '/api'
 
@@ -44,9 +47,13 @@ async function request<T>(
 ): Promise<T> {
   const url = `${API_BASE}${endpoint}`
 
+  const token = localStorage.getItem('token')
+  const authHeader = token ? { Authorization: `Bearer ${token}` } : {}
+
   const defaultHeaders: HeadersInit = {
     'Content-Type': 'application/json',
     Accept: 'application/json',
+    ...authHeader,
   }
 
   const response = await fetch(url, {
@@ -268,6 +275,47 @@ export const auditLogsApi = {
    */
   async stats(): Promise<ApiResponse<AuditStats>> {
     return request<ApiResponse<AuditStats>>('/audit-logs/stats')
+  },
+}
+
+/**
+ * Serviço de API para Autenticação
+ */
+export const authApi = {
+  /**
+   * Realiza login
+   */
+  async login(payload: LoginPayload): Promise<ApiResponse<AuthResponse>> {
+    return request<ApiResponse<AuthResponse>>('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    })
+  },
+
+  /**
+   * Realiza registro
+   */
+  async register(payload: RegisterPayload): Promise<ApiResponse<AuthResponse>> {
+    return request<ApiResponse<AuthResponse>>('/auth/register', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    })
+  },
+
+  /**
+   * Obtém usuário atual
+   */
+  async me(): Promise<ApiResponse<any>> {
+    return request<ApiResponse<any>>('/auth/me')
+  },
+
+  /**
+   * Realiza logout
+   */
+  async logout(): Promise<ApiResponse> {
+    return request<ApiResponse>('/auth/logout', {
+      method: 'POST',
+    })
   },
 }
 

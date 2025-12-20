@@ -85,6 +85,23 @@ export interface UpdateConnectionPayload {
 }
 
 /**
+ * Payload de Login
+ */
+export interface LoginPayload {
+  email: string
+  password: string
+}
+
+/**
+ * Payload de Registro
+ */
+export interface RegisterPayload {
+  fullName?: string
+  email: string
+  password: string
+}
+
+/**
  * Interface de um backup
  */
 export interface Backup {

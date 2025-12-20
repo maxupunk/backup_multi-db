@@ -105,10 +105,10 @@
 
 ### 11. PWA (Progressive Web App)
 
-- [ ] Configurar manifest.json
-- [ ] Criar service worker básico
-- [ ] Adicionar ícones em múltiplos tamanhos
-- [ ] Configurar offline fallback
+- [x] Configurar manifest.json
+- [x] Criar service worker básico
+- [x] Adicionar ícones em múltiplos tamanhos
+- [x] Configurar offline fallback
 
 ### 12. Segurança e Validação
 
@@ -120,8 +120,7 @@
 
 ### 13. Documentação
 
-- [x] Criar README.md completo
-- [ ] Documentar API (OpenAPI/Swagger)
+- [x] Documentar API (OpenAPI/Swagger)
 - [ ] Guia de instalação
 - [ ] Guia de contribuição (CONTRIBUTING.md)
 
@@ -131,8 +130,8 @@
 
 ### Autenticação e Multi-usuário
 
-- [ ] Sistema de login/registro
-- [ ] Gerenciamento de usuários
+- [x] Sistema de login/registro
+- [x] Gerenciamento de usuários
 - [ ] Permissões por conexão
 
 ### Destinos de Armazenamento
