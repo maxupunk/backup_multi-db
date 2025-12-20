@@ -1,4 +1,5 @@
 import type { HttpContext } from '@adonisjs/core/http'
+import { DateTime } from 'luxon'
 import Connection from '#models/connection'
 import {
   createConnectionValidator,
@@ -217,7 +218,7 @@ export default class ConnectionsController {
       // Atualiza o status da conexão
       connection.status = testResult.success ? 'active' : 'error'
       connection.lastError = testResult.success ? null : testResult.error ?? null
-      connection.lastTestedAt = new Date() as unknown as import('luxon').DateTime
+      connection.lastTestedAt = DateTime.now()
 
       await connection.save()
 
@@ -240,7 +241,7 @@ export default class ConnectionsController {
     } catch (error) {
       connection.status = 'error'
       connection.lastError = error instanceof Error ? error.message : 'Erro desconhecido'
-      connection.lastTestedAt = new Date() as unknown as import('luxon').DateTime
+      connection.lastTestedAt = DateTime.now()
       await connection.save()
 
       return response.internalServerError({
