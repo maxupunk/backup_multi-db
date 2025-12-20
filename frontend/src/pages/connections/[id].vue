@@ -207,12 +207,20 @@ const saving = ref(false)
 const testing = ref(false)
 const loading = ref(false)
 
-const isEditing = computed(() => !!(route.params as { id?: string }).id)
+const isEditing = computed(() => {
+    const params = route.params as { id?: string }
+    const id = params.id
+    return !!id && id !== 'new' && !isNaN(Number(id))
+})
 
 // Helper para obter o ID da conexão de forma segura
 function getConnectionId(): number {
     const params = route.params as { id?: string }
-    return Number(params.id)
+    const id = Number(params.id)
+    if (isNaN(id)) {
+        throw new Error('ID inválido')
+    }
+    return id
 }
 
 const form = reactive({
