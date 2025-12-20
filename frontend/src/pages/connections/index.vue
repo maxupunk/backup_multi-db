@@ -105,7 +105,7 @@
                         </v-tooltip>
                     </v-btn>
 
-                    <v-btn icon="mdi-pencil" size="small" variant="text" :to="`/connections/${item.id}/edit`">
+                    <v-btn icon="mdi-pencil" size="small" variant="text" :to="`/connections/${item.id}`">
                         <v-icon icon="mdi-pencil" />
                         <v-tooltip activator="parent" location="top">
                             Editar
