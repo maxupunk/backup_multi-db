@@ -1,0 +1,44 @@
+# Dependências
+node_modules
+
+# Build
+build
+dist
+
+# Arquivos de desenvolvimento
+.git
+.gitignore
+.editorconfig
+*.md
+!README.md
+
+# Ambiente local
+.env
+.env.local
+.env.*.local
+
+# Testes (manter tests/bootstrap.ts para o build)
+*.spec.ts
+coverage
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# Logs e temporários
+logs
+*.log
+npm-debug.log*
+tmp
+.tmp
+
+# Storage local (será montado como volume)
+storage/backups/*
+storage/database/*
+!storage/backups/.gitkeep
+!storage/database/.gitkeep
+
+# macOS
+.DS_Store
