@@ -266,6 +266,7 @@
   import { useRoute, useRouter } from 'vue-router'
   import { useDisplay } from 'vuetify'
   import { connectionsApi, storageDestinationsApi } from '@/services/api'
+  import { useStorageDestinationOptions } from '@/composables/useStorageDestinationOptions'
 
   const route = useRoute()
   const router = useRouter()
@@ -342,12 +343,7 @@
     passwordModified.value = true
   }
 
-  const storageDestinationOptions = computed(() => [
-    ...storageDestinations.value.map(d => ({
-      title: d.isDefault ? `${d.name} (padrão)` : d.name,
-      value: d.id,
-    })),
-  ])
+  const storageDestinationOptions = useStorageDestinationOptions(storageDestinations)
 
   async function loadStorageDestinations () {
     loadingDestinations.value = true
