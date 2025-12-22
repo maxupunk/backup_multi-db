@@ -136,11 +136,11 @@
 
 ### Destinos de Armazenamento
 
-- [ ] Local filesystem
-- [ ] Suporte a S3/MinIO
-- [ ] Suporte a Google Cloud Storage
-- [ ] Suporte a Azure Blob Storage
-- [ ] Suporte a SFTP
+- [x] Local filesystem
+- [x] Suporte a S3/MinIO
+- [x] Suporte a Google Cloud Storage
+- [x] Suporte a Azure Blob Storage
+- [x] Suporte a SFTP
 
 ### Notificações
 
