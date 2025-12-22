@@ -9,6 +9,22 @@
 # -----------------------------------------------------------------------------
 FROM node:25-bookworm-slim AS base
 
+# -----------------------------------------------------------------------------
+# Stage: Frontend Builder
+# -----------------------------------------------------------------------------
+FROM node:25-bookworm-slim AS frontend-builder
+WORKDIR /app-frontend
+COPY frontend/package*.json ./
+RUN npm install
+COPY frontend/ .
+# Force output to ./dist to avoid relative path issues with predefined vite config
+RUN npm run build-only -- --outDir dist
+
+# -----------------------------------------------------------------------------
+# Stage 1: Base - Instala dependências do sistema
+# -----------------------------------------------------------------------------
+FROM base AS final-base
+
 # Instalar dependências do sistema necessárias
 # - mysql-client: fornece mysqldump para backups MySQL/MariaDB
 # - postgresql-client: fornece pg_dump para backups PostgreSQL
@@ -27,10 +43,10 @@ WORKDIR /app
 # -----------------------------------------------------------------------------
 # Stage 2: Dependencies - Instala dependências Node.js
 # -----------------------------------------------------------------------------
-FROM base AS dependencies
+FROM final-base AS dependencies
 
 # Copiar arquivos de configuração de dependências
-COPY package*.json ./
+COPY backend/package*.json ./
 
 # Instalar todas as dependências (incluindo devDependencies para build)
 RUN npm ci
@@ -41,7 +57,10 @@ RUN npm ci
 FROM dependencies AS build
 
 # Copiar código fonte
-COPY . .
+COPY backend/ .
+
+# Copiar build do frontend para a pasta public do backend
+COPY --from=frontend-builder /app-frontend/dist ./public
 
 # Build da aplicação
 RUN node ace build
@@ -49,7 +68,7 @@ RUN node ace build
 # -----------------------------------------------------------------------------
 # Stage 4: Production - Imagem final otimizada
 # -----------------------------------------------------------------------------
-FROM base AS production
+FROM final-base AS production
 
 ENV NODE_ENV=production
 ENV HOST=0.0.0.0
@@ -65,13 +84,13 @@ COPY --from=build /app/build ./
 COPY --from=build /app/package*.json ./
 
 # Copiar configuração do PM2
-COPY ecosystem.config.cjs ./
+COPY backend/ecosystem.config.cjs ./
 
 # Instalar apenas dependências de produção
 RUN npm ci --only=production && npm cache clean --force
 
 # Copiar e configurar entrypoint
-COPY docker-entrypoint.sh /docker-entrypoint.sh
+COPY backend/docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh
 
 # Criar diretórios necessários (incluindo logs)
@@ -106,10 +125,10 @@ ENV PORT=3333
 WORKDIR /app
 
 # Copiar código fonte
-COPY . .
+COPY backend/ .
 
 # Copiar e configurar entrypoint
-COPY docker-entrypoint.sh /docker-entrypoint.sh
+COPY backend/docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh
 
 # Criar diretórios necessários

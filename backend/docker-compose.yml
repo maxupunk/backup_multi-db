@@ -6,8 +6,8 @@
 services:
   backend:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: backend/Dockerfile
       target: production
     container_name: backup-manager-backend
     restart: unless-stopped
