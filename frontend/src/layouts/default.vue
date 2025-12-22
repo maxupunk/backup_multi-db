@@ -1,19 +1,38 @@
 <template>
-  <v-app-bar class="bg-surface" :elevation="0">
+  <v-app-bar class="bg-surface border-b" :elevation="0">
     <v-app-bar-nav-icon v-if="!mdAndUp" @click="drawer = !drawer" />
 
-    <v-app-bar-title class="font-weight-bold">
-      DB Backup
+    <v-app-bar-title class="font-weight-bold text-h6">
+      {{ pageTitle }}
     </v-app-bar-title>
 
     <template #append>
-      <v-btn :aria-label="isDark ? 'Ativar tema claro' : 'Ativar tema escuro'" icon @click="toggleTheme">
+      <v-btn class="mr-2" :icon="isDark ? 'mdi-weather-night' : 'mdi-weather-sunny'" variant="text"
+        @click="toggleTheme">
         <v-icon :icon="isDark ? 'mdi-weather-night' : 'mdi-weather-sunny'" />
+        <v-tooltip activator="parent" location="bottom">Alternar Tema</v-tooltip>
       </v-btn>
 
-      <v-btn v-if="authStore.user" aria-label="Sair" color="error" icon @click="handleLogout">
-        <v-icon icon="mdi-logout" />
-      </v-btn>
+      <v-menu v-if="authStore.user" location="bottom end" min-width="230" offset="10">
+        <template #activator="{ props }">
+          <v-btn class="mr-2" icon v-bind="props">
+            <v-avatar color="primary" size="32">
+              <span class="text-subtitle-2 font-weight-bold">{{ userInitials }}</span>
+            </v-avatar>
+          </v-btn>
+        </template>
+        <v-list class="pa-2" rounded="lg">
+          <v-list-item class="mb-2" :subtitle="authStore.user.email" :title="authStore.user.fullName || 'Usuário'">
+            <template #prepend>
+              <v-avatar color="primary" size="40">
+                <span class="text-h6">{{ userInitials }}</span>
+              </v-avatar>
+            </template>
+          </v-list-item>
+          <v-divider class="mb-2" />
+          <v-list-item color="error" prepend-icon="mdi-logout" rounded="lg" title="Sair" @click="handleLogout" />
+        </v-list>
+      </v-menu>
     </template>
   </v-app-bar>
 
@@ -45,24 +64,6 @@
 
     <template #append>
       <v-divider class="mb-2" />
-
-      <!-- User Profile -->
-      <v-list-item v-if="authStore.user" class="mx-2 mb-2" prepend-icon="mdi-account-circle" rounded="lg"
-        :subtitle="rail ? '' : authStore.user.email" :title="rail ? '' : (authStore.user.fullName || 'Usuário')">
-        <template v-if="!rail" #append>
-          <v-btn color="error" icon="mdi-logout" size="small" variant="text" @click="handleLogout">
-            <v-icon icon="mdi-logout" />
-            <v-tooltip activator="parent" location="top">Sair</v-tooltip>
-          </v-btn>
-        </template>
-      </v-list-item>
-
-      <v-divider v-if="authStore.user" class="mb-2" />
-
-      <!-- Theme Toggle -->
-      <v-list-item class="mx-2 mb-2" :prepend-icon="isDark ? 'mdi-weather-night' : 'mdi-weather-sunny'" rounded="lg"
-        :title="rail ? '' : 'Tema'" @click="toggleTheme" />
-
       <!-- Rail Toggle -->
       <v-list-item v-if="mdAndUp" class="mx-2 mb-2" :prepend-icon="rail ? 'mdi-chevron-right' : 'mdi-chevron-left'"
         rounded="lg" :title="rail ? '' : 'Recolher'" @click="rail = !rail" />
@@ -80,7 +81,7 @@
 
 <script lang="ts" setup>
 import { computed, provide, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useDisplay, useTheme } from 'vuetify'
 import { useAuthStore } from '@/stores/auth'
 import { useNotificationStore } from '@/stores/notification'
@@ -91,10 +92,39 @@ const { mdAndUp } = useDisplay()
 const authStore = useAuthStore()
 const notificationStore = useNotificationStore()
 const router = useRouter()
+const route = useRoute()
+
+const navItems = [
+  { title: 'Dashboard', icon: 'mdi-view-dashboard', to: '/' },
+  { title: 'Conexões', icon: 'mdi-database', to: '/connections' },
+  { title: 'Backups', icon: 'mdi-backup-restore', to: '/backups' },
+  { title: 'Auditoria', icon: 'mdi-history', to: '/audit' },
+  { title: 'Usuários', icon: 'mdi-account-group', to: '/users' },
+  { title: 'Configurações', icon: 'mdi-cog', to: '/settings' },
+]
+
 const drawer = ref(mdAndUp.value)
 const rail = ref(false)
 
 const isDark = computed(() => theme.global.current.value.dark)
+
+const pageTitle = computed(() => {
+  const sortedItems = [...navItems].sort((a, b) => b.to.length - a.to.length)
+  const item = sortedItems.find(i =>
+    i.to === '/' ? route.path === '/' : route.path.startsWith(i.to)
+  )
+  return item ? item.title : ''
+})
+
+const userInitials = computed(() => {
+  const name = authStore.user?.fullName || 'Usuário'
+  return name
+    .split(' ')
+    .map((n: string) => n[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 2)
+})
 
 watch(
   mdAndUp,
@@ -114,14 +144,7 @@ async function handleLogout() {
   router.push('/login')
 }
 
-const navItems = [
-  { title: 'Dashboard', icon: 'mdi-view-dashboard', to: '/' },
-  { title: 'Conexões', icon: 'mdi-database', to: '/connections' },
-  { title: 'Backups', icon: 'mdi-backup-restore', to: '/backups' },
-  { title: 'Auditoria', icon: 'mdi-history', to: '/audit' },
-  { title: 'Usuários', icon: 'mdi-account-group', to: '/users' },
-  { title: 'Configurações', icon: 'mdi-cog', to: '/settings' },
-]
+
 
 function showNotification(
   message: string,
