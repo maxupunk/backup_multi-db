@@ -3,6 +3,7 @@ import Connection, { type ScheduleFrequency } from '#models/connection'
 import { BackupService } from '#services/backup_service'
 import { RetentionService } from '#services/retention_service'
 import logger from '@adonisjs/core/services/logger'
+import env from '#start/env'
 
 /**
  * Job agendado para backup
@@ -22,6 +23,7 @@ export class SchedulerService {
   private backupService: BackupService
   private retentionService: RetentionService
   private isRunning = false
+  private timezone = env.get('TZ', 'America/Sao_Paulo')
 
   constructor() {
     this.backupService = new BackupService()
@@ -114,7 +116,7 @@ export class SchedulerService {
         await this.executeBackupJob(connection.id)
       },
       {
-        timezone: 'America/Sao_Paulo', // Ajuste conforme necessário
+        timezone: this.timezone,
       }
     )
 
@@ -204,7 +206,7 @@ export class SchedulerService {
         await this.executeRetentionJob()
       },
       {
-        timezone: 'America/Sao_Paulo',
+        timezone: this.timezone,
       }
     )
 
