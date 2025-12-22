@@ -1,18 +1,21 @@
 # 🗄️ DB Backup Manager
 
-Um sistema **self-hosted** e **open source** para gerenciamento, agendamento e armazenamento de backups de múltiplos bancos de dados remotos.
+Um sistema **pronto para uso**, **self-hosted** e **open source** para gerenciamento robusto de backups de bancos de dados.
+Projetado com foco em **experiência do usuário (UX)** inovadora e **instalação simplificada** via Docker.
 
-![Status](https://img.shields.io/badge/status-em%20desenvolvimento-yellow)
+![Status](https://img.shields.io/badge/status-ativo-brightgreen)
+![Docker](https://img.shields.io/badge/docker-ready-blue)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
-## ✨ Funcionalidades
+## ✨ Destaques (Features)
 
-- 🔗 **Gerenciamento de Conexões** - CRUD completo para conexões de banco de dados
-- 🔒 **Segurança** - Senhas criptografadas com AES-256-GCM
-- ⏰ **Agendamento Flexível** - Backups automáticos a cada 1h, 6h, 12h ou 24h
-- 📦 **Engine de Backup** - Integração com `mysqldump` e `pg_dump`
-- 🗂️ **Retenção Inteligente (GFS)** - Política Grandfather-Father-Son modificada
-- 📱 **PWA Ready** - Interface responsiva preparada para Progressive Web App
+- 🚀 **Instalação Instantânea** - Suba todo o ambiente em segundos com Docker Compose
+- 🎨 **Interface Moderna (UX/UI)** - Design intuitivo, feedback visual rico e foco na usabilidade
+- 📱 **100% Responsivo** - Gerencie seus backups do desktop ou celular (PWA Ready)
+- 🔗 **Gerenciamento Centralizado** - Controle múltiplas conexões de banco de dados em um só lugar
+- 🔒 **Segurança de Ponta** - Senhas criptografadas com AES-256-GCM
+- ⏰ **Automação Inteligente** - Agendamentos flexíveis e retenção automática (GFS)
+- 📦 **Suporte Multi-Banco** - Compatível nativamente com MySQL, MariaDB e PostgreSQL
 
 ## 🏗️ Stack Tecnológica
 
@@ -29,14 +32,33 @@ Um sistema **self-hosted** e **open source** para gerenciamento, agendamento e a
 - ✅ MariaDB
 - ✅ PostgreSQL
 
-## 📋 Pré-requisitos
+## 🚀 Início Rápido (Quick Start)
+
+Tenha o sistema rodando em menos de 2 minutos usando Docker:
+
+```bash
+# 1. Clone o repositório
+git clone https://github.com/seu-usuario/db-backup-manager.git
+cd db-backup-manager
+
+# 2. Inicie com Docker Compose
+docker compose up -d
+```
+
+Acesse imediatamente: **http://localhost:3000**
+
+> O sistema já vem **configurado e pronto para uso** com um banco de dados interno e configurações padrão.
+
+---
+
+## 📋 Pré-requisitos (Para Instalação Manual)
 
 - **Node.js** >= 20.x
 - **npm** >= 10.x
 - **mysqldump** (para MySQL/MariaDB) - incluído no MySQL Client
 - **pg_dump** (para PostgreSQL) - incluído no PostgreSQL Client
 
-## 🚀 Instalação
+## �️ Instalação Manual (Desenvolvimento)
 
 ### 1. Clone o repositório
 
