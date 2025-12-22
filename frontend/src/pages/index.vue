@@ -182,10 +182,13 @@
 
 <script lang="ts" setup>
   import type { BackupStatus, DashboardStats } from '@/types/api'
-  import { inject, onMounted, ref } from 'vue'
+  import { onMounted, ref } from 'vue'
   import { statsApi } from '@/services/api'
+  import { useNotifier } from '@/composables/useNotifier'
+  import { getBackupStatusColor as getStatusColor, getBackupStatusLabel as getStatusLabel } from '@/ui/backup'
+  import { formatDateTimePtBR, formatFileSize } from '@/utils/format'
 
-  const showNotification = inject<(msg: string, type: string) => void>('showNotification')
+  const notify = useNotifier()
 
   const loading = ref(false)
   const stats = ref<DashboardStats | null>(null)
@@ -197,57 +200,14 @@
       stats.value = response.data ?? null
     } catch (error) {
       console.error('Erro ao carregar estatísticas:', error)
-      showNotification?.('Erro ao carregar estatísticas', 'error')
+      notify('Erro ao carregar estatísticas', 'error')
     } finally {
       loading.value = false
     }
   }
 
-  function getStatusColor (status: BackupStatus): string {
-    const colors: Record<BackupStatus, string> = {
-      pending: 'warning',
-      running: 'info',
-      completed: 'success',
-      failed: 'error',
-      cancelled: 'grey',
-    }
-    return colors[status] ?? 'grey'
-  }
-
-  function getStatusLabel (status: BackupStatus): string {
-    const labels: Record<BackupStatus, string> = {
-      pending: 'Pendente',
-      running: 'Em execução',
-      completed: 'Concluído',
-      failed: 'Falhou',
-      cancelled: 'Cancelado',
-    }
-    return labels[status] ?? status
-  }
-
-  function formatFileSize (bytes: number | null): string {
-    if (bytes === null || bytes === undefined) return 'N/A'
-
-    const units = ['B', 'KB', 'MB', 'GB', 'TB']
-    let size = bytes
-    let unitIndex = 0
-
-    while (size >= 1024 && unitIndex < units.length - 1) {
-      size /= 1024
-      unitIndex++
-    }
-
-    return `${size.toFixed(1)} ${units[unitIndex]}`
-  }
-
   function formatDate (dateString: string): string {
-    const date = new Date(dateString)
-    return date.toLocaleString('pt-BR', {
-      day: '2-digit',
-      month: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-    })
+    return formatDateTimePtBR(dateString, { withYear: false })
   }
 
   onMounted(() => {

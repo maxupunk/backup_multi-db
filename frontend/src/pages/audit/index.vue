@@ -392,6 +392,8 @@
   import { computed, onMounted, reactive, ref } from 'vue'
   import { useDisplay } from 'vuetify'
   import { auditLogsApi } from '@/services/api'
+  import { useDebouncedFn } from '@/composables/useDebouncedFn'
+  import { formatDateTimePtBR as formatDate } from '@/utils/format'
 
   const { smAndUp, mdAndUp } = useDisplay()
 
@@ -494,14 +496,7 @@
     detailsDialog.value = true
   }
 
-  // Debounce for entityId input
-  let debounceTimer: ReturnType<typeof setTimeout>
-  function debouncedLoadLogs () {
-    clearTimeout(debounceTimer)
-    debounceTimer = setTimeout(() => {
-      loadLogs()
-    }, 500)
-  }
+  const debouncedLoadLogs = useDebouncedFn(loadLogs, 500)
 
   // Helpers
   function getActionColor (action: AuditAction): string {
@@ -550,17 +545,6 @@
       warning: 'Aviso',
     }
     return labels[status] ?? status
-  }
-
-  function formatDate (dateString: string): string {
-    const date = new Date(dateString)
-    return date.toLocaleString('pt-BR', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    })
   }
 
   function formatTimeAgo (dateString: string): string {

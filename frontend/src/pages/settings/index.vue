@@ -552,14 +552,16 @@
 
 <script lang="ts" setup>
   import type { StorageDestination, StorageDestinationType } from '@/types/api'
-  import { computed, inject, onMounted, reactive, ref } from 'vue'
+  import { computed, onMounted, reactive, ref } from 'vue'
   import { useTheme } from 'vuetify'
   import { ApiError, healthCheck, storageDestinationsApi } from '@/services/api'
   import { useDisplay } from 'vuetify'
+  import { useDebouncedFn } from '@/composables/useDebouncedFn'
+  import { useNotifier } from '@/composables/useNotifier'
 
   const theme = useTheme()
   const { mdAndUp } = useDisplay()
-  const showNotification = inject<(msg: string, type: string) => void>('showNotification')
+  const notify = useNotifier()
 
   const apiStatus = ref<'online' | 'offline'>('offline')
   const apiLatency = ref<number | null>(null)
@@ -688,11 +690,11 @@
       await healthCheck()
       apiLatency.value = Date.now() - startTime
       apiStatus.value = 'online'
-      showNotification?.('API está online', 'success')
+      notify('API está online', 'success')
     } catch {
       apiStatus.value = 'offline'
       apiLatency.value = null
-      showNotification?.('API está offline', 'error')
+      notify('API está offline', 'error')
     } finally {
       checkingApi.value = false
     }
@@ -719,19 +721,13 @@
       storageDestinations.value = response.data?.data ?? []
     } catch {
       storageDestinations.value = []
-      showNotification?.('Erro ao carregar destinos de armazenamento', 'error')
+      notify('Erro ao carregar destinos de armazenamento', 'error')
     } finally {
       loadingDestinations.value = false
     }
   }
 
-  let debounceTimer: ReturnType<typeof setTimeout>
-  function debouncedLoadDestinations () {
-    clearTimeout(debounceTimer)
-    debounceTimer = setTimeout(() => {
-      loadDestinations()
-    }, 300)
-  }
+  const debouncedLoadDestinations = useDebouncedFn(loadDestinations, 300)
 
   function resetDestinationConfig () {
     destinationConfig.basePath = ''
@@ -806,13 +802,13 @@
 
       destinationDialog.value = true
     } catch {
-      showNotification?.('Erro ao carregar destino', 'error')
+      notify('Erro ao carregar destino', 'error')
     } finally {
       savingDestination.value = false
     }
   }
 
-  function stableStringify(value: unknown): string {
+  function stableStringify (value: unknown): string {
     if (value === undefined) return '"__undefined__"'
     if (value === null || typeof value !== 'object') return JSON.stringify(value)
     if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`
@@ -822,7 +818,7 @@
     return `{${entries.join(',')}}`
   }
 
-  function getOriginalConfigSafe(): Record<string, unknown> {
+  function getOriginalConfigSafe (): Record<string, unknown> {
     const cfg = originalDestination.value?.config
     if (!cfg || typeof cfg !== 'object') return {}
     const obj = cfg as Record<string, unknown>
@@ -939,7 +935,7 @@
         }
 
         await storageDestinationsApi.update(editingDestinationId.value, payload)
-        showNotification?.('Destino atualizado com sucesso', 'success')
+        notify('Destino atualizado com sucesso', 'success')
       } else {
         const payload = {
           name: destinationForm.name.trim(),
@@ -949,16 +945,16 @@
           config: destinationPayloadConfig.value,
         }
         await storageDestinationsApi.create(payload)
-        showNotification?.('Destino criado com sucesso', 'success')
+        notify('Destino criado com sucesso', 'success')
       }
 
       destinationDialog.value = false
       loadDestinations()
     } catch (error: unknown) {
       if (error instanceof ApiError) {
-        showNotification?.(error.message || 'Erro ao salvar destino', 'error')
+        notify(error.message || 'Erro ao salvar destino', 'error')
       } else {
-        showNotification?.('Erro ao salvar destino', 'error')
+        notify('Erro ao salvar destino', 'error')
       }
     } finally {
       savingDestination.value = false
@@ -975,12 +971,12 @@
     deletingDestination.value = true
     try {
       await storageDestinationsApi.delete(destinationToDelete.value.id)
-      showNotification?.('Destino removido com sucesso', 'success')
+      notify('Destino removido com sucesso', 'success')
       deleteDestinationDialog.value = false
       destinationToDelete.value = null
       loadDestinations()
     } catch {
-      showNotification?.('Erro ao remover destino', 'error')
+      notify('Erro ao remover destino', 'error')
     } finally {
       deletingDestination.value = false
     }

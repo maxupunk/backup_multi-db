@@ -262,15 +262,17 @@
 
 <script lang="ts" setup>
   import type { DatabaseType, ScheduleFrequency, StorageDestination } from '@/types/api'
-  import { computed, inject, onMounted, reactive, ref } from 'vue'
+  import { computed, onMounted, reactive, ref } from 'vue'
   import { useRoute, useRouter } from 'vue-router'
   import { useDisplay } from 'vuetify'
   import { connectionsApi, storageDestinationsApi } from '@/services/api'
+  import { useNotifier } from '@/composables/useNotifier'
   import { useStorageDestinationOptions } from '@/composables/useStorageDestinationOptions'
+  import { databaseTypeOptions, defaultDatabasePorts } from '@/ui/database'
 
   const route = useRoute()
   const router = useRouter()
-  const showNotification = inject<(msg: string, type: string) => void>('showNotification')
+  const notify = useNotifier()
   const { mdAndUp } = useDisplay()
 
   const formRef = ref()
@@ -311,11 +313,7 @@
     scheduleFrequency: null as ScheduleFrequency | null,
   })
 
-  const databaseTypes = [
-    { title: 'MySQL', value: 'mysql' },
-    { title: 'MariaDB', value: 'mariadb' },
-    { title: 'PostgreSQL', value: 'postgresql' },
-  ]
+  const databaseTypes = databaseTypeOptions
 
   const scheduleFrequencies = [
     { title: 'A cada 1 hora', value: '1h' },
@@ -324,11 +322,7 @@
     { title: 'A cada 24 horas', value: '24h' },
   ]
 
-  const defaultPorts: Record<DatabaseType, number> = {
-    mysql: 3306,
-    mariadb: 3306,
-    postgresql: 5432,
-  }
+  const defaultPorts = defaultDatabasePorts
 
   const rules = {
     required: (v: string) => !!v || 'Campo obrigatório',
@@ -376,7 +370,7 @@
         form.scheduleFrequency = connection.scheduleFrequency
       }
     } catch {
-      showNotification?.('Erro ao carregar conexão', 'error')
+      notify('Erro ao carregar conexão', 'error')
       router.push('/connections')
     } finally {
       loading.value = false
@@ -408,18 +402,18 @@
         }
 
         await connectionsApi.update(getConnectionId(), payload)
-        showNotification?.('Conexão atualizada com sucesso', 'success')
+        notify('Conexão atualizada com sucesso', 'success')
       } else {
         await connectionsApi.create({
           ...form,
           scheduleFrequency: form.scheduleFrequency || undefined,
         })
-        showNotification?.('Conexão criada com sucesso', 'success')
+        notify('Conexão criada com sucesso', 'success')
       }
 
       router.push('/connections')
     } catch {
-      showNotification?.(
+      notify(
         isEditing.value ? 'Erro ao atualizar conexão' : 'Erro ao criar conexão',
         'error',
       )
@@ -432,12 +426,12 @@
     testing.value = true
     try {
       const response = await connectionsApi.test(getConnectionId())
-      showNotification?.(
+      notify(
         `Conexão bem-sucedida! Latência: ${response.data?.latencyMs}ms`,
         'success',
       )
     } catch {
-      showNotification?.('Falha ao testar conexão', 'error')
+      notify('Falha ao testar conexão', 'error')
     } finally {
       testing.value = false
     }

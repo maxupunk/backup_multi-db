@@ -164,8 +164,8 @@
 
         <!-- Status -->
         <template #item.status="{ item }">
-          <v-chip :color="getStatusColor(item.status)" label size="small">
-            {{ getStatusLabel(item.status) }}
+          <v-chip :color="getConnectionStatusColor(item.status)" label size="small">
+            {{ getConnectionStatusLabel(item.status) }}
           </v-chip>
         </template>
 
@@ -183,7 +183,7 @@
         <!-- Last Backup -->
         <template #item.lastBackup="{ item }">
           <template v-if="item.backups && item.backups.length > 0">
-            <v-chip :color="getStatusColor(item.backups[0]!.status)" size="small" variant="tonal">
+            <v-chip :color="getBackupStatusColor(item.backups[0]!.status)" size="small" variant="tonal">
               {{ formatDate(item.backups[0]!.createdAt) }}
             </v-chip>
           </template>
@@ -313,11 +313,16 @@
 
 <script lang="ts" setup>
   import type { Connection, ConnectionStatus, DatabaseType } from '@/types/api'
-  import { computed, inject, onMounted, reactive, ref } from 'vue'
+  import { computed, onMounted, reactive, ref } from 'vue'
   import { useDisplay } from 'vuetify'
   import { connectionsApi } from '@/services/api'
+  import { useDebouncedFn } from '@/composables/useDebouncedFn'
+  import { useNotifier } from '@/composables/useNotifier'
+  import { getBackupStatusColor } from '@/ui/backup'
+  import { databaseTypeOptions, getDatabaseColor, getDatabaseIcon } from '@/ui/database'
+  import { formatDateTimePtBR } from '@/utils/format'
 
-  const showNotification = inject<(msg: string, type: string) => void>('showNotification')
+  const notify = useNotifier()
   const { smAndUp, mdAndUp } = useDisplay()
 
   const loading = ref(false)
@@ -349,11 +354,7 @@
 
   const tableHeaders = computed(() => (mdAndUp.value ? desktopHeaders : mobileHeaders))
 
-  const databaseTypes = [
-    { title: 'MySQL', value: 'mysql' },
-    { title: 'MariaDB', value: 'mariadb' },
-    { title: 'PostgreSQL', value: 'postgresql' },
-  ]
+  const databaseTypes = databaseTypeOptions
 
   const statusOptions = [
     { title: 'Ativo', value: 'active' },
@@ -372,31 +373,25 @@
       connections.value = response.data?.data ?? []
     } catch (error) {
       console.error('Erro ao carregar conexões:', error)
-      showNotification?.('Erro ao carregar conexões', 'error')
+      notify('Erro ao carregar conexões', 'error')
     } finally {
       loading.value = false
     }
   }
 
-  let debounceTimer: ReturnType<typeof setTimeout>
-  function debouncedLoad () {
-    clearTimeout(debounceTimer)
-    debounceTimer = setTimeout(() => {
-      loadConnections()
-    }, 300)
-  }
+  const debouncedLoad = useDebouncedFn(loadConnections, 300)
 
   async function testConnection (connection: Connection) {
     testLoading[connection.id] = true
     try {
       const response = await connectionsApi.test(connection.id)
-      showNotification?.(
+      notify(
         `Conexão bem-sucedida! Latência: ${response.data?.latencyMs}ms`,
         'success',
       )
       loadConnections()
     } catch {
-      showNotification?.('Falha ao testar conexão', 'error')
+      notify('Falha ao testar conexão', 'error')
     } finally {
       testLoading[connection.id] = false
     }
@@ -406,13 +401,13 @@
     backupLoading[connection.id] = true
     try {
       const response = await connectionsApi.backup(connection.id)
-      showNotification?.(
+      notify(
         `Backup concluído: ${response.data?.fileName}`,
         'success',
       )
       loadConnections()
     } catch {
-      showNotification?.('Falha ao executar backup', 'error')
+      notify('Falha ao executar backup', 'error')
     } finally {
       backupLoading[connection.id] = false
     }
@@ -434,44 +429,27 @@
     deleteLoading.value = true
     try {
       await connectionsApi.delete(connectionToDelete.value.id)
-      showNotification?.('Conexão excluída com sucesso', 'success')
+      notify('Conexão excluída com sucesso', 'success')
       deleteDialog.value = false
       loadConnections()
     } catch {
-      showNotification?.('Erro ao excluir conexão', 'error')
+      notify('Erro ao excluir conexão', 'error')
     } finally {
       deleteLoading.value = false
     }
   }
 
   // Helpers
-  function getDatabaseColor (type: DatabaseType): string {
-    const colors: Record<DatabaseType, string> = {
-      mysql: 'orange',
-      mariadb: 'teal',
-      postgresql: 'blue',
-    }
-    return colors[type] ?? 'grey'
-  }
-
-  function getDatabaseIcon (_type: DatabaseType): string {
-    return 'mdi-database'
-  }
-
-  function getStatusColor (status: ConnectionStatus | string): string {
-    const colors: Record<string, string> = {
+  function getConnectionStatusColor (status: ConnectionStatus): string {
+    const colors: Record<ConnectionStatus, string> = {
       active: 'success',
       inactive: 'grey',
       error: 'error',
-      completed: 'success',
-      failed: 'error',
-      pending: 'warning',
-      running: 'info',
     }
     return colors[status] ?? 'grey'
   }
 
-  function getStatusLabel (status: ConnectionStatus): string {
+  function getConnectionStatusLabel (status: ConnectionStatus): string {
     const labels: Record<ConnectionStatus, string> = {
       active: 'Ativo',
       inactive: 'Inativo',
@@ -481,13 +459,7 @@
   }
 
   function formatDate (dateString: string): string {
-    const date = new Date(dateString)
-    return date.toLocaleString('pt-BR', {
-      day: '2-digit',
-      month: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-    })
+    return formatDateTimePtBR(dateString, { withYear: false })
   }
 
   onMounted(() => {

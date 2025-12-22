@@ -88,11 +88,13 @@
 
 <script lang="ts" setup>
   import type { User } from '@/types/auth'
-  import { computed, inject, onMounted, reactive, ref } from 'vue'
+  import { computed, onMounted, reactive, ref } from 'vue'
   import { useDisplay } from 'vuetify'
   import { usersApi } from '@/services/api'
+  import { useNotifier } from '@/composables/useNotifier'
+  import { formatDateTimePtBR as formatDate } from '@/utils/format'
 
-  const showNotification = inject<(msg: string, type: string) => void>('showNotification')
+  const notify = useNotifier()
   const { mdAndUp } = useDisplay()
 
   const loading = ref(false)
@@ -122,7 +124,7 @@
       users.value = response.data?.data ?? []
     } catch (error) {
       console.error('Erro ao carregar usuários:', error)
-      showNotification?.('Erro ao carregar usuários', 'error')
+      notify('Erro ao carregar usuários', 'error')
     } finally {
       loading.value = false
     }
@@ -132,28 +134,16 @@
     actionLoading[user.id] = true
     try {
       await usersApi.toggleStatus(user.id)
-      showNotification?.(`Status de ${user.fullName} alterado com sucesso!`, 'success')
+      notify(`Status de ${user.fullName} alterado com sucesso!`, 'success')
 
       // Optimistic update or reload
       user.isActive = !user.isActive
     } catch (error) {
       console.error(error)
-      showNotification?.('Erro ao alterar status do usuário', 'error')
+      notify('Erro ao alterar status do usuário', 'error')
     } finally {
       actionLoading[user.id] = false
     }
-  }
-
-  function formatDate (dateString?: string): string {
-    if (!dateString) return '-'
-    const date = new Date(dateString)
-    return date.toLocaleString('pt-BR', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    })
   }
 
   onMounted(() => {

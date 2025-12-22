@@ -303,11 +303,20 @@
 
 <script lang="ts" setup>
   import type { Backup, BackupStatus, Connection, DatabaseType, RetentionType } from '@/types/api'
-  import { computed, inject, onMounted, reactive, ref } from 'vue'
+  import { computed, onMounted, reactive, ref } from 'vue'
   import { useDisplay } from 'vuetify'
   import { backupsApi, connectionsApi } from '@/services/api'
+  import { useNotifier } from '@/composables/useNotifier'
+  import {
+    backupStatusOptions,
+    getBackupStatusColor as getStatusColor,
+    getBackupStatusIcon as getStatusIcon,
+    getBackupStatusLabel as getStatusLabel,
+  } from '@/ui/backup'
+  import { getDatabaseColor } from '@/ui/database'
+  import { formatDateTimePtBR as formatDate, formatDuration, formatFileSize } from '@/utils/format'
 
-  const showNotification = inject<(msg: string, type: string) => void>('showNotification')
+  const notify = useNotifier()
   const { smAndUp, mdAndUp } = useDisplay()
 
   const loading = ref(false)
@@ -340,13 +349,7 @@
 
   const tableHeaders = computed(() => (mdAndUp.value ? desktopHeaders : mobileHeaders))
 
-  const statusOptions = [
-    { title: 'Pendente', value: 'pending' },
-    { title: 'Em execução', value: 'running' },
-    { title: 'Concluído', value: 'completed' },
-    { title: 'Falhou', value: 'failed' },
-    { title: 'Cancelado', value: 'cancelled' },
-  ]
+  const statusOptions = backupStatusOptions
 
   async function loadBackups () {
     loading.value = true
@@ -361,7 +364,7 @@
       }))
     } catch (error) {
       console.error('Erro ao carregar backups:', error)
-      showNotification?.('Erro ao carregar backups', 'error')
+      notify('Erro ao carregar backups', 'error')
     } finally {
       loading.value = false
     }
@@ -392,11 +395,11 @@
     deleteLoading.value = true
     try {
       await backupsApi.delete(backupToDelete.value.id)
-      showNotification?.('Backup excluído com sucesso', 'success')
+      notify('Backup excluído com sucesso', 'success')
       deleteDialog.value = false
       loadBackups()
     } catch {
-      showNotification?.('Erro ao excluir backup', 'error')
+      notify('Erro ao excluir backup', 'error')
     } finally {
       deleteLoading.value = false
     }
@@ -405,48 +408,6 @@
   // Helpers
   function getDownloadUrl (id: number): string {
     return backupsApi.getDownloadUrl(id)
-  }
-
-  function getDatabaseColor (type: DatabaseType): string {
-    const colors: Record<DatabaseType, string> = {
-      mysql: 'orange',
-      mariadb: 'teal',
-      postgresql: 'blue',
-    }
-    return colors[type] ?? 'grey'
-  }
-
-  function getStatusColor (status: BackupStatus): string {
-    const colors: Record<BackupStatus, string> = {
-      pending: 'warning',
-      running: 'info',
-      completed: 'success',
-      failed: 'error',
-      cancelled: 'grey',
-    }
-    return colors[status] ?? 'grey'
-  }
-
-  function getStatusIcon (status: BackupStatus): string {
-    const icons: Record<BackupStatus, string> = {
-      pending: 'mdi-clock-outline',
-      running: 'mdi-loading mdi-spin',
-      completed: 'mdi-check',
-      failed: 'mdi-alert-circle',
-      cancelled: 'mdi-cancel',
-    }
-    return icons[status] ?? 'mdi-help'
-  }
-
-  function getStatusLabel (status: BackupStatus): string {
-    const labels: Record<BackupStatus, string> = {
-      pending: 'Pendente',
-      running: 'Em execução',
-      completed: 'Concluído',
-      failed: 'Falhou',
-      cancelled: 'Cancelado',
-    }
-    return labels[status] ?? status
   }
 
   function getRetentionColor (type: RetentionType): string {
@@ -469,37 +430,6 @@
       yearly: 'Anual',
     }
     return labels[type] ?? type
-  }
-
-  function formatFileSize (bytes: number): string {
-    const units = ['B', 'KB', 'MB', 'GB', 'TB']
-    let size = bytes
-    let unitIndex = 0
-
-    while (size >= 1024 && unitIndex < units.length - 1) {
-      size /= 1024
-      unitIndex++
-    }
-
-    return `${size.toFixed(1)} ${units[unitIndex]}`
-  }
-
-  function formatDuration (seconds: number): string {
-    if (seconds < 60) return `${seconds}s`
-    const minutes = Math.floor(seconds / 60)
-    const secs = seconds % 60
-    return `${minutes}m ${secs}s`
-  }
-
-  function formatDate (dateString: string): string {
-    const date = new Date(dateString)
-    return date.toLocaleString('pt-BR', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    })
   }
 
   onMounted(() => {
