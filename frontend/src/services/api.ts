@@ -42,6 +42,37 @@ export class ApiError extends Error {
 }
 
 /**
+ * Extrai mensagem de erro de diferentes formatos de resposta do backend
+ */
+function extractErrorMessage(data: unknown): string {
+  if (typeof data !== 'object' || data === null) {
+    return 'Erro na requisição'
+  }
+  
+  const obj = data as Record<string, unknown>
+  
+  // Formato: { errors: [{ message: "..." }] }
+  if (Array.isArray(obj.errors) && obj.errors.length > 0) {
+    const firstError = obj.errors[0]
+    if (typeof firstError === 'object' && firstError !== null && 'message' in firstError) {
+      return String(firstError.message)
+    }
+  }
+  
+  // Formato: { message: "..." }
+  if (typeof obj.message === 'string') {
+    return obj.message
+  }
+  
+  // Formato: { error: "..." }
+  if (typeof obj.error === 'string') {
+    return obj.error
+  }
+  
+  return 'Erro na requisição'
+}
+
+/**
  * Função auxiliar para fazer requests
  */
 async function request<T> (
@@ -73,7 +104,7 @@ async function request<T> (
 
   if (!response.ok) {
     throw new ApiError(
-      data.message || data.error || 'Erro na requisição',
+      extractErrorMessage(data),
       response.status,
       data,
     )
