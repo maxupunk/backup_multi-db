@@ -500,6 +500,13 @@ export const authApi = {
       method: 'POST',
     })
   },
+
+  /**
+   * Verifica se existem usuários cadastrados no sistema
+   */
+  async checkStatus (): Promise<ApiResponse<{ hasUsers: boolean }>> {
+    return request<ApiResponse<{ hasUsers: boolean }>>('/auth/status')
+  },
 }
 
 /**

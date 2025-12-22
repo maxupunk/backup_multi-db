@@ -39,6 +39,7 @@ router
     })
 
     // ==================== Autenticação (Público) ====================
+    router.get('/auth/status', [AuthController, 'checkStatus'])
     router.post('/auth/register', [AuthController, 'register'])
     router.post('/auth/login', [AuthController, 'login'])
 

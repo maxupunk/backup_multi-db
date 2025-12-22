@@ -33,7 +33,7 @@
 </template>
 
 <script lang="ts" setup>
-import { reactive, ref } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ApiError, authApi } from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
@@ -133,4 +133,15 @@ async function handleLogin() {
     loading.value = false
   }
 }
+
+onMounted(async () => {
+  try {
+    const response = await authApi.checkStatus()
+    if (response.success && response.data && !response.data.hasUsers) {
+      router.push('/register')
+    }
+  } catch (error) {
+    console.error('Failed to check system status:', error)
+  }
+})
 </script>

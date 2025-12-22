@@ -102,4 +102,19 @@ export default class AuthController {
       },
     })
   }
+
+  /**
+   * Verifica o status do sistema (ex: se existe usuário registrado)
+   */
+  async checkStatus({ response }: HttpContext) {
+    const usersCount = await User.query().count('* as total').first()
+    const totalUsers = usersCount ? Number(usersCount.$extras.total) : 0
+
+    return response.ok({
+      success: true,
+      data: {
+        hasUsers: totalUsers > 0,
+      },
+    })
+  }
 }
