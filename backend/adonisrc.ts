@@ -50,6 +50,7 @@ export default defineConfig({
     () => import('@adonisjs/static/static_provider'),
     () => import('@adonisjs/limiter/limiter_provider'),
     () => import('#providers/scheduler_provider'),
+    () => import('@adonisjs/transmit/transmit_provider')
   ],
 
   /*
@@ -64,6 +65,7 @@ export default defineConfig({
     () => import('#start/routes'),
     () => import('#start/kernel'),
     () => import('#start/limiter'),
+    () => import('#start/transmit'),
   ],
 
   /*

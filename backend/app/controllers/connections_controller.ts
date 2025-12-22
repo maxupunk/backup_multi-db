@@ -8,6 +8,7 @@ import {
 } from '#validators/connection_validator'
 import { BackupService } from '#services/backup_service'
 import { AuditService } from '#services/audit_service'
+import { NotificationService } from '#services/notification_service'
 
 /**
  * Controller para gerenciamento de conexões de banco de dados
@@ -299,6 +300,9 @@ export default class ConnectionsController {
       )
 
       if (testResult.success) {
+        // Notificar sucesso do teste
+        NotificationService.connectionTestSuccess(connection.name, connection.id)
+
         return response.ok({
           success: true,
           message: 'Conexão testada com sucesso',
@@ -308,6 +312,13 @@ export default class ConnectionsController {
           },
         })
       } else {
+        // Notificar falha do teste
+        NotificationService.connectionTestFailed(
+          connection.name,
+          connection.id,
+          testResult.error ?? 'Erro desconhecido'
+        )
+
         return response.unprocessableEntity({
           success: false,
           message: 'Falha ao conectar ao banco de dados',

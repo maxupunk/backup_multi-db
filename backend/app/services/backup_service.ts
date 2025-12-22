@@ -12,6 +12,7 @@ import Connection from '#models/connection'
 import Backup, { type BackupTrigger, type RetentionType } from '#models/backup'
 import { StorageDestinationService } from '#services/storage_destination_service'
 import { StorageSpaceService } from '#services/storage_space_service'
+import { NotificationService } from '#services/notification_service'
 
 /**
  * Resultado da execução de um backup
@@ -78,6 +79,22 @@ export class BackupService {
       `[Backup] Iniciado backup da conexão "${connection.name}" (ID: ${connection.id}) ` +
         `para o armazenamento "${destinationName}" - Backup ID: ${backup.id}, Trigger: ${trigger}`
     )
+
+    // Envia notificação de backup iniciado
+    NotificationService.backupStarted(connection.name, connection.id, trigger)
+
+    // Envia notificação de espaço baixo se aplicável
+    if (spaceCheck.warning) {
+      const spaceInfo = await StorageSpaceService.getDestinationSpaceInfo(destination)
+      if (spaceInfo) {
+        NotificationService.storageSpaceLow(
+          spaceInfo.destinationName,
+          spaceInfo.freePercent,
+          spaceInfo.freeBytes,
+          destination?.id
+        )
+      }
+    }
 
     try {
       const localBasePath = StorageDestinationService.getLocalBasePath(destination)
@@ -162,6 +179,15 @@ export class BackupService {
         `[Backup] Concluído backup da conexão "${connection.name}" (ID: ${connection.id}) ` +
           `- Backup ID: ${backup.id}, Arquivo: ${result.fileName}, Tamanho: ${fileSizeKb} KB`
       )
+
+      // Envia notificação de backup concluído
+      NotificationService.backupCompleted(
+        connection.name,
+        connection.id,
+        backup.id,
+        result.fileName!,
+        result.fileSize!
+      )
     } else {
       this.copyPartialResultToBackup(backup, result)
       backup.markAsFailed(result.error ?? 'Erro desconhecido', result.exitCode)
@@ -169,6 +195,13 @@ export class BackupService {
       logger.error(
         `[Backup] Falhou backup da conexão "${connection.name}" (ID: ${connection.id}) ` +
           `- Backup ID: ${backup.id}, Erro: ${result.error ?? 'Erro desconhecido'}`
+      )
+
+      // Envia notificação de backup falhou
+      NotificationService.backupFailed(
+        connection.name,
+        connection.id,
+        result.error ?? 'Erro desconhecido'
       )
     }
 
