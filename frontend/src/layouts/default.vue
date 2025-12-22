@@ -161,7 +161,7 @@
   )
 
   function toggleTheme () {
-    theme.global.name.value = isDark.value ? 'light' : 'dark'
+    theme.change(isDark.value ? 'light' : 'dark')
   }
 
   async function handleLogout () {

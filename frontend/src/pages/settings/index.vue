@@ -672,12 +672,11 @@
   }
 
   function applyTheme () {
-    if (settings.theme === 'system') {
-      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
-      theme.global.name.value = prefersDark ? 'dark' : 'light'
-    } else {
-      theme.global.name.value = settings.theme
-    }
+    const nextTheme = settings.theme === 'system'
+      ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+      : settings.theme
+
+    theme.change(nextTheme)
 
     localStorage.setItem('theme', settings.theme)
   }
