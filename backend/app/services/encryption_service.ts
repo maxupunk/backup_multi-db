@@ -22,7 +22,7 @@ export class EncryptionService {
     if (!keyHex || keyHex.length !== 64) {
       throw new Error(
         'DB_ENCRYPTION_KEY deve ser definida no .env com 64 caracteres hexadecimais (32 bytes). ' +
-          'Gere com: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"'
+          "Gere com: node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\""
       )
     }
 

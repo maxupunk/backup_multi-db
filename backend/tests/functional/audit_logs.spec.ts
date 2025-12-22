@@ -24,27 +24,31 @@ test.group('Audit Logs', (group) => {
       description: 'Test log',
       ipAddress: '127.0.0.1',
       userAgent: 'TestAgent',
-      status: 'success'
+      status: 'success',
     })
 
     const token = await User.accessTokens.create(user)
-    const response = await client.get('/api/audit-logs').header('Authorization', `Bearer ${token.value!.release()}`)
+    const response = await client
+      .get('/api/audit-logs')
+      .header('Authorization', `Bearer ${token.value!.release()}`)
 
     response.assertStatus(200)
     response.assertBodyContains({
       success: true,
-      meta: {}
+      meta: {},
     })
   })
 
   test('get audit log stats', async ({ client }) => {
     const token = await User.accessTokens.create(user)
-    const response = await client.get('/api/audit-logs/stats').header('Authorization', `Bearer ${token.value!.release()}`)
+    const response = await client
+      .get('/api/audit-logs/stats')
+      .header('Authorization', `Bearer ${token.value!.release()}`)
 
     response.assertStatus(200)
     response.assertBodyContains({
       success: true,
-      data: {}
+      data: {},
     })
   })
 
@@ -57,19 +61,21 @@ test.group('Audit Logs', (group) => {
       description: 'Test log view',
       ipAddress: '127.0.0.1',
       userAgent: 'TestAgent',
-      status: 'success'
+      status: 'success',
     })
 
     const token = await User.accessTokens.create(user)
-    const response = await client.get(`/api/audit-logs/${log.id}`).header('Authorization', `Bearer ${token.value!.release()}`)
+    const response = await client
+      .get(`/api/audit-logs/${log.id}`)
+      .header('Authorization', `Bearer ${token.value!.release()}`)
 
     response.assertStatus(200)
     response.assertBodyContains({
       success: true,
       data: {
         id: log.id,
-        action: 'connection.created'
-      }
+        action: 'connection.created',
+      },
     })
   })
 })

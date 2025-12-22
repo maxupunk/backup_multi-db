@@ -44,6 +44,7 @@
     "@types/luxon": "^3.7.1",
     "@types/node": "^22.15.18",
     "@types/pg": "^8.16.0",
+    "@types/ssh2-sftp-client": "^9.0.6",
     "eslint": "^9.26.0",
     "hot-hook": "^0.4.0",
     "pino-pretty": "^13.0.0",
@@ -58,6 +59,9 @@
     "@adonisjs/limiter": "^2.4.0",
     "@adonisjs/lucid": "^21.6.1",
     "@adonisjs/static": "^1.1.1",
+    "@aws-sdk/client-s3": "^3.956.0",
+    "@azure/storage-blob": "^12.29.1",
+    "@google-cloud/storage": "^7.18.0",
     "@types/node-cron": "^3.0.11",
     "@vinejs/vine": "^3.0.1",
     "adonis-autoswagger": "^3.73.0",
@@ -66,7 +70,8 @@
     "mysql2": "^3.16.0",
     "node-cron": "^4.2.1",
     "pg": "^8.16.3",
-    "reflect-metadata": "^0.2.2"
+    "reflect-metadata": "^0.2.2",
+    "ssh2-sftp-client": "^12.0.1"
   },
   "hotHook": {
     "boundaries": [

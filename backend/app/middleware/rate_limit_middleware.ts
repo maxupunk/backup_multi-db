@@ -16,9 +16,9 @@ import limiter from '@adonisjs/limiter/services/main'
  * Rate limiting configuration
  */
 const LIMITS = {
-  global: { requests: 100, duration: 60 },       // 100 req/min
-  strict: { requests: 10, duration: 60 },        // 10 req/min
-  backup: { requests: 5, duration: 300 },        // 5 req/5min
+  global: { requests: 100, duration: 60 }, // 100 req/min
+  strict: { requests: 10, duration: 60 }, // 10 req/min
+  backup: { requests: 5, duration: 300 }, // 5 req/5min
 } as const
 
 export type LimiterType = keyof typeof LIMITS

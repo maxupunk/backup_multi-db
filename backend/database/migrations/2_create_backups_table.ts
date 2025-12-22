@@ -38,7 +38,10 @@ export default class extends BaseSchema {
         .defaultTo('hourly')
         .notNullable()
         .comment('Categoria de retenção do backup')
-      table.boolean('protected').defaultTo(false).comment('Se o backup está protegido contra pruning')
+      table
+        .boolean('protected')
+        .defaultTo(false)
+        .comment('Se o backup está protegido contra pruning')
 
       // Metadados de execução
       table.timestamp('started_at').nullable().comment('Momento de início do backup')

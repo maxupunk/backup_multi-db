@@ -16,15 +16,18 @@ test.group('Connections', (group) => {
 
   test('create a new connection', async ({ client }) => {
     const token = await User.accessTokens.create(user)
-    const response = await client.post('/api/connections').header('Authorization', `Bearer ${token.value!.release()}`).json({
-      name: 'Test Connection',
-      type: 'postgresql',
-      host: 'localhost',
-      port: 5432,
-      database: 'test_db',
-      username: 'user',
-      passwordEncrypted: 'password',
-    })
+    const response = await client
+      .post('/api/connections')
+      .header('Authorization', `Bearer ${token.value!.release()}`)
+      .json({
+        name: 'Test Connection',
+        type: 'postgresql',
+        host: 'localhost',
+        port: 5432,
+        database: 'test_db',
+        username: 'user',
+        passwordEncrypted: 'password',
+      })
 
     response.assertStatus(201)
     response.assertBodyContains({
@@ -44,11 +47,13 @@ test.group('Connections', (group) => {
       database: 'mydb',
       username: 'root',
       passwordEncrypted: 'password',
-      status: 'active'
+      status: 'active',
     })
 
     const token = await User.accessTokens.create(user)
-    const response = await client.get('/api/connections').header('Authorization', `Bearer ${token.value!.release()}`)
+    const response = await client
+      .get('/api/connections')
+      .header('Authorization', `Bearer ${token.value!.release()}`)
 
     response.assertStatus(200)
     response.assertBodyContains({
@@ -56,11 +61,13 @@ test.group('Connections', (group) => {
     })
     // Check pagination structure
     response.assertBodyContains({
-        data: {
-          data: [{
-            name: 'List Connection'
-          }]
-        }
+      data: {
+        data: [
+          {
+            name: 'List Connection',
+          },
+        ],
+      },
     })
   })
 
@@ -73,11 +80,13 @@ test.group('Connections', (group) => {
       database: 'show_db',
       username: 'user',
       passwordEncrypted: 'password',
-      status: 'active'
+      status: 'active',
     })
 
     const token = await User.accessTokens.create(user)
-    const response = await client.get(`/api/connections/${connection.id}`).header('Authorization', `Bearer ${token.value!.release()}`)
+    const response = await client
+      .get(`/api/connections/${connection.id}`)
+      .header('Authorization', `Bearer ${token.value!.release()}`)
 
     response.assertStatus(200)
     response.assertBodyContains({
@@ -98,14 +107,17 @@ test.group('Connections', (group) => {
       database: 'update_db',
       username: 'user',
       passwordEncrypted: 'password',
-      status: 'active'
+      status: 'active',
     })
 
     const token = await User.accessTokens.create(user)
-    const response = await client.put(`/api/connections/${connection.id}`).header('Authorization', `Bearer ${token.value!.release()}`).json({
-      name: 'Updated Name',
-      host: '192.168.1.1',
-    })
+    const response = await client
+      .put(`/api/connections/${connection.id}`)
+      .header('Authorization', `Bearer ${token.value!.release()}`)
+      .json({
+        name: 'Updated Name',
+        host: '192.168.1.1',
+      })
 
     response.assertStatus(200)
     response.assertBodyContains({
@@ -126,18 +138,20 @@ test.group('Connections', (group) => {
       database: 'del_db',
       username: 'user',
       passwordEncrypted: 'password',
-      status: 'active'
+      status: 'active',
     })
 
     const token = await User.accessTokens.create(user)
-    const response = await client.delete(`/api/connections/${connection.id}`).header('Authorization', `Bearer ${token.value!.release()}`)
+    const response = await client
+      .delete(`/api/connections/${connection.id}`)
+      .header('Authorization', `Bearer ${token.value!.release()}`)
 
     response.assertStatus(200)
-    
+
     // Verify deletion
     const check = await Connection.find(connection.id)
     if (check) {
-        throw new Error('Connection should be deleted')
+      throw new Error('Connection should be deleted')
     }
   })
 
@@ -150,11 +164,13 @@ test.group('Connections', (group) => {
       database: 'test_db',
       username: 'user',
       passwordEncrypted: 'password',
-      status: 'active'
+      status: 'active',
     })
 
     const token = await User.accessTokens.create(user)
-    const response = await client.post(`/api/connections/${connection.id}/test`).header('Authorization', `Bearer ${token.value!.release()}`)
+    const response = await client
+      .post(`/api/connections/${connection.id}/test`)
+      .header('Authorization', `Bearer ${token.value!.release()}`)
 
     // Should be unprocessableEntity or internalServerError or 422 depending on controller logic for connection failure
     // Controller returns 422 for connection failure inside try/catch block if result.success is false
@@ -164,7 +180,7 @@ test.group('Connections', (group) => {
 
     response.assertStatus(422)
     response.assertBodyContains({
-        success: false,
+      success: false,
     })
   })
 })

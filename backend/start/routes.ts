@@ -10,6 +10,7 @@ const BackupsController = () => import('#controllers/backups_controller')
 const AuditLogsController = () => import('#controllers/audit_logs_controller')
 const AuthController = () => import('#controllers/auth_controller')
 const UsersController = () => import('#controllers/users_controller')
+const StorageDestinationsController = () => import('#controllers/storage_destinations_controller')
 import AutoSwagger from 'adonis-autoswagger'
 import swagger from '#config/swagger'
 
@@ -51,6 +52,9 @@ router
         // ==================== Connections ====================
         router.resource('connections', ConnectionsController).apiOnly()
 
+        // ==================== Storage Destinations ====================
+        router.resource('storage-destinations', StorageDestinationsController).apiOnly()
+
         // Test connection - rateLimit estrito (10 req/min)
         router
           .post('connections/:id/test', [ConnectionsController, 'test'])
@@ -70,8 +74,10 @@ router
 
         // ==================== Dashboard Stats ====================
         router.get('/stats', async () => {
-          const Connection = (await import('#models/connection')).default
-          const Backup = (await import('#models/backup')).default
+          const connectionModule = await import('#models/connection')
+          const backupModule = await import('#models/backup')
+          const Connection = connectionModule.default
+          const Backup = backupModule.default
           const { DateTime } = await import('luxon')
 
           const today = DateTime.now().startOf('day')
@@ -82,10 +88,7 @@ router
               Connection.query().where('status', 'active').count('* as total').first(),
               Backup.query().count('* as total').first(),
               Backup.query().where('createdAt', '>=', today.toSQL()).count('* as total').first(),
-              Backup.query()
-                .preload('connection')
-                .orderBy('createdAt', 'desc')
-                .limit(5),
+              Backup.query().preload('connection').orderBy('createdAt', 'desc').limit(5),
             ])
 
           return {

@@ -20,7 +20,7 @@ test.group('Auth', () => {
     // Verify in DB
     const user = await User.findBy('email', email)
     if (!user) {
-        throw new Error('User was not persisted to database')
+      throw new Error('User was not persisted to database')
     }
   })
 
@@ -42,9 +42,9 @@ test.group('Auth', () => {
       data: {
         type: 'bearer',
         user: {
-          email: email
-        }
-      }
+          email: email,
+        },
+      },
     })
   })
 
@@ -59,15 +59,17 @@ test.group('Auth', () => {
 
   test('access protected route (me)', async ({ client }) => {
     const email = `me_${Date.now()}@example.com`
-    const user = await User.create({ 
-      fullName: 'Me User', 
-      email, 
-      password: 'Password123!', 
-      isActive: true 
+    const user = await User.create({
+      fullName: 'Me User',
+      email,
+      password: 'Password123!',
+      isActive: true,
     })
 
     const token = await User.accessTokens.create(user)
-    const response = await client.get('/api/auth/me').header('Authorization', `Bearer ${token.value!.release()}`)
+    const response = await client
+      .get('/api/auth/me')
+      .header('Authorization', `Bearer ${token.value!.release()}`)
 
     response.assertStatus(200)
     response.assertBodyContains({
@@ -80,15 +82,17 @@ test.group('Auth', () => {
 
   test('logout', async ({ client }) => {
     const email = `logout_${Date.now()}@example.com`
-    const user = await User.create({ 
-      fullName: 'Logout User', 
-      email, 
-      password: 'Password123!', 
-      isActive: true 
+    const user = await User.create({
+      fullName: 'Logout User',
+      email,
+      password: 'Password123!',
+      isActive: true,
     })
 
     const token = await User.accessTokens.create(user)
-    const response = await client.post('/api/auth/logout').header('Authorization', `Bearer ${token.value!.release()}`)
+    const response = await client
+      .post('/api/auth/logout')
+      .header('Authorization', `Bearer ${token.value!.release()}`)
 
     response.assertStatus(200)
     response.assertBodyContains({

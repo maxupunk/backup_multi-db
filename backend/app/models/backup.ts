@@ -2,6 +2,7 @@ import { DateTime } from 'luxon'
 import { BaseModel, belongsTo, column } from '@adonisjs/lucid/orm'
 import type { BelongsTo } from '@adonisjs/lucid/types/relations'
 import Connection from './connection.js'
+import StorageDestination from './storage_destination.js'
 
 /**
  * Status possíveis de um backup
@@ -37,6 +38,9 @@ export default class Backup extends BaseModel {
 
   @column()
   declare connectionId: number
+
+  @column()
+  declare storageDestinationId: number | null
 
   @column()
   declare status: BackupStatus
@@ -99,6 +103,9 @@ export default class Backup extends BaseModel {
 
   @belongsTo(() => Connection)
   declare connection: BelongsTo<typeof Connection>
+
+  @belongsTo(() => StorageDestination)
+  declare storageDestination: BelongsTo<typeof StorageDestination>
 
   // ==================== Métodos de Instância ====================
 

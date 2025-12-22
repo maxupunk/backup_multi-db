@@ -19,20 +19,8 @@ export default {
   preferredPutPatch: 'PUT', // Prefere PUT se ambos existirem
   common: {
     parameters: {
-      page: [
-        'page',
-        'query',
-        false,
-        'int',
-        'Número da página para paginação',
-      ],
-      limit: [
-        'limit',
-        'query',
-        false,
-        'int',
-        'Quantidade de itens por página',
-      ],
+      page: ['page', 'query', false, 'int', 'Número da página para paginação'],
+      limit: ['limit', 'query', false, 'int', 'Quantidade de itens por página'],
     },
     headers: {},
   },

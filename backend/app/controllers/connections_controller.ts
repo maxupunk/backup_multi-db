@@ -81,6 +81,7 @@ export default class ConnectionsController {
     connection.database = payload.database
     connection.username = payload.username
     connection.setPassword(payload.password)
+    connection.storageDestinationId = payload.storageDestinationId ?? null
     connection.scheduleFrequency = payload.scheduleFrequency ?? null
     connection.scheduleEnabled = payload.scheduleEnabled ?? false
     connection.options = payload.options ?? null
@@ -188,11 +189,30 @@ export default class ConnectionsController {
       changes.password = { from: '***', to: '***' } // Não logar senha
       connection.setPassword(payload.password)
     }
-    if (payload.scheduleFrequency !== undefined && payload.scheduleFrequency !== connection.scheduleFrequency) {
-      changes.scheduleFrequency = { from: connection.scheduleFrequency, to: payload.scheduleFrequency }
+    if (
+      payload.storageDestinationId !== undefined &&
+      payload.storageDestinationId !== connection.storageDestinationId
+    ) {
+      changes.storageDestinationId = {
+        from: connection.storageDestinationId,
+        to: payload.storageDestinationId,
+      }
+      connection.storageDestinationId = payload.storageDestinationId
+    }
+    if (
+      payload.scheduleFrequency !== undefined &&
+      payload.scheduleFrequency !== connection.scheduleFrequency
+    ) {
+      changes.scheduleFrequency = {
+        from: connection.scheduleFrequency,
+        to: payload.scheduleFrequency,
+      }
       connection.scheduleFrequency = payload.scheduleFrequency
     }
-    if (payload.scheduleEnabled !== undefined && payload.scheduleEnabled !== connection.scheduleEnabled) {
+    if (
+      payload.scheduleEnabled !== undefined &&
+      payload.scheduleEnabled !== connection.scheduleEnabled
+    ) {
       changes.scheduleEnabled = { from: connection.scheduleEnabled, to: payload.scheduleEnabled }
       connection.scheduleEnabled = payload.scheduleEnabled
     }
@@ -264,7 +284,7 @@ export default class ConnectionsController {
 
       // Atualiza o status da conexão
       connection.status = testResult.success ? 'active' : 'error'
-      connection.lastError = testResult.success ? null : testResult.error ?? null
+      connection.lastError = testResult.success ? null : (testResult.error ?? null)
       connection.lastTestedAt = DateTime.now()
 
       await connection.save()
@@ -363,7 +383,8 @@ export default class ConnectionsController {
         const [rows] = await conn.query('SELECT VERSION() as version')
         await conn.end()
 
-        const version = Array.isArray(rows) && rows[0] ? (rows[0] as { version: string }).version : undefined
+        const version =
+          Array.isArray(rows) && rows[0] ? (rows[0] as { version: string }).version : undefined
 
         return {
           success: true,
@@ -431,7 +452,12 @@ export default class ConnectionsController {
         })
       } else {
         // Registrar auditoria de falha
-        await AuditService.logBackupFailed(backup.id, connection.name, result.error ?? 'Erro desconhecido', ctx)
+        await AuditService.logBackupFailed(
+          backup.id,
+          connection.name,
+          result.error ?? 'Erro desconhecido',
+          ctx
+        )
 
         return response.unprocessableEntity({
           success: false,

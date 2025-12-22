@@ -42,10 +42,7 @@ export default class extends BaseSchema {
       table.timestamp('last_backup_at').nullable().comment('Última vez que um backup foi realizado')
 
       // Opções adicionais (JSON serializado)
-      table
-        .text('options')
-        .nullable()
-        .comment('Opções adicionais em JSON (ssl, charset, etc)')
+      table.text('options').nullable().comment('Opções adicionais em JSON (ssl, charset, etc)')
 
       // Timestamps
       table.timestamp('created_at').notNullable()

@@ -99,9 +99,7 @@ export class SchedulerService {
    */
   async scheduleConnection(connection: Connection): Promise<void> {
     if (!connection.scheduleEnabled || !connection.scheduleFrequency) {
-      logger.warn(
-        `Tentativa de agendar conexão ${connection.id} sem agendamento ativo`
-      )
+      logger.warn(`Tentativa de agendar conexão ${connection.id} sem agendamento ativo`)
       return
     }
 
@@ -171,39 +169,27 @@ export class SchedulerService {
       }
 
       if (connection.status !== 'active') {
-        logger.warn(
-          `Conexão ${connectionId} não está ativa. Pulando backup.`
-        )
+        logger.warn(`Conexão ${connectionId} não está ativa. Pulando backup.`)
         return
       }
 
       if (!connection.scheduleEnabled) {
-        logger.warn(
-          `Agendamento da conexão ${connectionId} foi desabilitado. Removendo job.`
-        )
+        logger.warn(`Agendamento da conexão ${connectionId} foi desabilitado. Removendo job.`)
         this.unscheduleConnection(connectionId)
         return
       }
 
-      const { backup, result } = await this.backupService.execute(
-        connection,
-        'scheduled'
-      )
+      const { backup, result } = await this.backupService.execute(connection, 'scheduled')
 
       if (result.success) {
         logger.info(
           `Backup agendado concluído para conexão ${connectionId}: ${result.fileName} (${backup.getFormattedSize()})`
         )
       } else {
-        logger.error(
-          `Falha no backup agendado da conexão ${connectionId}: ${result.error}`
-        )
+        logger.error(`Falha no backup agendado da conexão ${connectionId}: ${result.error}`)
       }
     } catch (error) {
-      logger.error(
-        `Erro ao executar backup agendado da conexão ${connectionId}:`,
-        error
-      )
+      logger.error(`Erro ao executar backup agendado da conexão ${connectionId}:`, error)
     }
   }
 

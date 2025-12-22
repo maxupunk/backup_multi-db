@@ -24,7 +24,7 @@ test.group('Backups', (group) => {
       database: 'backup_db',
       username: 'user',
       passwordEncrypted: 'password',
-      status: 'active'
+      status: 'active',
     })
   })
 
@@ -41,22 +41,26 @@ test.group('Backups', (group) => {
     })
 
     const token = await User.accessTokens.create(user)
-    const response = await client.get('/api/backups').header('Authorization', `Bearer ${token.value!.release()}`)
+    const response = await client
+      .get('/api/backups')
+      .header('Authorization', `Bearer ${token.value!.release()}`)
 
     response.assertStatus(200)
     response.assertBodyContains({
       success: true,
     })
     response.assertBodyContains({
-        data: {
-            meta: { total: 1 } // at least 1
-        }
+      data: {
+        meta: { total: 1 }, // at least 1
+      },
     })
   })
 
   test('list backups by connection', async ({ client }) => {
     const token = await User.accessTokens.create(user)
-    const response = await client.get(`/api/connections/${connection.id}/backups`).header('Authorization', `Bearer ${token.value!.release()}`)
+    const response = await client
+      .get(`/api/connections/${connection.id}/backups`)
+      .header('Authorization', `Bearer ${token.value!.release()}`)
 
     response.assertStatus(200)
     response.assertBodyContains({
@@ -77,7 +81,9 @@ test.group('Backups', (group) => {
     })
 
     const token = await User.accessTokens.create(user)
-    const response = await client.get(`/api/backups/${backup.id}`).header('Authorization', `Bearer ${token.value!.release()}`)
+    const response = await client
+      .get(`/api/backups/${backup.id}`)
+      .header('Authorization', `Bearer ${token.value!.release()}`)
 
     response.assertStatus(200)
     response.assertBodyContains({
@@ -102,13 +108,15 @@ test.group('Backups', (group) => {
     })
 
     const token = await User.accessTokens.create(user)
-    const response = await client.get(`/api/backups/${backup.id}/download`).header('Authorization', `Bearer ${token.value!.release()}`)
+    const response = await client
+      .get(`/api/backups/${backup.id}/download`)
+      .header('Authorization', `Bearer ${token.value!.release()}`)
 
     // Should return 404 because file doesn't exist on disk
     response.assertStatus(404)
     response.assertBodyContains({
-        success: false,
-        message: 'Arquivo de backup não encontrado no servidor'
+      success: false,
+      message: 'Arquivo de backup não encontrado no servidor',
     })
   })
 
@@ -125,13 +133,15 @@ test.group('Backups', (group) => {
     })
 
     const token = await User.accessTokens.create(user)
-    const response = await client.delete(`/api/backups/${backup.id}`).header('Authorization', `Bearer ${token.value!.release()}`)
+    const response = await client
+      .delete(`/api/backups/${backup.id}`)
+      .header('Authorization', `Bearer ${token.value!.release()}`)
 
     response.assertStatus(200)
-    
+
     const check = await Backup.find(backup.id)
     if (check) {
-        throw new Error('Backup should be deleted')
+      throw new Error('Backup should be deleted')
     }
   })
 })

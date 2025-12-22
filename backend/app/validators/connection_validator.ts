@@ -22,6 +22,7 @@ export const createConnectionValidator = vine.compile(
     database: vine.string().trim().minLength(1).maxLength(100),
     username: vine.string().trim().minLength(1).maxLength(100),
     password: vine.string().optional(),
+    storageDestinationId: vine.number().positive().nullable().optional(),
     scheduleFrequency: vine.enum(scheduleFrequencies).optional(),
     scheduleEnabled: vine.boolean().optional(),
     options: vine
@@ -45,6 +46,7 @@ export const updateConnectionValidator = vine.compile(
     database: vine.string().trim().minLength(1).maxLength(100).optional(),
     username: vine.string().trim().minLength(1).maxLength(100).optional(),
     password: vine.string().optional(),
+    storageDestinationId: vine.number().positive().nullable().optional(),
     scheduleFrequency: vine.enum(scheduleFrequencies).nullable().optional(),
     scheduleEnabled: vine.boolean().optional(),
     options: vine

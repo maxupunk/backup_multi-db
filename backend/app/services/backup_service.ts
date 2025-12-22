@@ -6,8 +6,10 @@ import { createGzip } from 'node:zlib'
 import { join } from 'node:path'
 import { DateTime } from 'luxon'
 import app from '@adonisjs/core/services/app'
+import env from '#start/env'
 import Connection from '#models/connection'
 import Backup, { type BackupTrigger, type RetentionType } from '#models/backup'
+import { StorageDestinationService } from '#services/storage_destination_service'
 
 /**
  * Resultado da execução de um backup
@@ -15,6 +17,7 @@ import Backup, { type BackupTrigger, type RetentionType } from '#models/backup'
 export interface BackupResult {
   success: boolean
   filePath?: string
+  localFullPath?: string
   fileName?: string
   fileSize?: number
   checksum?: string
@@ -29,7 +32,7 @@ export class BackupService {
   private readonly storagePath: string
 
   constructor() {
-    this.storagePath = app.makePath('storage/backups')
+    this.storagePath = env.get('BACKUP_STORAGE_PATH') ?? app.makePath('storage/backups')
     this.ensureStorageDirectory()
   }
 
@@ -49,9 +52,12 @@ export class BackupService {
     connection: Connection,
     trigger: BackupTrigger = 'manual'
   ): Promise<{ backup: Backup; result: BackupResult }> {
+    const destination = await StorageDestinationService.resolveDestinationForConnection(connection)
+
     // Criar registro do backup
     const backup = new Backup()
     backup.connectionId = connection.id
+    backup.storageDestinationId = destination?.id ?? null
     backup.trigger = trigger
     backup.compressed = true
     backup.retentionType = this.determineRetentionType()
@@ -59,7 +65,23 @@ export class BackupService {
     await backup.save()
 
     try {
-      const result = await this.performBackup(connection)
+      const localBasePath = StorageDestinationService.getLocalBasePath(destination)
+      const result = await this.performBackup(connection, localBasePath)
+
+      if (result.success && destination) {
+        try {
+          await StorageDestinationService.uploadBackupFile(
+            destination,
+            result.filePath!,
+            result.localFullPath!
+          )
+        } catch (error) {
+          const errorMessage =
+            error instanceof Error ? error.message : 'Erro desconhecido no upload'
+          result.success = false
+          result.error = errorMessage
+        }
+      }
 
       if (result.success) {
         backup.markAsCompleted(
@@ -73,6 +95,10 @@ export class BackupService {
         connection.lastBackupAt = DateTime.now()
         await connection.save()
       } else {
+        if (result.filePath) backup.filePath = result.filePath
+        if (result.fileName) backup.fileName = result.fileName
+        if (result.fileSize !== undefined) backup.fileSize = result.fileSize
+        if (result.checksum) backup.checksum = result.checksum
         backup.markAsFailed(result.error ?? 'Erro desconhecido', result.exitCode)
       }
 
@@ -94,14 +120,14 @@ export class BackupService {
   /**
    * Executa o comando de backup real
    */
-  private async performBackup(connection: Connection): Promise<BackupResult> {
+  private async performBackup(connection: Connection, basePath: string): Promise<BackupResult> {
     const timestamp = DateTime.now().toFormat('yyyyMMdd_HHmmss')
     const fileName = `${connection.database}_${timestamp}.sql.gz`
     const relativePath = join(connection.id.toString(), fileName)
-    const fullPath = join(this.storagePath, relativePath)
+    const fullPath = join(basePath, relativePath)
 
     // Criar diretório da conexão se não existir
-    const connectionDir = join(this.storagePath, connection.id.toString())
+    const connectionDir = join(basePath, connection.id.toString())
     if (!existsSync(connectionDir)) {
       mkdirSync(connectionDir, { recursive: true })
     }
@@ -111,7 +137,7 @@ export class BackupService {
     return new Promise((resolve) => {
       let command: string
       let args: string[]
-      const env = { ...process.env }
+      const processEnv = { ...process.env }
 
       if (connection.type === 'postgresql') {
         // PostgreSQL - pg_dump
@@ -128,7 +154,7 @@ export class BackupService {
           '--no-password',
         ]
         // pg_dump usa PGPASSWORD para senha
-        env.PGPASSWORD = password
+        processEnv.PGPASSWORD = password
       } else {
         // MySQL / MariaDB - mysqldump
         command = 'mysqldump'
@@ -148,7 +174,7 @@ export class BackupService {
       }
 
       const dumpProcess = spawn(command, args, {
-        env,
+        env: processEnv,
         stdio: ['ignore', 'pipe', 'pipe'],
       })
 
@@ -176,6 +202,7 @@ export class BackupService {
               resolve({
                 success: true,
                 filePath: relativePath,
+                localFullPath: fullPath,
                 fileName: fileName,
                 fileSize: stats.size,
                 checksum: hash.digest('hex'),

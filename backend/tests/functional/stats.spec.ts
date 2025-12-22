@@ -15,7 +15,9 @@ test.group('Stats', (group) => {
 
   test('get dashboard stats', async ({ client }) => {
     const token = await User.accessTokens.create(user)
-    const response = await client.get('/api/stats').header('Authorization', `Bearer ${token.value!.release()}`)
+    const response = await client
+      .get('/api/stats')
+      .header('Authorization', `Bearer ${token.value!.release()}`)
 
     response.assertStatus(200)
     response.assertBodyContains({

@@ -23,11 +23,13 @@ test.group('Users', (group) => {
     })
 
     const token = await User.accessTokens.create(currentUser)
-    const response = await client.get('/api/users').header('Authorization', `Bearer ${token.value!.release()}`)
+    const response = await client
+      .get('/api/users')
+      .header('Authorization', `Bearer ${token.value!.release()}`)
 
     response.assertStatus(200)
     response.assertBodyContains({
-      meta: { perPage: 10 }
+      meta: { perPage: 10 },
     })
   })
 
@@ -40,21 +42,27 @@ test.group('Users', (group) => {
     })
 
     const token = await User.accessTokens.create(currentUser)
-    const response = await client.patch(`/api/users/${targetUser.id}/status`).header('Authorization', `Bearer ${token.value!.release()}`)
+    const response = await client
+      .patch(`/api/users/${targetUser.id}/status`)
+      .header('Authorization', `Bearer ${token.value!.release()}`)
 
     response.assertStatus(200)
     response.assertBodyContains({
       success: true,
     })
     const body = response.body()
-    if (!body.message || (!body.message.includes('desativado com sucesso') && !body.message.includes('ativado com sucesso'))) {
-        throw new Error('Message not matching expected pattern')
+    if (
+      !body.message ||
+      (!body.message.includes('desativado com sucesso') &&
+        !body.message.includes('ativado com sucesso'))
+    ) {
+      throw new Error('Message not matching expected pattern')
     }
 
     // Verify change in DB
     await targetUser.refresh()
     if (targetUser.isActive) {
-        throw new Error('User status should be toggled to false')
+      throw new Error('User status should be toggled to false')
     }
   })
 })

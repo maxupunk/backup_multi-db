@@ -1,8 +1,9 @@
 import { DateTime } from 'luxon'
-import { BaseModel, beforeSave, column, hasMany } from '@adonisjs/lucid/orm'
-import type { HasMany } from '@adonisjs/lucid/types/relations'
+import { BaseModel, beforeSave, belongsTo, column, hasMany } from '@adonisjs/lucid/orm'
+import type { BelongsTo, HasMany } from '@adonisjs/lucid/types/relations'
 import { EncryptionService } from '#services/encryption_service'
 import Backup from './backup.js'
+import StorageDestination from './storage_destination.js'
 
 /**
  * Tipos de banco de dados suportados
@@ -79,6 +80,9 @@ export default class Connection extends BaseModel {
   @column.dateTime()
   declare lastBackupAt: DateTime | null
 
+  @column()
+  declare storageDestinationId: number | null
+
   /**
    * Opções adicionais serializadas como JSON
    */
@@ -98,6 +102,9 @@ export default class Connection extends BaseModel {
 
   @hasMany(() => Backup)
   declare backups: HasMany<typeof Backup>
+
+  @belongsTo(() => StorageDestination)
+  declare storageDestination: BelongsTo<typeof StorageDestination>
 
   // ==================== Hooks ====================
 

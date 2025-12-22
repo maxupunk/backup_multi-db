@@ -14,11 +14,14 @@ import type {
   Connection,
   ConnectionTestResult,
   CreateConnectionPayload,
+  CreateStorageDestinationPayload,
   DashboardStats,
   LoginPayload,
   PaginatedResponse,
   RegisterPayload,
+  StorageDestination,
   UpdateConnectionPayload,
+  UpdateStorageDestinationPayload,
 } from '@/types/api'
 import type { AuthResponse, User } from '@/types/auth'
 
@@ -176,6 +179,68 @@ export const connectionsApi = {
   async backup (id: number): Promise<ApiResponse<BackupResult>> {
     return request<ApiResponse<BackupResult>>(`/connections/${id}/backup`, {
       method: 'POST',
+    })
+  },
+}
+
+export const storageDestinationsApi = {
+  async list (params?: {
+    page?: number
+    limit?: number
+    type?: string
+    status?: string
+    search?: string
+  }): Promise<PaginatedResponse<StorageDestination>> {
+    const searchParams = new URLSearchParams()
+
+    if (params?.page) {
+      searchParams.set('page', params.page.toString())
+    }
+    if (params?.limit) {
+      searchParams.set('limit', params.limit.toString())
+    }
+    if (params?.type) {
+      searchParams.set('type', params.type)
+    }
+    if (params?.status) {
+      searchParams.set('status', params.status)
+    }
+    if (params?.search) {
+      searchParams.set('search', params.search)
+    }
+
+    const query = searchParams.toString()
+    return request<PaginatedResponse<StorageDestination>>(
+      `/storage-destinations${query ? `?${query}` : ''}`,
+    )
+  },
+
+  async get (id: number): Promise<ApiResponse<StorageDestination>> {
+    return request<ApiResponse<StorageDestination>>(`/storage-destinations/${id}`)
+  },
+
+  async create (
+    payload: CreateStorageDestinationPayload,
+  ): Promise<ApiResponse<StorageDestination>> {
+    return request<ApiResponse<StorageDestination>>('/storage-destinations', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    })
+  },
+
+  async update (
+    id: number,
+    payload: UpdateStorageDestinationPayload,
+  ): Promise<ApiResponse<StorageDestination>> {
+    return request<ApiResponse<StorageDestination>>(`/storage-destinations/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    })
+  },
+
+  async delete (id: number): Promise<ApiResponse> {
+    return request<ApiResponse>(`/storage-destinations/${id}`, {
+      method: 'DELETE',
     })
   },
 }

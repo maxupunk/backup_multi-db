@@ -1,10 +1,7 @@
 import { DateTime } from 'luxon'
 import Backup from '#models/backup'
-import { unlink } from 'node:fs/promises'
-import { join } from 'node:path'
-import app from '@adonisjs/core/services/app'
-import { existsSync } from 'node:fs'
 import env from '#start/env'
+import { StorageDestinationService } from '#services/storage_destination_service'
 
 /**
  * Configurações de retenção (em unidades)
@@ -113,10 +110,7 @@ export class RetentionService {
     if (now.day === now.daysInMonth) {
       const lastBackupsOfMonth = await this.getLastBackupsOfPeriod('month')
       for (const backup of lastBackupsOfMonth) {
-        if (
-          backup.retentionType !== 'monthly' &&
-          backup.retentionType !== 'yearly'
-        ) {
+        if (backup.retentionType !== 'monthly' && backup.retentionType !== 'yearly') {
           backup.promoteRetention('monthly')
           await backup.save()
           promoted++
@@ -144,10 +138,7 @@ export class RetentionService {
     if (now.hour >= 23) {
       const lastBackupsOfDay = await this.getLastBackupsOfPeriod('day')
       for (const backup of lastBackupsOfDay) {
-        if (
-          backup.retentionType === 'hourly' &&
-          backup.status === 'completed'
-        ) {
+        if (backup.retentionType === 'hourly' && backup.status === 'completed') {
           backup.promoteRetention('daily')
           await backup.save()
           promoted++
@@ -223,9 +214,7 @@ export class RetentionService {
     deleted: number
     errors: string[]
   }> {
-    const cutoffDate = DateTime.now()
-      .minus({ days: this.config.daily })
-      .startOf('day')
+    const cutoffDate = DateTime.now().minus({ days: this.config.daily }).startOf('day')
 
     const oldDailyBackups = await Backup.query()
       .where('retentionType', 'daily')
@@ -242,9 +231,7 @@ export class RetentionService {
     deleted: number
     errors: string[]
   }> {
-    const cutoffDate = DateTime.now()
-      .minus({ weeks: this.config.weekly })
-      .startOf('week')
+    const cutoffDate = DateTime.now().minus({ weeks: this.config.weekly }).startOf('week')
 
     const oldWeeklyBackups = await Backup.query()
       .where('retentionType', 'weekly')
@@ -261,9 +248,7 @@ export class RetentionService {
     deleted: number
     errors: string[]
   }> {
-    const cutoffDate = DateTime.now()
-      .minus({ months: this.config.monthly })
-      .startOf('month')
+    const cutoffDate = DateTime.now().minus({ months: this.config.monthly }).startOf('month')
 
     const oldMonthlyBackups = await Backup.query()
       .where('retentionType', 'monthly')
@@ -280,9 +265,7 @@ export class RetentionService {
     deleted: number
     errors: string[]
   }> {
-    const cutoffDate = DateTime.now()
-      .minus({ years: this.config.yearly })
-      .startOf('year')
+    const cutoffDate = DateTime.now().minus({ years: this.config.yearly }).startOf('year')
 
     const oldYearlyBackups = await Backup.query()
       .where('retentionType', 'yearly')
@@ -295,9 +278,7 @@ export class RetentionService {
   /**
    * Deleta uma lista de backups (banco + arquivo físico)
    */
-  private async deleteBackups(
-    backups: Backup[]
-  ): Promise<{ deleted: number; errors: string[] }> {
+  private async deleteBackups(backups: Backup[]): Promise<{ deleted: number; errors: string[] }> {
     let deleted = 0
     const errors: string[] = []
 
@@ -305,14 +286,8 @@ export class RetentionService {
       try {
         // Deletar arquivo físico
         if (backup.filePath) {
-          const fullPath = join(
-            app.makePath('storage/backups'),
-            backup.filePath
-          )
-
-          if (existsSync(fullPath)) {
-            await unlink(fullPath)
-          }
+          const destination = await StorageDestinationService.resolveDestinationForBackup(backup)
+          await StorageDestinationService.deleteBackupFile(destination, backup.filePath)
         }
 
         // Deletar registro do banco

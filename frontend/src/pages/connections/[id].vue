@@ -17,7 +17,7 @@
       <v-col cols="12" md="8">
         <v-card>
           <v-card-text>
-            <v-form ref="formRef" @submit.prevent="submit">
+            <v-form ref="formRef" :disabled="loading" @submit.prevent="submit">
               <!-- Basic Info -->
               <h3 class="text-h6 mb-4">Informações Básicas</h3>
 
@@ -99,6 +99,24 @@
                     :type="showPassword ? 'text' : 'password'"
                     @click:append-inner="showPassword = !showPassword"
                     @update:model-value="markPasswordAsModified"
+                  />
+                </v-col>
+              </v-row>
+
+              <v-divider class="my-6" />
+
+              <h3 class="text-h6 mb-4">Armazenamento</h3>
+
+              <v-row>
+                <v-col cols="12">
+                  <v-select
+                    v-model="form.storageDestinationId"
+                    clearable
+                    :items="storageDestinationOptions"
+                    label="Destino de Armazenamento"
+                    prepend-inner-icon="mdi-folder-upload"
+                    :loading="loadingDestinations"
+                    :disabled="loadingDestinations"
                   />
                 </v-col>
               </v-row>
@@ -243,11 +261,11 @@
 </template>
 
 <script lang="ts" setup>
-  import type { DatabaseType, ScheduleFrequency } from '@/types/api'
+  import type { DatabaseType, ScheduleFrequency, StorageDestination } from '@/types/api'
   import { computed, inject, onMounted, reactive, ref } from 'vue'
   import { useRoute, useRouter } from 'vue-router'
   import { useDisplay } from 'vuetify'
-  import { connectionsApi } from '@/services/api'
+  import { connectionsApi, storageDestinationsApi } from '@/services/api'
 
   const route = useRoute()
   const router = useRouter()
@@ -260,22 +278,24 @@
   const testing = ref(false)
   const loading = ref(false)
   const passwordModified = ref(false)
+  const loadingDestinations = ref(false)
+  const storageDestinations = ref<StorageDestination[]>([])
 
-const isEditing = computed(() => {
+  const isEditing = computed(() => {
     const params = route.params as { id?: string }
     const id = params.id
     return !!id && id !== 'new' && !Number.isNaN(Number(id))
-})
+  })
 
   // Helper para obter o ID da conexão de forma segura
-function getConnectionId(): number {
+  function getConnectionId (): number {
     const params = route.params as { id?: string }
     const id = Number(params.id)
     if (Number.isNaN(id)) {
-        throw new Error('ID inválido')
+      throw new Error('ID inválido')
     }
     return id
-}
+  }
 
   const form = reactive({
     name: '',
@@ -285,6 +305,7 @@ function getConnectionId(): number {
     database: '',
     username: '',
     password: '',
+    storageDestinationId: null as number | null,
     scheduleEnabled: false,
     scheduleFrequency: null as ScheduleFrequency | null,
   })
@@ -321,6 +342,25 @@ function getConnectionId(): number {
     passwordModified.value = true
   }
 
+  const storageDestinationOptions = computed(() => [
+    ...storageDestinations.value.map(d => ({
+      title: d.isDefault ? `${d.name} (padrão)` : d.name,
+      value: d.id,
+    })),
+  ])
+
+  async function loadStorageDestinations () {
+    loadingDestinations.value = true
+    try {
+      const response = await storageDestinationsApi.list({ status: 'active', limit: 100 })
+      storageDestinations.value = response.data?.data ?? []
+    } catch {
+      storageDestinations.value = []
+    } finally {
+      loadingDestinations.value = false
+    }
+  }
+
   async function loadConnection () {
     if (!isEditing.value) return
 
@@ -335,6 +375,7 @@ function getConnectionId(): number {
         form.port = connection.port
         form.database = connection.database
         form.username = connection.username
+        form.storageDestinationId = connection.storageDestinationId ?? null
         form.scheduleEnabled = connection.scheduleEnabled
         form.scheduleFrequency = connection.scheduleFrequency
       }
@@ -360,6 +401,7 @@ function getConnectionId(): number {
           port: form.port,
           database: form.database,
           username: form.username,
+          storageDestinationId: form.storageDestinationId,
           scheduleEnabled: form.scheduleEnabled,
           scheduleFrequency: form.scheduleFrequency,
         }
@@ -406,6 +448,7 @@ function getConnectionId(): number {
   }
 
   onMounted(() => {
+    loadStorageDestinations()
     loadConnection()
   })
 </script>

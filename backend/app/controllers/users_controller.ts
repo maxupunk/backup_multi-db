@@ -33,10 +33,10 @@ export default class UsersController {
 
     // Prevent user from changing their own status (optional safety)
     if (userToUpdate.id === currentUser.id) {
-       return response.badRequest({
-         success: false,
-         message: 'Você não pode alterar seu próprio status.'
-       })
+      return response.badRequest({
+        success: false,
+        message: 'Você não pode alterar seu próprio status.',
+      })
     }
 
     userToUpdate.isActive = !userToUpdate.isActive
@@ -47,8 +47,8 @@ export default class UsersController {
       message: `Usuário ${userToUpdate.isActive ? 'ativado' : 'desativado'} com sucesso.`,
       data: {
         id: userToUpdate.id,
-        isActive: userToUpdate.isActive
-      }
+        isActive: userToUpdate.isActive,
+      },
     })
   }
 }

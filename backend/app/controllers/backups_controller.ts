@@ -2,10 +2,9 @@ import type { HttpContext } from '@adonisjs/core/http'
 import Backup from '#models/backup'
 import Connection from '#models/connection'
 import { createReadStream, existsSync } from 'node:fs'
-import { unlink } from 'node:fs/promises'
-import { join } from 'node:path'
-import app from '@adonisjs/core/services/app'
 import { AuditService } from '#services/audit_service'
+import { StorageDestinationService } from '#services/storage_destination_service'
+import type { Readable } from 'node:stream'
 
 /**
  * Controller para gerenciamento de backups
@@ -21,9 +20,7 @@ export default class BackupsController {
     const status = request.input('status')
     const connectionId = request.input('connectionId')
 
-    const query = Backup.query()
-      .preload('connection')
-      .orderBy('createdAt', 'desc')
+    const query = Backup.query().preload('connection').orderBy('createdAt', 'desc')
 
     if (status) {
       query.where('status', status)
@@ -80,10 +77,7 @@ export default class BackupsController {
    * Retorna detalhes de um backup específico
    */
   async show({ params, response }: HttpContext) {
-    const backup = await Backup.query()
-      .where('id', params.id)
-      .preload('connection')
-      .first()
+    const backup = await Backup.query().where('id', params.id).preload('connection').first()
 
     if (!backup) {
       return response.notFound({
@@ -110,7 +104,11 @@ export default class BackupsController {
    */
   async download(ctx: HttpContext) {
     const { params, response } = ctx
-    const backup = await Backup.query().where('id', params.id).preload('connection').first()
+    const backup = await Backup.query()
+      .where('id', params.id)
+      .preload('connection')
+      .preload('storageDestination')
+      .first()
 
     if (!backup) {
       return response.notFound({
@@ -126,33 +124,43 @@ export default class BackupsController {
       })
     }
 
-    const fullPath = join(app.makePath('storage/backups'), backup.filePath)
+    const destination = backup.storageDestination ?? null
+    const fullPath = StorageDestinationService.getLocalFullPath(destination, backup.filePath)
 
-    if (!existsSync(fullPath)) {
-      return response.notFound({
+    try {
+      let stream: Readable
+      let contentLength: number | undefined = backup.fileSize ?? undefined
+
+      if (existsSync(fullPath)) {
+        stream = createReadStream(fullPath)
+      } else if (destination) {
+        const download = await StorageDestinationService.getDownloadStream(destination, backup.filePath)
+        stream = download.stream
+        contentLength = download.contentLength ?? contentLength
+      } else {
+        return response.notFound({
+          success: false,
+          message: 'Arquivo de backup não encontrado no servidor',
+        })
+      }
+
+      await AuditService.logBackupDownloaded(backup.id, backup.connection?.name ?? 'N/A', ctx)
+
+      response.header('Content-Type', 'application/octet-stream')
+      response.header('Content-Disposition', `attachment; filename="${backup.fileName}"`)
+
+      if (contentLength) {
+        response.header('Content-Length', contentLength.toString())
+      }
+
+      return response.stream(stream)
+    } catch (error) {
+      return response.internalServerError({
         success: false,
-        message: 'Arquivo de backup não encontrado no servidor',
+        message: 'Erro ao fazer download do backup',
+        error: error instanceof Error ? error.message : 'Erro desconhecido',
       })
     }
-
-    // Registrar auditoria de download
-    await AuditService.logBackupDownloaded(
-      backup.id,
-      backup.connection?.name ?? 'N/A',
-      ctx
-    )
-
-    // Stream do arquivo para download
-    const stream = createReadStream(fullPath)
-
-    response.header('Content-Type', 'application/octet-stream')
-    response.header('Content-Disposition', `attachment; filename="${backup.fileName}"`)
-
-    if (backup.fileSize) {
-      response.header('Content-Length', backup.fileSize.toString())
-    }
-
-    return response.stream(stream)
   }
 
   /**
@@ -161,7 +169,11 @@ export default class BackupsController {
    */
   async destroy(ctx: HttpContext) {
     const { params, response } = ctx
-    const backup = await Backup.query().where('id', params.id).preload('connection').first()
+    const backup = await Backup.query()
+      .where('id', params.id)
+      .preload('connection')
+      .preload('storageDestination')
+      .first()
 
     if (!backup) {
       return response.notFound({
@@ -182,14 +194,13 @@ export default class BackupsController {
 
     // Deletar arquivo físico se existir
     if (backup.filePath) {
-      const fullPath = join(app.makePath('storage/backups'), backup.filePath)
-
-      if (existsSync(fullPath)) {
-        try {
-          await unlink(fullPath)
-        } catch (error) {
-          console.error('Erro ao deletar arquivo de backup:', error)
-        }
+      try {
+        await StorageDestinationService.deleteBackupFile(
+          backup.storageDestination ?? null,
+          backup.filePath
+        )
+      } catch (error) {
+        console.error('Erro ao deletar arquivo de backup:', error)
       }
     }
 

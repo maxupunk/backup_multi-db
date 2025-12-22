@@ -14,6 +14,10 @@ export type ScheduleFrequency = '1h' | '6h' | '12h' | '24h'
 // Status de um backup
 export type BackupStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled'
 
+export type StorageDestinationType = 'local' | 's3' | 'gcs' | 'azure_blob' | 'sftp'
+
+export type StorageDestinationStatus = 'active' | 'inactive'
+
 // Tipo de retenção
 export type RetentionType = 'hourly' | 'daily' | 'weekly' | 'monthly' | 'yearly'
 
@@ -31,6 +35,7 @@ export interface Connection {
   port: number
   database: string
   username: string
+  storageDestinationId?: number | null
   scheduleFrequency: ScheduleFrequency | null
   scheduleEnabled: boolean
   status: ConnectionStatus
@@ -57,6 +62,7 @@ export interface CreateConnectionPayload {
   database: string
   username: string
   password: string
+  storageDestinationId?: number | null
   scheduleFrequency?: ScheduleFrequency
   scheduleEnabled?: boolean
   options?: {
@@ -76,12 +82,75 @@ export interface UpdateConnectionPayload {
   database?: string
   username?: string
   password?: string
+  storageDestinationId?: number | null
   scheduleFrequency?: ScheduleFrequency | null
   scheduleEnabled?: boolean
   options?: {
     ssl?: boolean
     charset?: string
   } | null
+}
+
+export type StorageDestinationConfigPayload =
+  | {
+      basePath?: string
+    }
+  | {
+      region: string
+      bucket: string
+      endpoint?: string
+      accessKeyId: string
+      secretAccessKey: string
+      forcePathStyle?: boolean
+      prefix?: string
+    }
+  | {
+      bucket: string
+      projectId?: string
+      credentialsJson?: string
+      usingUniformAcl?: boolean
+      prefix?: string
+    }
+  | {
+      connectionString: string
+      container: string
+      prefix?: string
+    }
+  | {
+      host: string
+      port?: number
+      username: string
+      password?: string
+      privateKey?: string
+      passphrase?: string
+      basePath?: string
+    }
+
+export interface StorageDestination {
+  id: number
+  name: string
+  type: StorageDestinationType
+  status: StorageDestinationStatus
+  isDefault: boolean
+  createdAt: string
+  updatedAt: string
+  config?: Record<string, unknown> | null
+}
+
+export interface CreateStorageDestinationPayload {
+  name: string
+  type: StorageDestinationType
+  status?: StorageDestinationStatus
+  isDefault?: boolean
+  config?: StorageDestinationConfigPayload
+}
+
+export interface UpdateStorageDestinationPayload {
+  name?: string
+  type?: StorageDestinationType
+  status?: StorageDestinationStatus
+  isDefault?: boolean
+  config?: StorageDestinationConfigPayload
 }
 
 /**
