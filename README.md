@@ -150,6 +150,56 @@ npm run build      # Build para produção (output: ../backend/public)
 npm run lint       # ESLint
 ```
 
+## 🐳 Docker
+
+### Desenvolvimento
+
+```bash
+cd backend
+docker compose -f docker-compose.dev.yml up --build
+```
+
+### Produção (com PM2)
+
+```bash
+cd backend
+
+# Build e iniciar
+docker compose up --build -d
+
+# Verificar status
+docker compose ps
+docker exec backup-manager-backend pm2 status
+
+# Ver logs
+docker compose logs -f
+docker exec backup-manager-backend pm2 logs
+
+# Reiniciar aplicação
+docker exec backup-manager-backend pm2 restart backup-manager
+
+# Parar
+docker compose down
+```
+
+### Variáveis de Ambiente (Produção)
+
+Crie um arquivo `.env` no diretório `backend/` com:
+
+```bash
+# Obrigatórios
+APP_KEY=<gerado com: node ace generate:key>
+DB_ENCRYPTION_KEY=<gerado com: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))">
+
+# Opcionais
+PORT=3333
+TZ=America/Sao_Paulo
+RETENTION_DAILY=7
+RETENTION_WEEKLY=4
+RETENTION_MONTHLY=12
+RETENTION_YEARLY=5
+```
+
 ## 📖 API Endpoints
 
 ### Conexões

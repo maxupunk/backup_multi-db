@@ -26,3 +26,6 @@ yarn-error.log
 
 # Storage
 /storage
+
+# PM2 Logs
+/logs

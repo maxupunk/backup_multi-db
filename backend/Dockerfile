@@ -57,9 +57,15 @@ ENV PORT=3333
 
 WORKDIR /app
 
+# Instalar PM2 globalmente
+RUN npm install -g pm2
+
 # Copiar build e package.json
 COPY --from=build /app/build ./
 COPY --from=build /app/package*.json ./
+
+# Copiar configuração do PM2
+COPY ecosystem.config.cjs ./
 
 # Instalar apenas dependências de produção
 RUN npm ci --only=production && npm cache clean --force
@@ -68,12 +74,16 @@ RUN npm ci --only=production && npm cache clean --force
 COPY docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh
 
-# Criar diretórios necessários
-RUN mkdir -p /app/storage/backups /app/storage/database
+# Criar diretórios necessários (incluindo logs)
+RUN mkdir -p /app/storage/backups /app/storage/database /app/logs
 
 # Criar usuário não-root para segurança
-RUN groupadd -r appgroup && useradd -r -g appgroup appuser \
+RUN groupadd -r appgroup && useradd -r -g appgroup -m appuser \
     && chown -R appuser:appgroup /app
+
+# Criar diretório PM2 para o usuário
+RUN mkdir -p /home/appuser/.pm2 \
+    && chown -R appuser:appgroup /home/appuser/.pm2
 
 USER appuser
 

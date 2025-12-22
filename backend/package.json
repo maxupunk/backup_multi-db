@@ -6,6 +6,12 @@
   "license": "UNLICENSED",
   "scripts": {
     "start": "node bin/server.js",
+    "start:pm2": "pm2 start ecosystem.config.cjs --env production",
+    "stop:pm2": "pm2 stop backup-manager",
+    "restart:pm2": "pm2 restart backup-manager",
+    "reload:pm2": "pm2 reload backup-manager",
+    "logs:pm2": "pm2 logs backup-manager",
+    "status:pm2": "pm2 status",
     "build": "node ace build",
     "dev": "node ace serve --hmr",
     "test": "node ace test",
