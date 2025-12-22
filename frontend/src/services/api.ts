@@ -20,6 +20,7 @@ import type {
   PaginatedResponse,
   RegisterPayload,
   StorageDestination,
+  StorageSpaceInfo,
   UpdateConnectionPayload,
   UpdateStorageDestinationPayload,
 } from '@/types/api'
@@ -273,6 +274,20 @@ export const storageDestinationsApi = {
     return request<ApiResponse>(`/storage-destinations/${id}`, {
       method: 'DELETE',
     })
+  },
+
+  /**
+   * Obtém informações de espaço de todos os destinos
+   */
+  async spaceAll (): Promise<ApiResponse<StorageSpaceInfo[]>> {
+    return request<ApiResponse<StorageSpaceInfo[]>>('/storage-destinations-space')
+  },
+
+  /**
+   * Obtém informações de espaço de um destino específico
+   */
+  async space (id: number): Promise<ApiResponse<StorageSpaceInfo | null>> {
+    return request<ApiResponse<StorageSpaceInfo | null>>(`/storage-destinations/${id}/space`)
   },
 }
 

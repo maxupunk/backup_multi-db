@@ -54,6 +54,8 @@ router
 
         // ==================== Storage Destinations ====================
         router.resource('storage-destinations', StorageDestinationsController).apiOnly()
+        router.get('storage-destinations-space', [StorageDestinationsController, 'spaceAll'])
+        router.get('storage-destinations/:id/space', [StorageDestinationsController, 'space'])
 
         // Test connection - rateLimit estrito (10 req/min)
         router
@@ -76,19 +78,21 @@ router
         router.get('/stats', async () => {
           const connectionModule = await import('#models/connection')
           const backupModule = await import('#models/backup')
+          const { StorageSpaceService } = await import('#services/storage_space_service')
           const Connection = connectionModule.default
           const Backup = backupModule.default
           const { DateTime } = await import('luxon')
 
           const today = DateTime.now().startOf('day')
 
-          const [totalConnections, activeConnections, totalBackups, backupsToday, recentBackups] =
+          const [totalConnections, activeConnections, totalBackups, backupsToday, recentBackups, storageSpaces] =
             await Promise.all([
               Connection.query().count('* as total').first(),
               Connection.query().where('status', 'active').count('* as total').first(),
               Backup.query().count('* as total').first(),
               Backup.query().where('createdAt', '>=', today.toSQL()).count('* as total').first(),
               Backup.query().preload('connection').orderBy('createdAt', 'desc').limit(5),
+              StorageSpaceService.getAllDestinationsSpaceInfo(),
             ])
 
           return {
@@ -109,6 +113,7 @@ router
                 fileSize: backup.fileSize,
                 createdAt: backup.createdAt,
               })),
+              storageSpaces,
             },
           }
         })

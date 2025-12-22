@@ -89,6 +89,61 @@
       </v-col>
     </v-row>
 
+    <!-- Storage Space Cards -->
+    <v-row v-if="stats?.storageSpaces?.length" class="mb-6">
+      <v-col cols="12">
+        <div class="d-flex align-center mb-4">
+          <v-icon class="mr-2" color="primary" icon="mdi-harddisk" />
+          <h2 class="text-h6 font-weight-medium">Espaço de Armazenamento</h2>
+        </div>
+      </v-col>
+
+      <v-col v-for="storage in stats.storageSpaces" :key="storage.destinationId ?? 'default'" cols="12" md="4" sm="6">
+        <v-card :class="['storage-card', { 'storage-card--warning': storage.isLowSpace }]">
+          <v-card-text class="pa-4">
+            <div class="d-flex align-center justify-space-between mb-3">
+              <div class="d-flex align-center">
+                <v-avatar :color="storage.isLowSpace ? 'warning' : 'primary'" size="40" class="mr-3">
+                  <v-icon :icon="getStorageIcon(storage.type)" size="20" />
+                </v-avatar>
+                <div>
+                  <p class="text-body-1 font-weight-medium mb-0">
+                    {{ storage.destinationName }}
+                  </p>
+                  <p class="text-caption text-medium-emphasis">
+                    {{ formatStorageType(storage.type) }}
+                  </p>
+                </div>
+              </div>
+              <v-chip v-if="storage.isLowSpace" color="warning" label size="small" variant="tonal">
+                <v-icon icon="mdi-alert" size="14" class="mr-1" />
+                Espaço baixo
+              </v-chip>
+            </div>
+
+            <v-progress-linear :model-value="storage.usedPercent" :color="getProgressColor(storage.usedPercent)"
+              bg-color="grey-lighten-3" height="12" rounded class="mb-3">
+              <template #default>
+                <span class="text-caption font-weight-medium">
+                  {{ storage.usedPercent.toFixed(1) }}%
+                </span>
+              </template>
+            </v-progress-linear>
+
+            <div class="d-flex justify-space-between text-caption text-medium-emphasis">
+              <span>
+                <v-icon icon="mdi-check-circle" size="14" class="mr-1" color="success" />
+                {{ formatBytes(storage.freeBytes) }} livre
+              </span>
+              <span>
+                {{ formatBytes(storage.usedBytes) }} / {{ formatBytes(storage.totalBytes) }}
+              </span>
+            </div>
+          </v-card-text>
+        </v-card>
+      </v-col>
+    </v-row>
+
     <v-row>
       <!-- Quick Actions -->
       <v-col cols="12" md="4">
@@ -99,23 +154,11 @@
           </v-card-title>
 
           <v-card-text>
-            <v-btn
-              block
-              class="mb-3"
-              color="primary"
-              prepend-icon="mdi-plus"
-              to="/connections/new"
-            >
+            <v-btn block class="mb-3" color="primary" prepend-icon="mdi-plus" to="/connections/new">
               Nova Conexão
             </v-btn>
 
-            <v-btn
-              block
-              color="primary"
-              prepend-icon="mdi-backup-restore"
-              to="/backups"
-              variant="outlined"
-            >
+            <v-btn block color="primary" prepend-icon="mdi-backup-restore" to="/backups" variant="outlined">
               Ver Todos os Backups
             </v-btn>
           </v-card-text>
@@ -181,38 +224,76 @@
 </template>
 
 <script lang="ts" setup>
-  import type { BackupStatus, DashboardStats } from '@/types/api'
-  import { onMounted, ref } from 'vue'
-  import { statsApi } from '@/services/api'
-  import { useNotifier } from '@/composables/useNotifier'
-  import { getBackupStatusColor as getStatusColor, getBackupStatusLabel as getStatusLabel } from '@/ui/backup'
-  import { formatDateTimePtBR, formatFileSize } from '@/utils/format'
+import type { BackupStatus, DashboardStats, StorageSpaceInfo } from '@/types/api'
+import { onMounted, ref } from 'vue'
+import { statsApi } from '@/services/api'
+import { useNotifier } from '@/composables/useNotifier'
+import { getBackupStatusColor as getStatusColor, getBackupStatusLabel as getStatusLabel } from '@/ui/backup'
+import { formatDateTimePtBR, formatFileSize } from '@/utils/format'
 
-  const notify = useNotifier()
+const notify = useNotifier()
 
-  const loading = ref(false)
-  const stats = ref<DashboardStats | null>(null)
+const loading = ref(false)
+const stats = ref<DashboardStats | null>(null)
 
-  async function loadStats () {
-    loading.value = true
-    try {
-      const response = await statsApi.get()
-      stats.value = response.data ?? null
-    } catch (error) {
-      console.error('Erro ao carregar estatísticas:', error)
-      notify('Erro ao carregar estatísticas', 'error')
-    } finally {
-      loading.value = false
-    }
+async function loadStats() {
+  loading.value = true
+  try {
+    const response = await statsApi.get()
+    stats.value = response.data ?? null
+  } catch (error) {
+    console.error('Erro ao carregar estatísticas:', error)
+    notify('Erro ao carregar estatísticas', 'error')
+  } finally {
+    loading.value = false
   }
+}
 
-  function formatDate (dateString: string): string {
-    return formatDateTimePtBR(dateString, { withYear: false })
+function formatDate(dateString: string): string {
+  return formatDateTimePtBR(dateString, { withYear: false })
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return '0 B'
+
+  const k = 1024
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB', 'PB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`
+}
+
+function getStorageIcon(type: string): string {
+  const icons: Record<string, string> = {
+    local: 'mdi-folder',
+    s3: 'mdi-aws',
+    gcs: 'mdi-google-cloud',
+    azure_blob: 'mdi-microsoft-azure',
+    sftp: 'mdi-server-network',
   }
+  return icons[type] ?? 'mdi-harddisk'
+}
 
-  onMounted(() => {
-    loadStats()
-  })
+function formatStorageType(type: string): string {
+  const labels: Record<string, string> = {
+    local: 'Armazenamento Local',
+    s3: 'Amazon S3 / MinIO',
+    gcs: 'Google Cloud Storage',
+    azure_blob: 'Azure Blob Storage',
+    sftp: 'SFTP',
+  }
+  return labels[type] ?? type
+}
+
+function getProgressColor(usedPercent: number): string {
+  if (usedPercent >= 90) return 'error'
+  if (usedPercent >= 75) return 'warning'
+  return 'success'
+}
+
+onMounted(() => {
+  loadStats()
+})
 </script>
 
 <style scoped>
@@ -227,5 +308,25 @@
 .stat-card:hover {
   transform: translateY(-2px);
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+}
+
+.storage-card {
+  background: linear-gradient(135deg,
+      rgb(var(--v-theme-surface)) 0%,
+      rgb(var(--v-theme-surface-bright)) 100%);
+  border: 1px solid rgba(var(--v-border-color), 0.08);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.3s ease;
+}
+
+.storage-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12);
+}
+
+.storage-card--warning {
+  border-color: rgb(var(--v-theme-warning));
+  background: linear-gradient(135deg,
+      rgba(var(--v-theme-warning), 0.05) 0%,
+      rgb(var(--v-theme-surface)) 100%);
 }
 </style>

@@ -1,5 +1,6 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import StorageDestination from '#models/storage_destination'
+import { StorageSpaceService } from '#services/storage_space_service'
 import {
   createStorageDestinationValidator,
   listStorageDestinationsValidator,
@@ -147,6 +148,47 @@ export default class StorageDestinationsController {
     return response.ok({
       success: true,
       message: 'Destino de armazenamento removido com sucesso',
+    })
+  }
+
+  /**
+   * Obtém informações de espaço de um destino específico
+   */
+  async space({ params, response }: HttpContext) {
+    const destination = await StorageDestination.find(params.id)
+
+    if (!destination) {
+      return response.notFound({
+        success: false,
+        message: 'Destino de armazenamento não encontrado',
+      })
+    }
+
+    const spaceInfo = await StorageSpaceService.getDestinationSpaceInfo(destination)
+
+    if (!spaceInfo) {
+      return response.ok({
+        success: true,
+        message: 'Informações de espaço não disponíveis para este tipo de armazenamento',
+        data: null,
+      })
+    }
+
+    return response.ok({
+      success: true,
+      data: spaceInfo,
+    })
+  }
+
+  /**
+   * Obtém informações de espaço de todos os destinos
+   */
+  async spaceAll({ response }: HttpContext) {
+    const storageSpaces = await StorageSpaceService.getAllDestinationsSpaceInfo()
+
+    return response.ok({
+      success: true,
+      data: storageSpaces,
     })
   }
 }

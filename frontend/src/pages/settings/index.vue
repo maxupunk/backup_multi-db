@@ -114,6 +114,29 @@
                 </v-chip>
               </template>
 
+              <template #item.space="{ item }">
+                <template v-if="item.type === 'local'">
+                  <template v-if="getStorageSpace(item.id)">
+                    <div class="storage-space-cell">
+                      <v-progress-linear :model-value="getStorageSpace(item.id)!.usedPercent"
+                        :color="getProgressColor(getStorageSpace(item.id)!.usedPercent)" bg-color="grey-lighten-3"
+                        height="8" rounded class="mb-1" />
+                      <div class="d-flex justify-space-between text-caption text-medium-emphasis">
+                        <span>{{ formatBytes(getStorageSpace(item.id)!.freeBytes) }} livre</span>
+                        <span v-if="getStorageSpace(item.id)!.isLowSpace" class="text-warning">
+                          <v-icon icon="mdi-alert" size="12" />
+                        </span>
+                      </div>
+                    </div>
+                  </template>
+                  <template v-else-if="loadingSpaces">
+                    <v-progress-circular indeterminate size="16" width="2" />
+                  </template>
+                  <span v-else class="text-caption text-medium-emphasis">-</span>
+                </template>
+                <span v-else class="text-caption text-medium-emphasis">N/A</span>
+              </template>
+
               <template #item.status="{ item }">
                 <v-chip :color="item.status === 'active' ? 'success' : 'grey'" label size="small">
                   {{ item.status === 'active' ? 'Ativo' : 'Inativo' }}
@@ -432,7 +455,7 @@
 </template>
 
 <script lang="ts" setup>
-import type { StorageDestination, StorageDestinationType } from '@/types/api'
+import type { StorageDestination, StorageDestinationType, StorageSpaceInfo } from '@/types/api'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useTheme } from 'vuetify'
 import { ApiError, healthCheck, storageDestinationsApi } from '@/services/api'
@@ -470,10 +493,14 @@ const destinationFilters = reactive({
 const destinationHeaders = [
   { title: 'Nome', key: 'name', sortable: true },
   { title: 'Tipo', key: 'type', sortable: true },
+  { title: 'Espaço', key: 'space', sortable: false, width: 180 },
   { title: 'Status', key: 'status', sortable: true },
   { title: '', key: 'isDefault', sortable: false },
   { title: 'Ações', key: 'actions', sortable: false, align: 'end' as const },
 ]
+
+const storageSpaces = ref<Map<number, StorageSpaceInfo>>(new Map())
+const loadingSpaces = ref(false)
 
 const destinationTypes = [
   { title: 'Local', value: 'local' },
@@ -599,12 +626,53 @@ async function loadDestinations() {
       limit: 100,
     })
     storageDestinations.value = response.data?.data ?? []
+    // Carregar espaços após carregar destinos
+    loadStorageSpaces()
   } catch {
     storageDestinations.value = []
     notify('Erro ao carregar destinos de armazenamento', 'error')
   } finally {
     loadingDestinations.value = false
   }
+}
+
+async function loadStorageSpaces() {
+  loadingSpaces.value = true
+  try {
+    const response = await storageDestinationsApi.spaceAll()
+    const spaces = response.data ?? []
+    const spaceMap = new Map<number, StorageSpaceInfo>()
+    for (const space of spaces) {
+      if (space.destinationId !== null) {
+        spaceMap.set(space.destinationId, space)
+      }
+    }
+    storageSpaces.value = spaceMap
+  } catch {
+    storageSpaces.value = new Map()
+  } finally {
+    loadingSpaces.value = false
+  }
+}
+
+function getStorageSpace(destinationId: number): StorageSpaceInfo | undefined {
+  return storageSpaces.value.get(destinationId)
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return '0 B'
+
+  const k = 1024
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB', 'PB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`
+}
+
+function getProgressColor(usedPercent: number): string {
+  if (usedPercent >= 90) return 'error'
+  if (usedPercent >= 75) return 'warning'
+  return 'success'
 }
 
 const debouncedLoadDestinations = useDebouncedFn(loadDestinations, 300)
@@ -880,3 +948,10 @@ onMounted(() => {
   loadDestinations()
 })
 </script>
+
+<style scoped>
+.storage-space-cell {
+  min-width: 120px;
+  max-width: 160px;
+}
+</style>

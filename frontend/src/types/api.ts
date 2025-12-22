@@ -249,6 +249,22 @@ export interface PaginatedResponse<T> {
 }
 
 /**
+ * Informações de espaço de armazenamento
+ */
+export interface StorageSpaceInfo {
+  destinationId: number | null
+  destinationName: string
+  type: string
+  totalBytes: number
+  usedBytes: number
+  freeBytes: number
+  usedPercent: number
+  freePercent: number
+  isLowSpace: boolean
+  lowSpaceThreshold: number
+}
+
+/**
  * Estatísticas do dashboard
  */
 export interface DashboardStats {
@@ -267,6 +283,7 @@ export interface DashboardStats {
     fileSize: number | null
     createdAt: string
   }[]
+  storageSpaces: StorageSpaceInfo[]
 }
 
 /**

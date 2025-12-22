@@ -11,6 +11,7 @@ import logger from '@adonisjs/core/services/logger'
 import Connection from '#models/connection'
 import Backup, { type BackupTrigger, type RetentionType } from '#models/backup'
 import { StorageDestinationService } from '#services/storage_destination_service'
+import { StorageSpaceService } from '#services/storage_space_service'
 
 /**
  * Resultado da execução de um backup
@@ -24,6 +25,7 @@ export interface BackupResult {
   checksum?: string
   error?: string
   exitCode?: number
+  storageWarning?: string
 }
 
 /**
@@ -66,6 +68,9 @@ export class BackupService {
     const destination = await StorageDestinationService.resolveDestinationForConnection(connection)
     const destinationName = destination?.name ?? 'Local (padrão)'
 
+    // Verificar espaço em disco antes do backup
+    const spaceCheck = await StorageSpaceService.checkSpaceBeforeBackup(destination)
+
     // Criar e salvar registro inicial do backup
     const backup = await this.createBackupRecord(connection, destination, trigger)
 
@@ -77,6 +82,11 @@ export class BackupService {
     try {
       const localBasePath = StorageDestinationService.getLocalBasePath(destination)
       const result = await this.performBackup(connection, localBasePath)
+
+      // Adicionar aviso de espaço baixo ao resultado, se houver
+      if (spaceCheck.warning) {
+        result.storageWarning = spaceCheck.warning
+      }
 
       // Upload para destino remoto, se configurado
       if (result.success && destination) {
