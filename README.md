@@ -32,6 +32,16 @@ Projetado com foco em **experiência do usuário (UX)** inovadora e **instalaç�
 - ✅ MariaDB
 - ✅ PostgreSQL
 
+## ☁️ Destinos de Backup (Storage)
+
+O sistema suporta nativamente o envio seguro de backups para múltiplos destinos:
+
+- 📂 **Local** (Filesystem do servidor)
+- ☁️ **AWS S3** (e compatíveis: MinIO, DigitalOcean Spaces, Backblaze B2, etc.)
+- 🟦 **Azure Blob Storage**
+- 🟧 **Google Cloud Storage (GCS)**
+- 📁 **SFTP** (Transferência segura para servidores remotos)
+
 ## 🚀 Início Rápido (Quick Start)
 
 Tenha o sistema rodando em menos de 2 minutos usando Docker:
