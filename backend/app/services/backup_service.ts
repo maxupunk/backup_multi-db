@@ -54,9 +54,15 @@ interface DumpConfig {
 }
 
 /**
+ * Valor especial que indica backup completo (todos os databases)
+ */
+export const ALL_DATABASES_MARKER = '*'
+
+/**
  * Serviço responsável por executar backups de banco de dados.
  * Suporta MySQL, MariaDB e PostgreSQL.
  * Agora suporta múltiplos databases por conexão.
+ * Suporta backup completo usando pg_dumpall e mysqldump --all-databases.
  */
 export class BackupService {
   private readonly storagePath: string
@@ -388,7 +394,9 @@ export class BackupService {
     fullPath: string
   } {
     const timestamp = DateTime.now().toFormat('yyyyMMdd_HHmmss')
-    const fileName = `${databaseName}_${timestamp}.sql.gz`
+    // Para backup completo, usar nome descritivo
+    const filePrefix = databaseName === ALL_DATABASES_MARKER ? 'all_databases' : databaseName
+    const fileName = `${filePrefix}_${timestamp}.sql.gz`
     const relativePath = join(connection.id.toString(), fileName)
     const fullPath = join(basePath, relativePath)
 
@@ -401,16 +409,21 @@ export class BackupService {
   private buildDumpConfig(connection: Connection, databaseName: string): DumpConfig {
     const password = connection.getDecryptedPassword()
     const processEnv = { ...process.env }
+    const isFullBackup = databaseName === ALL_DATABASES_MARKER
 
     if (connection.type === 'postgresql') {
-      return this.buildPostgresConfig(connection, databaseName, password, processEnv)
+      return isFullBackup
+        ? this.buildPostgresDumpAllConfig(connection, password, processEnv)
+        : this.buildPostgresConfig(connection, databaseName, password, processEnv)
     }
 
-    return this.buildMySqlConfig(connection, databaseName, password, processEnv)
+    return isFullBackup
+      ? this.buildMySqlAllDatabasesConfig(connection, password, processEnv)
+      : this.buildMySqlConfig(connection, databaseName, password, processEnv)
   }
 
   /**
-   * Configuração para PostgreSQL (pg_dump)
+   * Configuração para PostgreSQL (pg_dump) - backup de um database específico
    */
   private buildPostgresConfig(
     connection: Connection,
@@ -432,7 +445,28 @@ export class BackupService {
   }
 
   /**
-   * Configuração para MySQL/MariaDB (mysqldump)
+   * Configuração para PostgreSQL (pg_dumpall) - backup completo de TODOS os databases
+   * Inclui: todos os databases, roles/usuários, tablespaces e permissões
+   */
+  private buildPostgresDumpAllConfig(
+    connection: Connection,
+    password: string,
+    env: NodeJS.ProcessEnv
+  ): DumpConfig {
+    return {
+      command: 'pg_dumpall',
+      args: [
+        '-h', connection.host,
+        '-p', connection.port.toString(),
+        '-U', connection.username,
+        '--no-password',
+      ],
+      env: { ...env, PGPASSWORD: password },
+    }
+  }
+
+  /**
+   * Configuração para MySQL/MariaDB (mysqldump) - backup de um database específico
    */
   private buildMySqlConfig(
     connection: Connection,
@@ -451,6 +485,31 @@ export class BackupService {
         '--routines',
         '--triggers',
         databaseName,
+      ],
+      env,
+    }
+  }
+
+  /**
+   * Configuração para MySQL/MariaDB (mysqldump --all-databases) - backup completo
+   * Inclui: todos os databases, usuários e permissões
+   */
+  private buildMySqlAllDatabasesConfig(
+    connection: Connection,
+    password: string,
+    env: NodeJS.ProcessEnv
+  ): DumpConfig {
+    return {
+      command: 'mysqldump',
+      args: [
+        '-h', connection.host,
+        '-P', connection.port.toString(),
+        '-u', connection.username,
+        `--password=${password}`,
+        '--single-transaction',
+        '--routines',
+        '--triggers',
+        '--all-databases',
       ],
       env,
     }

@@ -85,16 +85,36 @@
                 <!-- Seleção de databases (múltipla) -->
                 <v-col cols="12">
                   <v-select v-model="form.databases" chips closable-chips :disabled="availableDatabases.length === 0"
-                    :items="availableDatabases" label="Selecione os Bancos de Dados para Backup *" multiple
+                    :items="databaseOptions" label="Selecione os Bancos de Dados para Backup *" multiple
                     :no-data-text="availableDatabases.length === 0 ? 'Clique em Testar e Listar Bancos primeiro' : 'Nenhum banco de dados encontrado'"
-                    prepend-inner-icon="mdi-database-multiple" :rules="[rules.requiredArray]">
+                    prepend-inner-icon="mdi-database-multiple" :rules="[rules.requiredArray]"
+                    @update:model-value="handleDatabaseSelection">
                     <template #chip="{ item, props: chipProps }">
-                      <v-chip v-bind="chipProps" color="primary" variant="outlined">
-                        <v-icon class="mr-1" icon="mdi-database" size="small" />
+                      <v-chip v-bind="chipProps" :color="item.value === '*' ? 'success' : 'primary'"
+                        :variant="item.value === '*' ? 'flat' : 'outlined'">
+                        <v-icon class="mr-1" :icon="item.value === '*' ? 'mdi-database-sync' : 'mdi-database'"
+                          size="small" />
                         {{ item.title }}
                       </v-chip>
                     </template>
+                    <template #item="{ item, props: itemProps }">
+                      <v-list-item v-bind="itemProps" :class="{ 'bg-success-subtle': item.value === '*' }">
+                        <template #prepend>
+                          <v-icon :color="item.value === '*' ? 'success' : undefined"
+                            :icon="item.value === '*' ? 'mdi-database-sync' : 'mdi-database'" />
+                        </template>
+                      </v-list-item>
+                    </template>
                   </v-select>
+
+                  <v-alert v-if="isAllDatabasesSelected" class="mt-2" color="info" density="compact" variant="tonal">
+                    <template #prepend>
+                      <v-icon icon="mdi-information" />
+                    </template>
+                    <strong>Backup Completo:</strong> Será utilizado
+                    <code>{{ form.type === 'postgresql' ? 'pg_dumpall' : 'mysqldump --all-databases' }}</code>
+                    para fazer backup de todos os bancos de dados do servidor, incluindo usuários e permissões.
+                  </v-alert>
                 </v-col>
               </v-row>
 
@@ -186,6 +206,15 @@
                   Backups são comprimidos com gzip
                 </v-list-item-title>
               </v-list-item>
+
+              <v-list-item>
+                <template #prepend>
+                  <v-icon color="success" icon="mdi-database-sync" size="20" />
+                </template>
+                <v-list-item-title class="text-body-2 tips-text">
+                  "Todos os bancos" faz backup completo incluindo usuários e permissões
+                </v-list-item-title>
+              </v-list-item>
             </v-list>
           </v-card-text>
         </v-card>
@@ -256,6 +285,10 @@ const discoveringDatabases = ref(false)
 const availableDatabases = ref<string[]>([])
 const discoverError = ref('')
 
+// Opção especial para backup completo
+const ALL_DATABASES_VALUE = '*'
+const ALL_DATABASES_LABEL = '★ Todos os bancos (backup completo)'
+
 const isEditing = computed(() => {
   const params = route.params as { id?: string }
   const id = params.id
@@ -307,6 +340,40 @@ const canDiscoverDatabases = computed(() => {
   return form.host && form.port && form.username && form.type
 })
 
+// Computed para opções de databases incluindo "Todos os bancos"
+const databaseOptions = computed(() => {
+  const allOption = { title: ALL_DATABASES_LABEL, value: ALL_DATABASES_VALUE }
+  const dbOptions = availableDatabases.value.map(db => ({ title: db, value: db }))
+  return [allOption, ...dbOptions]
+})
+
+// Computed para verificar se "Todos os bancos" está selecionado
+const isAllDatabasesSelected = computed(() => {
+  return form.databases.includes(ALL_DATABASES_VALUE)
+})
+
+/**
+ * Lida com a seleção de databases - garante que "Todos os bancos" seja mutuamente exclusivo
+ */
+function handleDatabaseSelection(selected: string[]) {
+  if (selected.length === 0) {
+    return
+  }
+
+  const lastSelected = selected[selected.length - 1]
+
+  // Se selecionou "Todos os bancos", limpa outras seleções
+  if (lastSelected === ALL_DATABASES_VALUE) {
+    form.databases = [ALL_DATABASES_VALUE]
+    return
+  }
+
+  // Se tinha "Todos os bancos" selecionado e agora escolheu outro, remove "Todos"
+  if (form.databases.includes(ALL_DATABASES_VALUE) && lastSelected !== ALL_DATABASES_VALUE) {
+    form.databases = selected.filter(db => db !== ALL_DATABASES_VALUE)
+  }
+}
+
 function onTypeChange(type: DatabaseType) {
   form.port = defaultPorts[type]
 }
@@ -336,9 +403,11 @@ async function discoverDatabases() {
       availableDatabases.value = response.data.databases
 
       // Se estiver editando e tiver um database já selecionado, mantém a seleção
-      // se o database existir na lista disponível
+      // se o database existir na lista disponível OU for o marcador especial "*"
       if (isEditing.value && form.databases.length > 0) {
-        form.databases = form.databases.filter(db => availableDatabases.value.includes(db))
+        form.databases = form.databases.filter(
+          db => db === ALL_DATABASES_VALUE || availableDatabases.value.includes(db)
+        )
       }
     }
   } catch (error) {
@@ -378,9 +447,10 @@ async function loadConnection() {
       // Carrega os databases do array retornado pela API
       const dbNames = connection.databases?.map(db => db.databaseName) ?? []
       form.databases = dbNames
-      // Adiciona os databases à lista de disponíveis para edição
-      if (dbNames.length > 0) {
-        availableDatabases.value = [...dbNames]
+      // Adiciona os databases à lista de disponíveis para edição (exceto o marcador especial "*")
+      const regularDbs = dbNames.filter(db => db !== ALL_DATABASES_VALUE)
+      if (regularDbs.length > 0) {
+        availableDatabases.value = [...regularDbs]
       }
       form.username = connection.username
       form.storageDestinationId = connection.storageDestinationId ?? null
