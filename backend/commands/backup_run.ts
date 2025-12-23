@@ -16,17 +16,22 @@ export default class BackupRun extends BaseCommand {
     const backupService = await app.container.make(BackupService)
 
     try {
-      const connections = await Connection.all()
+      const connections = await Connection.query().preload('databases', (query) => {
+        query.where('enabled', true)
+      })
 
       if (connections.length === 0) {
         this.logger.error('No connections found. Please create a connection first.')
         return
       }
 
-      const choices = connections.map((conn) => ({
-        name: conn.id.toString(),
-        message: `${conn.name} (${conn.database} @ ${conn.host})`,
-      }))
+      const choices = connections.map((conn) => {
+        const dbCount = conn.databases?.length ?? 0
+        return {
+          name: conn.id.toString(),
+          message: `${conn.name} (${dbCount} database(s) @ ${conn.host})`,
+        }
+      })
 
       const selectedId = await this.prompt.choice(
         'Select a connection to backup',
@@ -40,19 +45,24 @@ export default class BackupRun extends BaseCommand {
         return
       }
 
-      this.logger.info(`Starting backup for "${connection.name}"...`)
+      const databaseCount = await connection.getEnabledDatabasesCount()
+      if (databaseCount === 0) {
+        this.logger.error('No databases enabled for backup in this connection.')
+        return
+      }
 
-      const { result } = await backupService.execute(connection, 'manual')
+      this.logger.info(`Starting backup for "${connection.name}" (${databaseCount} database(s))...`)
 
-      if (result.success) {
-        this.logger.success(`Backup completed successfully!`)
-        this.logger.info(`File: ${result.fileName}`)
-        this.logger.info(`Size: ${(result.fileSize! / 1024 / 1024).toFixed(2)} MB`)
-        this.logger.info(`Path: ${result.localFullPath}`)
-      } else {
-        this.logger.error(`Backup failed: ${result.error}`)
-        if (result.exitCode) {
-            this.logger.error(`Exit Code: ${result.exitCode}`)
+      const result = await backupService.executeAll(connection, 'manual')
+
+      this.logger.info(`Backup completed: ${result.successful} success, ${result.failed} failed`)
+
+      for (const r of result.results) {
+        if (r.result.success) {
+          this.logger.success(`[${r.databaseName}] File: ${r.result.fileName}`)
+          this.logger.info(`  Size: ${(r.result.fileSize! / 1024 / 1024).toFixed(2)} MB`)
+        } else {
+          this.logger.error(`[${r.databaseName}] Failed: ${r.result.error}`)
         }
       }
     } catch (error) {

@@ -1,6 +1,7 @@
 import { test } from '@japa/runner'
 import User from '#models/user'
 import Connection from '#models/connection'
+import ConnectionDatabase from '#models/connection_database'
 
 test.group('Connections', (group) => {
   let user: User
@@ -24,9 +25,9 @@ test.group('Connections', (group) => {
         type: 'postgresql',
         host: 'localhost',
         port: 5432,
-        database: 'test_db',
+        databases: ['test_db'],
         username: 'user',
-        passwordEncrypted: 'password',
+        password: 'password',
       })
 
     response.assertStatus(201)
@@ -39,15 +40,21 @@ test.group('Connections', (group) => {
   })
 
   test('list connections', async ({ client }) => {
-    await Connection.create({
+    const connection = await Connection.create({
       name: 'List Connection',
       type: 'mysql',
       host: '127.0.0.1',
       port: 3306,
-      database: 'mydb',
       username: 'root',
       passwordEncrypted: 'password',
       status: 'active',
+    })
+
+    // Create associated database
+    await ConnectionDatabase.create({
+      connectionId: connection.id,
+      databaseName: 'mydb',
+      enabled: true,
     })
 
     const token = await User.accessTokens.create(user)
@@ -77,10 +84,16 @@ test.group('Connections', (group) => {
       type: 'postgresql',
       host: 'localhost',
       port: 5432,
-      database: 'show_db',
       username: 'user',
       passwordEncrypted: 'password',
       status: 'active',
+    })
+
+    // Create associated database
+    await ConnectionDatabase.create({
+      connectionId: connection.id,
+      databaseName: 'show_db',
+      enabled: true,
     })
 
     const token = await User.accessTokens.create(user)
@@ -104,10 +117,16 @@ test.group('Connections', (group) => {
       type: 'postgresql',
       host: 'localhost',
       port: 5432,
-      database: 'update_db',
       username: 'user',
       passwordEncrypted: 'password',
       status: 'active',
+    })
+
+    // Create associated database
+    await ConnectionDatabase.create({
+      connectionId: connection.id,
+      databaseName: 'update_db',
+      enabled: true,
     })
 
     const token = await User.accessTokens.create(user)
@@ -135,10 +154,16 @@ test.group('Connections', (group) => {
       type: 'postgresql',
       host: 'localhost',
       port: 5432,
-      database: 'del_db',
       username: 'user',
       passwordEncrypted: 'password',
       status: 'active',
+    })
+
+    // Create associated database
+    await ConnectionDatabase.create({
+      connectionId: connection.id,
+      databaseName: 'del_db',
+      enabled: true,
     })
 
     const token = await User.accessTokens.create(user)
@@ -161,10 +186,16 @@ test.group('Connections', (group) => {
       type: 'postgresql',
       host: 'invalid-host-name-xyz',
       port: 5432,
-      database: 'test_db',
       username: 'user',
       passwordEncrypted: 'password',
       status: 'active',
+    })
+
+    // Create associated database
+    await ConnectionDatabase.create({
+      connectionId: connection.id,
+      databaseName: 'test_db',
+      enabled: true,
     })
 
     const token = await User.accessTokens.create(user)

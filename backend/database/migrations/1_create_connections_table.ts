@@ -15,10 +15,9 @@ export default class extends BaseSchema {
         .notNullable()
         .comment('Tipo do banco de dados')
 
-      // Credenciais de conexão
+      // Credenciais de conexão (servidor)
       table.string('host', 255).notNullable().comment('Host ou IP do servidor')
       table.integer('port').unsigned().notNullable().comment('Porta de conexão')
-      table.string('database', 100).notNullable().comment('Nome do banco de dados')
       table.string('username', 100).notNullable().comment('Usuário de conexão')
 
       // Senha criptografada (AES-256-GCM)

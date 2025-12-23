@@ -51,6 +51,11 @@ router
         router.post('/auth/logout', [AuthController, 'logout'])
 
         // ==================== Connections ====================
+        // Rota de descoberta de databases (deve vir antes do resource para não conflitar)
+        router
+          .post('connections/discover-databases', [ConnectionsController, 'discoverDatabases'])
+          .use(middleware.rateLimit({ limiter: 'strict' }))
+
         router.resource('connections', ConnectionsController).apiOnly()
 
         // ==================== Storage Destinations ====================

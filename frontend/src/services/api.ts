@@ -213,6 +213,22 @@ export const connectionsApi = {
       method: 'POST',
     })
   },
+
+  /**
+   * Descobre bancos de dados disponíveis com as credenciais fornecidas
+   */
+  async discoverDatabases (payload: {
+    type: string
+    host: string
+    port: number
+    username: string
+    password?: string
+  }): Promise<ApiResponse<{ databases: string[] }>> {
+    return request<ApiResponse<{ databases: string[] }>>('/connections/discover-databases', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    })
+  },
 }
 
 export const storageDestinationsApi = {

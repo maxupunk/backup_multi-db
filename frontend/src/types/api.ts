@@ -25,6 +25,15 @@ export type RetentionType = 'hourly' | 'daily' | 'weekly' | 'monthly' | 'yearly'
 export type BackupTrigger = 'scheduled' | 'manual'
 
 /**
+ * Database associado a uma conexão
+ */
+export interface ConnectionDatabase {
+  id: number
+  databaseName: string
+  enabled: boolean
+}
+
+/**
  * Interface de uma conexão de banco de dados
  */
 export interface Connection {
@@ -33,7 +42,6 @@ export interface Connection {
   type: DatabaseType
   host: string
   port: number
-  database: string
   username: string
   storageDestinationId?: number | null
   scheduleFrequency: ScheduleFrequency | null
@@ -48,6 +56,7 @@ export interface Connection {
   } | null
   createdAt: string
   updatedAt: string
+  databases?: ConnectionDatabase[]
   backups?: BackupSummary[]
 }
 
@@ -59,7 +68,7 @@ export interface CreateConnectionPayload {
   type: DatabaseType
   host: string
   port: number
-  database: string
+  databases: string[]
   username: string
   password: string
   storageDestinationId?: number | null
@@ -79,7 +88,7 @@ export interface UpdateConnectionPayload {
   type?: DatabaseType
   host?: string
   port?: number
-  database?: string
+  databases?: string[]
   username?: string
   password?: string
   storageDestinationId?: number | null
@@ -176,6 +185,8 @@ export interface RegisterPayload {
 export interface Backup {
   id: number
   connectionId: number
+  connectionDatabaseId: number | null
+  databaseName: string
   status: BackupStatus
   filePath: string | null
   fileName: string | null
@@ -201,6 +212,7 @@ export interface Backup {
 export interface BackupSummary {
   id: number
   status: BackupStatus
+  databaseName?: string
   fileName?: string
   fileSize: number | null
   retentionType?: RetentionType
@@ -218,7 +230,6 @@ export interface ConnectionSummary {
   name: string
   type: DatabaseType
   host: string
-  database: string
 }
 
 /**

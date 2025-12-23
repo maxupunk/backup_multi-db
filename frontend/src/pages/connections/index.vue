@@ -28,42 +28,18 @@
         <v-expansion-panel-text>
           <v-row>
             <v-col cols="12">
-              <v-text-field
-                v-model="filters.search"
-                clearable
-                density="comfortable"
-                hide-details
-                label="Buscar"
-                prepend-inner-icon="mdi-magnify"
-                variant="outlined"
-                @update:model-value="debouncedLoad"
-              />
+              <v-text-field v-model="filters.search" clearable density="comfortable" hide-details label="Buscar"
+                prepend-inner-icon="mdi-magnify" variant="outlined" @update:model-value="debouncedLoad" />
             </v-col>
 
             <v-col cols="12">
-              <v-select
-                v-model="filters.type"
-                clearable
-                hide-details
-                density="comfortable"
-                :items="databaseTypes"
-                label="Tipo de Banco"
-                variant="outlined"
-                @update:model-value="loadConnections"
-              />
+              <v-select v-model="filters.type" clearable hide-details density="comfortable" :items="databaseTypes"
+                label="Tipo de Banco" variant="outlined" @update:model-value="loadConnections" />
             </v-col>
 
             <v-col cols="12">
-              <v-select
-                v-model="filters.status"
-                clearable
-                hide-details
-                density="comfortable"
-                :items="statusOptions"
-                label="Status"
-                variant="outlined"
-                @update:model-value="loadConnections"
-              />
+              <v-select v-model="filters.status" clearable hide-details density="comfortable" :items="statusOptions"
+                label="Status" variant="outlined" @update:model-value="loadConnections" />
             </v-col>
           </v-row>
         </v-expansion-panel-text>
@@ -74,42 +50,18 @@
       <v-card-text>
         <v-row>
           <v-col cols="12" sm="4">
-            <v-text-field
-              v-model="filters.search"
-              clearable
-              density="comfortable"
-              hide-details
-              label="Buscar"
-              prepend-inner-icon="mdi-magnify"
-              variant="outlined"
-              @update:model-value="debouncedLoad"
-            />
+            <v-text-field v-model="filters.search" clearable density="comfortable" hide-details label="Buscar"
+              prepend-inner-icon="mdi-magnify" variant="outlined" @update:model-value="debouncedLoad" />
           </v-col>
 
           <v-col cols="12" sm="4">
-            <v-select
-              v-model="filters.type"
-              clearable
-              density="comfortable"
-              hide-details
-              :items="databaseTypes"
-              label="Tipo de Banco"
-              variant="outlined"
-              @update:model-value="loadConnections"
-            />
+            <v-select v-model="filters.type" clearable density="comfortable" hide-details :items="databaseTypes"
+              label="Tipo de Banco" variant="outlined" @update:model-value="loadConnections" />
           </v-col>
 
           <v-col cols="12" sm="4">
-            <v-select
-              v-model="filters.status"
-              clearable
-              density="comfortable"
-              hide-details
-              :items="statusOptions"
-              label="Status"
-              variant="outlined"
-              @update:model-value="loadConnections"
-            />
+            <v-select v-model="filters.status" clearable density="comfortable" hide-details :items="statusOptions"
+              label="Status" variant="outlined" @update:model-value="loadConnections" />
           </v-col>
         </v-row>
       </v-card-text>
@@ -117,21 +69,15 @@
 
     <!-- Connections List -->
     <v-card>
-      <v-data-table
-        class="elevation-0"
-        :headers="tableHeaders"
-        :items="connections"
-        :items-per-page="mdAndUp ? 10 : 5"
-        :loading="loading"
-        :mobile="!mdAndUp"
-      >
+      <v-data-table class="elevation-0" :headers="tableHeaders" :items="connections" :items-per-page="mdAndUp ? 10 : 5"
+        :loading="loading" :mobile="!mdAndUp">
         <template #item.name="{ item }">
           <template v-if="!mdAndUp">
             <div class="d-flex align-center justify-space-between">
               <div class="pr-2">
                 <div class="font-weight-medium">{{ item.name }}</div>
                 <div class="text-caption text-medium-emphasis">
-                  {{ item.host }}:{{ item.port }} • {{ item.database }}
+                  {{ item.host }}:{{ item.port }} • {{ getDatabasesLabel(item) }}
                 </div>
               </div>
 
@@ -158,7 +104,7 @@
             <span class="text-medium-emphasis">:{{ item.port }}</span>
           </div>
           <div class="text-caption text-medium-emphasis">
-            {{ item.database }}
+            {{ getDatabasesLabel(item) }}
           </div>
         </template>
 
@@ -193,28 +139,16 @@
         <!-- Actions -->
         <template #item.actions="{ item }">
           <template v-if="mdAndUp">
-            <v-btn
-              color="success"
-              icon="mdi-play"
-              :loading="backupLoading[item.id]"
-              size="small"
-              variant="text"
-              @click="runBackup(item)"
-            >
+            <v-btn color="success" icon="mdi-play" :loading="backupLoading[item.id]" size="small" variant="text"
+              @click="runBackup(item)">
               <v-icon icon="mdi-play" />
               <v-tooltip activator="parent" location="top">
                 Executar Backup
               </v-tooltip>
             </v-btn>
 
-            <v-btn
-              color="info"
-              icon="mdi-connection"
-              :loading="testLoading[item.id]"
-              size="small"
-              variant="text"
-              @click="testConnection(item)"
-            >
+            <v-btn color="info" icon="mdi-connection" :loading="testLoading[item.id]" size="small" variant="text"
+              @click="testConnection(item)">
               <v-icon icon="mdi-connection" />
               <v-tooltip activator="parent" location="top">
                 Testar Conexão
@@ -228,13 +162,7 @@
               </v-tooltip>
             </v-btn>
 
-            <v-btn
-              color="error"
-              icon="mdi-delete"
-              size="small"
-              variant="text"
-              @click="confirmDelete(item)"
-            >
+            <v-btn color="error" icon="mdi-delete" size="small" variant="text" @click="confirmDelete(item)">
               <v-icon icon="mdi-delete" />
               <v-tooltip activator="parent" location="top">
                 Excluir
@@ -247,18 +175,10 @@
               <v-btn v-bind="props" icon="mdi-dots-vertical" variant="text" />
             </template>
             <v-list density="compact">
-              <v-list-item
-                :disabled="backupLoading[item.id]"
-                prepend-icon="mdi-play"
-                title="Executar backup"
-                @click="runBackup(item)"
-              />
-              <v-list-item
-                :disabled="testLoading[item.id]"
-                prepend-icon="mdi-connection"
-                title="Testar conexão"
-                @click="testConnection(item)"
-              />
+              <v-list-item :disabled="backupLoading[item.id]" prepend-icon="mdi-play" title="Executar backup"
+                @click="runBackup(item)" />
+              <v-list-item :disabled="testLoading[item.id]" prepend-icon="mdi-connection" title="Testar conexão"
+                @click="testConnection(item)" />
               <v-list-item prepend-icon="mdi-pencil" title="Editar" :to="`/connections/${item.id}`" />
               <v-list-item prepend-icon="mdi-delete" title="Excluir" @click="confirmDelete(item)" />
             </v-list>
@@ -312,157 +232,166 @@
 </template>
 
 <script lang="ts" setup>
-  import type { Connection, ConnectionStatus, DatabaseType } from '@/types/api'
-  import { computed, onMounted, reactive, ref } from 'vue'
-  import { useDisplay } from 'vuetify'
-  import { connectionsApi } from '@/services/api'
-  import { useDebouncedFn } from '@/composables/useDebouncedFn'
-  import { useNotifier } from '@/composables/useNotifier'
-  import { getBackupStatusColor } from '@/ui/backup'
-  import { databaseTypeOptions, getDatabaseColor, getDatabaseIcon } from '@/ui/database'
-  import { formatDateTimePtBR } from '@/utils/format'
+import type { Connection, ConnectionStatus, DatabaseType } from '@/types/api'
+import { computed, onMounted, reactive, ref } from 'vue'
+import { useDisplay } from 'vuetify'
+import { connectionsApi } from '@/services/api'
+import { useDebouncedFn } from '@/composables/useDebouncedFn'
+import { useNotifier } from '@/composables/useNotifier'
+import { getBackupStatusColor } from '@/ui/backup'
+import { databaseTypeOptions, getDatabaseColor, getDatabaseIcon } from '@/ui/database'
+import { formatDateTimePtBR } from '@/utils/format'
 
-  const notify = useNotifier()
-  const { smAndUp, mdAndUp } = useDisplay()
+const notify = useNotifier()
+const { smAndUp, mdAndUp } = useDisplay()
 
-  const loading = ref(false)
-  const connections = ref<Connection[]>([])
-  const testLoading = reactive<Record<number, boolean>>({})
-  const backupLoading = reactive<Record<number, boolean>>({})
+const loading = ref(false)
+const connections = ref<Connection[]>([])
+const testLoading = reactive<Record<number, boolean>>({})
+const backupLoading = reactive<Record<number, boolean>>({})
 
-  const filters = reactive({
-    search: '',
-    type: null as DatabaseType | null,
-    status: null as ConnectionStatus | null,
-  })
+const filters = reactive({
+  search: '',
+  type: null as DatabaseType | null,
+  status: null as ConnectionStatus | null,
+})
 
-  const desktopHeaders = [
-    { title: 'Nome', key: 'name', sortable: true },
-    { title: 'Tipo', key: 'type', sortable: true },
-    { title: 'Host', key: 'host', sortable: false },
-    { title: 'Status', key: 'status', sortable: true },
-    { title: 'Agendamento', key: 'schedule', sortable: false },
-    { title: 'Último Backup', key: 'lastBackup', sortable: false },
-    { title: 'Ações', key: 'actions', sortable: false, align: 'end' as const },
-  ]
+const desktopHeaders = [
+  { title: 'Nome', key: 'name', sortable: true },
+  { title: 'Tipo', key: 'type', sortable: true },
+  { title: 'Host', key: 'host', sortable: false },
+  { title: 'Status', key: 'status', sortable: true },
+  { title: 'Agendamento', key: 'schedule', sortable: false },
+  { title: 'Último Backup', key: 'lastBackup', sortable: false },
+  { title: 'Ações', key: 'actions', sortable: false, align: 'end' as const },
+]
 
-  const mobileHeaders = [
-    { title: 'Conexão', key: 'name', sortable: true },
-    { title: 'Status', key: 'status', sortable: true },
-    { title: 'Ações', key: 'actions', sortable: false, align: 'end' as const },
-  ]
+const mobileHeaders = [
+  { title: 'Conexão', key: 'name', sortable: true },
+  { title: 'Status', key: 'status', sortable: true },
+  { title: 'Ações', key: 'actions', sortable: false, align: 'end' as const },
+]
 
-  const tableHeaders = computed(() => (mdAndUp.value ? desktopHeaders : mobileHeaders))
+const tableHeaders = computed(() => (mdAndUp.value ? desktopHeaders : mobileHeaders))
 
-  const databaseTypes = databaseTypeOptions
+const databaseTypes = databaseTypeOptions
 
-  const statusOptions = [
-    { title: 'Ativo', value: 'active' },
-    { title: 'Inativo', value: 'inactive' },
-    { title: 'Erro', value: 'error' },
-  ]
+const statusOptions = [
+  { title: 'Ativo', value: 'active' },
+  { title: 'Inativo', value: 'inactive' },
+  { title: 'Erro', value: 'error' },
+]
 
-  async function loadConnections () {
-    loading.value = true
-    try {
-      const response = await connectionsApi.list({
-        search: filters.search || undefined,
-        type: filters.type || undefined,
-        status: filters.status || undefined,
-      })
-      connections.value = response.data?.data ?? []
-    } catch (error) {
-      console.error('Erro ao carregar conexões:', error)
-      notify('Erro ao carregar conexões', 'error')
-    } finally {
-      loading.value = false
-    }
+async function loadConnections() {
+  loading.value = true
+  try {
+    const response = await connectionsApi.list({
+      search: filters.search || undefined,
+      type: filters.type || undefined,
+      status: filters.status || undefined,
+    })
+    connections.value = response.data?.data ?? []
+  } catch (error) {
+    console.error('Erro ao carregar conexões:', error)
+    notify('Erro ao carregar conexões', 'error')
+  } finally {
+    loading.value = false
   }
+}
 
-  const debouncedLoad = useDebouncedFn(loadConnections, 300)
+const debouncedLoad = useDebouncedFn(loadConnections, 300)
 
-  async function testConnection (connection: Connection) {
-    testLoading[connection.id] = true
-    try {
-      const response = await connectionsApi.test(connection.id)
-      notify(
-        `Conexão bem-sucedida! Latência: ${response.data?.latencyMs}ms`,
-        'success',
-      )
-      loadConnections()
-    } catch {
-      notify('Falha ao testar conexão', 'error')
-    } finally {
-      testLoading[connection.id] = false
-    }
-  }
-
-  async function runBackup (connection: Connection) {
-    backupLoading[connection.id] = true
-    try {
-      const response = await connectionsApi.backup(connection.id)
-      notify(
-        `Backup concluído: ${response.data?.fileName}`,
-        'success',
-      )
-      loadConnections()
-    } catch {
-      notify('Falha ao executar backup', 'error')
-    } finally {
-      backupLoading[connection.id] = false
-    }
-  }
-
-  // Delete
-  const deleteDialog = ref(false)
-  const deleteLoading = ref(false)
-  const connectionToDelete = ref<Connection | null>(null)
-
-  function confirmDelete (connection: Connection) {
-    connectionToDelete.value = connection
-    deleteDialog.value = true
-  }
-
-  async function deleteConnection () {
-    if (!connectionToDelete.value) return
-
-    deleteLoading.value = true
-    try {
-      await connectionsApi.delete(connectionToDelete.value.id)
-      notify('Conexão excluída com sucesso', 'success')
-      deleteDialog.value = false
-      loadConnections()
-    } catch {
-      notify('Erro ao excluir conexão', 'error')
-    } finally {
-      deleteLoading.value = false
-    }
-  }
-
-  // Helpers
-  function getConnectionStatusColor (status: ConnectionStatus): string {
-    const colors: Record<ConnectionStatus, string> = {
-      active: 'success',
-      inactive: 'grey',
-      error: 'error',
-    }
-    return colors[status] ?? 'grey'
-  }
-
-  function getConnectionStatusLabel (status: ConnectionStatus): string {
-    const labels: Record<ConnectionStatus, string> = {
-      active: 'Ativo',
-      inactive: 'Inativo',
-      error: 'Erro',
-    }
-    return labels[status] ?? status
-  }
-
-  function formatDate (dateString: string): string {
-    return formatDateTimePtBR(dateString, { withYear: false })
-  }
-
-  onMounted(() => {
+async function testConnection(connection: Connection) {
+  testLoading[connection.id] = true
+  try {
+    const response = await connectionsApi.test(connection.id)
+    notify(
+      `Conexão bem-sucedida! Latência: ${response.data?.latencyMs}ms`,
+      'success',
+    )
     loadConnections()
-  })
+  } catch {
+    notify('Falha ao testar conexão', 'error')
+  } finally {
+    testLoading[connection.id] = false
+  }
+}
+
+async function runBackup(connection: Connection) {
+  backupLoading[connection.id] = true
+  try {
+    const response = await connectionsApi.backup(connection.id)
+    // A resposta agora contém múltiplos backups
+    const data = response.data as { successful?: number; totalDatabases?: number } | undefined
+    const msg = data?.successful
+      ? `${data.successful} de ${data.totalDatabases} backup(s) concluído(s)`
+      : response.message ?? 'Backup concluído'
+    notify(msg, 'success')
+    loadConnections()
+  } catch {
+    notify('Falha ao executar backup', 'error')
+  } finally {
+    backupLoading[connection.id] = false
+  }
+}
+
+// Delete
+const deleteDialog = ref(false)
+const deleteLoading = ref(false)
+const connectionToDelete = ref<Connection | null>(null)
+
+function confirmDelete(connection: Connection) {
+  connectionToDelete.value = connection
+  deleteDialog.value = true
+}
+
+async function deleteConnection() {
+  if (!connectionToDelete.value) return
+
+  deleteLoading.value = true
+  try {
+    await connectionsApi.delete(connectionToDelete.value.id)
+    notify('Conexão excluída com sucesso', 'success')
+    deleteDialog.value = false
+    loadConnections()
+  } catch {
+    notify('Erro ao excluir conexão', 'error')
+  } finally {
+    deleteLoading.value = false
+  }
+}
+
+// Helpers
+function getConnectionStatusColor(status: ConnectionStatus): string {
+  const colors: Record<ConnectionStatus, string> = {
+    active: 'success',
+    inactive: 'grey',
+    error: 'error',
+  }
+  return colors[status] ?? 'grey'
+}
+
+function getConnectionStatusLabel(status: ConnectionStatus): string {
+  const labels: Record<ConnectionStatus, string> = {
+    active: 'Ativo',
+    inactive: 'Inativo',
+    error: 'Erro',
+  }
+  return labels[status] ?? status
+}
+
+function formatDate(dateString: string): string {
+  return formatDateTimePtBR(dateString, { withYear: false })
+}
+
+function getDatabasesLabel(connection: Connection): string {
+  const dbs = connection.databases ?? []
+  if (dbs.length === 0) return 'Sem databases'
+  if (dbs.length === 1) return dbs[0]?.databaseName ?? ''
+  return `${dbs.length} databases`
+}
+
+onMounted(() => {
+  loadConnections()
+})
 </script>

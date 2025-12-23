@@ -2,6 +2,7 @@ import { DateTime } from 'luxon'
 import { BaseModel, belongsTo, column } from '@adonisjs/lucid/orm'
 import type { BelongsTo } from '@adonisjs/lucid/types/relations'
 import Connection from './connection.js'
+import ConnectionDatabase from './connection_database.js'
 import StorageDestination from './storage_destination.js'
 
 /**
@@ -31,6 +32,7 @@ export interface BackupMetadata {
 /**
  * Model para backups realizados.
  * Armazena informações sobre arquivos de backup, status e retenção.
+ * Cada backup é de UM database específico de uma conexão.
  */
 export default class Backup extends BaseModel {
   @column({ isPrimary: true })
@@ -38,6 +40,15 @@ export default class Backup extends BaseModel {
 
   @column()
   declare connectionId: number
+
+  @column()
+  declare connectionDatabaseId: number | null
+
+  /**
+   * Nome do database backupeado (denormalizado para facilitar exibição)
+   */
+  @column()
+  declare databaseName: string
 
   @column()
   declare storageDestinationId: number | null
@@ -103,6 +114,9 @@ export default class Backup extends BaseModel {
 
   @belongsTo(() => Connection)
   declare connection: BelongsTo<typeof Connection>
+
+  @belongsTo(() => ConnectionDatabase)
+  declare connectionDatabase: BelongsTo<typeof ConnectionDatabase>
 
   @belongsTo(() => StorageDestination)
   declare storageDestination: BelongsTo<typeof StorageDestination>

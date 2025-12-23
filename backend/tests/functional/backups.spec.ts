@@ -1,12 +1,14 @@
 import { test } from '@japa/runner'
 import User from '#models/user'
 import Connection from '#models/connection'
+import ConnectionDatabase from '#models/connection_database'
 import Backup from '#models/backup'
 import { DateTime } from 'luxon'
 
 test.group('Backups', (group) => {
   let user: User
   let connection: Connection
+  let connDb: ConnectionDatabase
 
   group.each.setup(async () => {
     user = await User.create({
@@ -21,16 +23,23 @@ test.group('Backups', (group) => {
       type: 'postgresql',
       host: 'localhost',
       port: 5432,
-      database: 'backup_db',
       username: 'user',
       passwordEncrypted: 'password',
       status: 'active',
+    })
+
+    connDb = await ConnectionDatabase.create({
+      connectionId: connection.id,
+      databaseName: 'backup_db',
+      enabled: true,
     })
   })
 
   test('list all backups', async ({ client }) => {
     await Backup.create({
       connectionId: connection.id,
+      connectionDatabaseId: connDb.id,
+      databaseName: connDb.databaseName,
       status: 'completed',
       startedAt: DateTime.now(),
       finishedAt: DateTime.now(),
@@ -71,6 +80,8 @@ test.group('Backups', (group) => {
   test('show specific backup', async ({ client }) => {
     const backup = await Backup.create({
       connectionId: connection.id,
+      connectionDatabaseId: connDb.id,
+      databaseName: connDb.databaseName,
       status: 'completed',
       startedAt: DateTime.now(),
       finishedAt: DateTime.now(),
@@ -98,6 +109,8 @@ test.group('Backups', (group) => {
   test('download backup (404 if file missing)', async ({ client }) => {
     const backup = await Backup.create({
       connectionId: connection.id,
+      connectionDatabaseId: connDb.id,
+      databaseName: connDb.databaseName,
       status: 'completed',
       startedAt: DateTime.now(),
       finishedAt: DateTime.now(),
@@ -123,6 +136,8 @@ test.group('Backups', (group) => {
   test('delete a backup', async ({ client }) => {
     const backup = await Backup.create({
       connectionId: connection.id,
+      connectionDatabaseId: connDb.id,
+      databaseName: connDb.databaseName,
       status: 'completed',
       startedAt: DateTime.now(),
       finishedAt: DateTime.now(),

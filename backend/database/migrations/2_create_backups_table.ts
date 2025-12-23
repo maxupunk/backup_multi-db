@@ -8,7 +8,7 @@ export default class extends BaseSchema {
       // Identificador único
       table.increments('id').primary()
 
-      // Relacionamento com a conexão
+      // Relacionamento com a conexão (para consultas rápidas)
       table
         .integer('connection_id')
         .unsigned()
@@ -17,6 +17,22 @@ export default class extends BaseSchema {
         .inTable('connections')
         .onDelete('CASCADE')
         .comment('ID da conexão de origem')
+
+      // Relacionamento com o database específico
+      table
+        .integer('connection_database_id')
+        .unsigned()
+        .nullable()
+        .references('id')
+        .inTable('connection_databases')
+        .onDelete('SET NULL')
+        .comment('ID do database específico backupeado')
+
+      // Nome do database (denormalizado para facilitar exibição)
+      table
+        .string('database_name', 100)
+        .notNullable()
+        .comment('Nome do banco de dados backupeado')
 
       // Status do backup
       table
@@ -66,6 +82,8 @@ export default class extends BaseSchema {
 
       // Índices para consultas frequentes
       table.index(['connection_id'], 'idx_backups_connection')
+      table.index(['connection_database_id'], 'idx_backups_conn_database')
+      table.index(['database_name'], 'idx_backups_database_name')
       table.index(['status'], 'idx_backups_status')
       table.index(['retention_type'], 'idx_backups_retention')
       table.index(['created_at'], 'idx_backups_created')

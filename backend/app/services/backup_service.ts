@@ -9,13 +9,14 @@ import app from '@adonisjs/core/services/app'
 import env from '#start/env'
 import logger from '@adonisjs/core/services/logger'
 import Connection from '#models/connection'
+import ConnectionDatabase from '#models/connection_database'
 import Backup, { type BackupTrigger, type RetentionType } from '#models/backup'
 import { StorageDestinationService } from '#services/storage_destination_service'
 import { StorageSpaceService } from '#services/storage_space_service'
 import { NotificationService } from '#services/notification_service'
 
 /**
- * Resultado da execução de um backup
+ * Resultado da execução de um backup individual
  */
 export interface BackupResult {
   success: boolean
@@ -30,6 +31,20 @@ export interface BackupResult {
 }
 
 /**
+ * Resultado da execução de backups múltiplos
+ */
+export interface MultiBackupResult {
+  totalDatabases: number
+  successful: number
+  failed: number
+  results: Array<{
+    databaseName: string
+    backup: Backup
+    result: BackupResult
+  }>
+}
+
+/**
  * Configuração do comando de dump
  */
 interface DumpConfig {
@@ -41,6 +56,7 @@ interface DumpConfig {
 /**
  * Serviço responsável por executar backups de banco de dados.
  * Suporta MySQL, MariaDB e PostgreSQL.
+ * Agora suporta múltiplos databases por conexão.
  */
 export class BackupService {
   private readonly storagePath: string
@@ -60,10 +76,69 @@ export class BackupService {
   }
 
   /**
-   * Executa o backup de uma conexão
+   * Executa o backup de TODOS os databases habilitados de uma conexão
    */
-  async execute(
+  async executeAll(
     connection: Connection,
+    trigger: BackupTrigger = 'manual'
+  ): Promise<MultiBackupResult> {
+    // Carregar databases habilitados
+    const databases = await connection.getEnabledDatabases()
+
+    if (databases.length === 0) {
+      logger.warn(
+        `[Backup] Conexão "${connection.name}" (ID: ${connection.id}) não possui databases habilitados para backup`
+      )
+      return {
+        totalDatabases: 0,
+        successful: 0,
+        failed: 0,
+        results: [],
+      }
+    }
+
+    logger.info(
+      `[Backup] Iniciando backup de ${databases.length} database(s) da conexão "${connection.name}" (ID: ${connection.id})`
+    )
+
+    const results: MultiBackupResult['results'] = []
+
+    // Executar backup de cada database
+    for (const connDb of databases) {
+      const { backup, result } = await this.executeForDatabase(connection, connDb, trigger)
+      results.push({
+        databaseName: connDb.databaseName,
+        backup,
+        result,
+      })
+    }
+
+    const successful = results.filter((r) => r.result.success).length
+    const failed = results.filter((r) => !r.result.success).length
+
+    logger.info(
+      `[Backup] Finalizado backup da conexão "${connection.name}": ` +
+        `${successful} sucesso, ${failed} falha(s) de ${databases.length} database(s)`
+    )
+
+    // Atualizar último backup da conexão
+    connection.lastBackupAt = DateTime.now()
+    await connection.save()
+
+    return {
+      totalDatabases: databases.length,
+      successful,
+      failed,
+      results,
+    }
+  }
+
+  /**
+   * Executa o backup de UM database específico
+   */
+  async executeForDatabase(
+    connection: Connection,
+    connDb: ConnectionDatabase,
     trigger: BackupTrigger = 'manual'
   ): Promise<{ backup: Backup; result: BackupResult }> {
     const destination = await StorageDestinationService.resolveDestinationForConnection(connection)
@@ -73,15 +148,19 @@ export class BackupService {
     const spaceCheck = await StorageSpaceService.checkSpaceBeforeBackup(destination)
 
     // Criar e salvar registro inicial do backup
-    const backup = await this.createBackupRecord(connection, destination, trigger)
+    const backup = await this.createBackupRecord(connection, connDb, destination, trigger)
 
     logger.info(
-      `[Backup] Iniciado backup da conexão "${connection.name}" (ID: ${connection.id}) ` +
-        `para o armazenamento "${destinationName}" - Backup ID: ${backup.id}, Trigger: ${trigger}`
+      `[Backup] Iniciado backup do database "${connDb.databaseName}" da conexão "${connection.name}" ` +
+        `(ID: ${connection.id}) para "${destinationName}" - Backup ID: ${backup.id}`
     )
 
     // Envia notificação de backup iniciado
-    NotificationService.backupStarted(connection.name, connection.id, trigger)
+    NotificationService.backupStarted(
+      `${connection.name} / ${connDb.databaseName}`,
+      connection.id,
+      trigger
+    )
 
     // Envia notificação de espaço baixo se aplicável
     if (spaceCheck.warning) {
@@ -98,7 +177,7 @@ export class BackupService {
 
     try {
       const localBasePath = StorageDestinationService.getLocalBasePath(destination)
-      const result = await this.performBackup(connection, localBasePath)
+      const result = await this.performBackup(connection, connDb.databaseName, localBasePath)
 
       // Adicionar aviso de espaço baixo ao resultado, se houver
       if (spaceCheck.warning) {
@@ -111,13 +190,48 @@ export class BackupService {
       }
 
       // Atualizar registro do backup com o resultado
-      await this.updateBackupRecord(backup, connection, result)
+      await this.updateBackupRecord(backup, connection, connDb, result)
 
       return { backup, result }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido'
-      return await this.handleBackupError(backup, connection, errorMessage)
+      return await this.handleBackupError(backup, connection, connDb, errorMessage)
     }
+  }
+
+  /**
+   * Executa backup de um único database (método legado para compatibilidade)
+   * @deprecated Use executeForDatabase ou executeAll
+   */
+  async execute(
+    connection: Connection,
+    trigger: BackupTrigger = 'manual'
+  ): Promise<{ backup: Backup; result: BackupResult }> {
+    // Buscar o primeiro database habilitado
+    const databases = await connection.getEnabledDatabases()
+    
+    if (databases.length === 0) {
+      // Criar backup de erro se não houver databases
+      const backup = new Backup()
+      backup.connectionId = connection.id
+      backup.databaseName = 'N/A'
+      backup.trigger = trigger
+      backup.compressed = true
+      backup.retentionType = this.determineRetentionType()
+      backup.markAsStarted()
+      backup.markAsFailed('Nenhum database habilitado para backup')
+      await backup.save()
+
+      return {
+        backup,
+        result: {
+          success: false,
+          error: 'Nenhum database habilitado para backup',
+        },
+      }
+    }
+
+    return this.executeForDatabase(connection, databases[0], trigger)
   }
 
   /**
@@ -125,11 +239,14 @@ export class BackupService {
    */
   private async createBackupRecord(
     connection: Connection,
+    connDb: ConnectionDatabase,
     destination: Awaited<ReturnType<typeof StorageDestinationService.resolveDestinationForConnection>>,
     trigger: BackupTrigger
   ): Promise<Backup> {
     const backup = new Backup()
     backup.connectionId = connection.id
+    backup.connectionDatabaseId = connDb.id
+    backup.databaseName = connDb.databaseName
     backup.storageDestinationId = destination?.id ?? null
     backup.trigger = trigger
     backup.compressed = true
@@ -167,22 +284,21 @@ export class BackupService {
   private async updateBackupRecord(
     backup: Backup,
     connection: Connection,
+    connDb: ConnectionDatabase,
     result: BackupResult
   ): Promise<void> {
     if (result.success) {
       backup.markAsCompleted(result.filePath!, result.fileName!, result.fileSize!, result.checksum)
-      connection.lastBackupAt = DateTime.now()
-      await connection.save()
 
       const fileSizeKb = result.fileSize ? (result.fileSize / 1024).toFixed(2) : '0'
       logger.info(
-        `[Backup] Concluído backup da conexão "${connection.name}" (ID: ${connection.id}) ` +
+        `[Backup] Concluído backup do database "${connDb.databaseName}" da conexão "${connection.name}" ` +
           `- Backup ID: ${backup.id}, Arquivo: ${result.fileName}, Tamanho: ${fileSizeKb} KB`
       )
 
       // Envia notificação de backup concluído
       NotificationService.backupCompleted(
-        connection.name,
+        `${connection.name} / ${connDb.databaseName}`,
         connection.id,
         backup.id,
         result.fileName!,
@@ -193,13 +309,13 @@ export class BackupService {
       backup.markAsFailed(result.error ?? 'Erro desconhecido', result.exitCode)
 
       logger.error(
-        `[Backup] Falhou backup da conexão "${connection.name}" (ID: ${connection.id}) ` +
+        `[Backup] Falhou backup do database "${connDb.databaseName}" da conexão "${connection.name}" ` +
           `- Backup ID: ${backup.id}, Erro: ${result.error ?? 'Erro desconhecido'}`
       )
 
       // Envia notificação de backup falhou
       NotificationService.backupFailed(
-        connection.name,
+        `${connection.name} / ${connDb.databaseName}`,
         connection.id,
         result.error ?? 'Erro desconhecido'
       )
@@ -224,14 +340,15 @@ export class BackupService {
   private async handleBackupError(
     backup: Backup,
     connection: Connection,
+    connDb: ConnectionDatabase,
     errorMessage: string
   ): Promise<{ backup: Backup; result: BackupResult }> {
     backup.markAsFailed(errorMessage)
     await backup.save()
 
     logger.error(
-      `[Backup] Erro inesperado no backup da conexão "${connection.name}" (ID: ${connection.id}) ` +
-        `- Backup ID: ${backup.id}, Erro: ${errorMessage}`
+      `[Backup] Erro inesperado no backup do database "${connDb.databaseName}" ` +
+        `da conexão "${connection.name}" (ID: ${connection.id}) - Backup ID: ${backup.id}, Erro: ${errorMessage}`
     )
 
     return {
@@ -243,13 +360,17 @@ export class BackupService {
   /**
    * Executa o comando de dump do banco de dados
    */
-  private async performBackup(connection: Connection, basePath: string): Promise<BackupResult> {
-    const { fileName, relativePath, fullPath } = this.buildFilePaths(connection, basePath)
+  private async performBackup(
+    connection: Connection,
+    databaseName: string,
+    basePath: string
+  ): Promise<BackupResult> {
+    const { fileName, relativePath, fullPath } = this.buildFilePaths(connection, databaseName, basePath)
 
     // Garantir que o diretório da conexão existe
     this.ensureDirectoryExists(join(basePath, connection.id.toString()))
 
-    const dumpConfig = this.buildDumpConfig(connection)
+    const dumpConfig = this.buildDumpConfig(connection, databaseName)
 
     return this.executeDumpProcess(dumpConfig, fullPath, relativePath, fileName)
   }
@@ -259,6 +380,7 @@ export class BackupService {
    */
   private buildFilePaths(
     connection: Connection,
+    databaseName: string,
     basePath: string
   ): {
     fileName: string
@@ -266,7 +388,7 @@ export class BackupService {
     fullPath: string
   } {
     const timestamp = DateTime.now().toFormat('yyyyMMdd_HHmmss')
-    const fileName = `${connection.database}_${timestamp}.sql.gz`
+    const fileName = `${databaseName}_${timestamp}.sql.gz`
     const relativePath = join(connection.id.toString(), fileName)
     const fullPath = join(basePath, relativePath)
 
@@ -276,15 +398,15 @@ export class BackupService {
   /**
    * Constrói a configuração do comando de dump baseado no tipo de banco
    */
-  private buildDumpConfig(connection: Connection): DumpConfig {
+  private buildDumpConfig(connection: Connection, databaseName: string): DumpConfig {
     const password = connection.getDecryptedPassword()
     const processEnv = { ...process.env }
 
     if (connection.type === 'postgresql') {
-      return this.buildPostgresConfig(connection, password, processEnv)
+      return this.buildPostgresConfig(connection, databaseName, password, processEnv)
     }
 
-    return this.buildMySqlConfig(connection, password, processEnv)
+    return this.buildMySqlConfig(connection, databaseName, password, processEnv)
   }
 
   /**
@@ -292,6 +414,7 @@ export class BackupService {
    */
   private buildPostgresConfig(
     connection: Connection,
+    databaseName: string,
     password: string,
     env: NodeJS.ProcessEnv
   ): DumpConfig {
@@ -301,7 +424,7 @@ export class BackupService {
         '-h', connection.host,
         '-p', connection.port.toString(),
         '-U', connection.username,
-        '-d', connection.database,
+        '-d', databaseName,
         '--no-password',
       ],
       env: { ...env, PGPASSWORD: password },
@@ -313,6 +436,7 @@ export class BackupService {
    */
   private buildMySqlConfig(
     connection: Connection,
+    databaseName: string,
     password: string,
     env: NodeJS.ProcessEnv
   ): DumpConfig {
@@ -326,7 +450,7 @@ export class BackupService {
         '--single-transaction',
         '--routines',
         '--triggers',
-        connection.database,
+        databaseName,
       ],
       env,
     }

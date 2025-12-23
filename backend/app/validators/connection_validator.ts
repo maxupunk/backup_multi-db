@@ -11,7 +11,7 @@ const databaseTypes = ['mysql', 'mariadb', 'postgresql'] as const
 const scheduleFrequencies = ['1h', '6h', '12h', '24h'] as const
 
 /**
- * Validator para criação de conexão
+ * Validator para criação de conexão (com múltiplos databases)
  */
 export const createConnectionValidator = vine.compile(
   vine.object({
@@ -19,7 +19,8 @@ export const createConnectionValidator = vine.compile(
     type: vine.enum(databaseTypes),
     host: vine.string().trim().minLength(1).maxLength(255),
     port: vine.number().positive().max(65535),
-    database: vine.string().trim().minLength(1).maxLength(100),
+    // Agora aceita array de databases
+    databases: vine.array(vine.string().trim().minLength(1).maxLength(100)).minLength(1),
     username: vine.string().trim().minLength(1).maxLength(100),
     password: vine.string().optional(),
     storageDestinationId: vine.number().positive().nullable().optional(),
@@ -43,7 +44,8 @@ export const updateConnectionValidator = vine.compile(
     type: vine.enum(databaseTypes).optional(),
     host: vine.string().trim().minLength(1).maxLength(255).optional(),
     port: vine.number().positive().max(65535).optional(),
-    database: vine.string().trim().minLength(1).maxLength(100).optional(),
+    // Permite atualizar a lista de databases
+    databases: vine.array(vine.string().trim().minLength(1).maxLength(100)).minLength(1).optional(),
     username: vine.string().trim().minLength(1).maxLength(100).optional(),
     password: vine.string().optional(),
     storageDestinationId: vine.number().positive().nullable().optional(),
@@ -69,5 +71,18 @@ export const listConnectionsValidator = vine.compile(
     type: vine.enum(databaseTypes).optional(),
     status: vine.enum(['active', 'inactive', 'error'] as const).optional(),
     search: vine.string().trim().optional(),
+  })
+)
+
+/**
+ * Validator para descoberta de bancos de dados disponíveis
+ */
+export const discoverDatabasesValidator = vine.compile(
+  vine.object({
+    type: vine.enum(databaseTypes),
+    host: vine.string().trim().minLength(1).maxLength(255),
+    port: vine.number().positive().max(65535),
+    username: vine.string().trim().minLength(1).maxLength(100),
+    password: vine.string().optional(),
   })
 )

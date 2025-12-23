@@ -3,6 +3,7 @@ import { BaseModel, beforeSave, belongsTo, column, hasMany } from '@adonisjs/luc
 import type { BelongsTo, HasMany } from '@adonisjs/lucid/types/relations'
 import { EncryptionService } from '#services/encryption_service'
 import Backup from './backup.js'
+import ConnectionDatabase from './connection_database.js'
 import StorageDestination from './storage_destination.js'
 
 /**
@@ -32,6 +33,7 @@ export interface ConnectionOptions {
 /**
  * Model para conexões de banco de dados.
  * Gerencia credenciais criptografadas e configurações de backup.
+ * Os databases são gerenciados pela tabela connection_databases.
  */
 export default class Connection extends BaseModel {
   @column({ isPrimary: true })
@@ -48,9 +50,6 @@ export default class Connection extends BaseModel {
 
   @column()
   declare port: number
-
-  @column()
-  declare database: string
 
   @column()
   declare username: string
@@ -102,6 +101,9 @@ export default class Connection extends BaseModel {
 
   @hasMany(() => Backup)
   declare backups: HasMany<typeof Backup>
+
+  @hasMany(() => ConnectionDatabase)
+  declare databases: HasMany<typeof ConnectionDatabase>
 
   @belongsTo(() => StorageDestination)
   declare storageDestination: BelongsTo<typeof StorageDestination>
@@ -184,5 +186,27 @@ export default class Connection extends BaseModel {
       '24h': 24 * 60 * 60 * 1000,
     }
     return intervals[this.scheduleFrequency]
+  }
+
+  /**
+   * Retorna os databases habilitados para backup
+   */
+  async getEnabledDatabases(): Promise<ConnectionDatabase[]> {
+    return ConnectionDatabase.query()
+      .where('connectionId', this.id)
+      .where('enabled', true)
+      .orderBy('databaseName', 'asc')
+  }
+
+  /**
+   * Retorna a contagem de databases habilitados
+   */
+  async getEnabledDatabasesCount(): Promise<number> {
+    const result = await ConnectionDatabase.query()
+      .where('connectionId', this.id)
+      .where('enabled', true)
+      .count('* as total')
+      .first()
+    return Number(result?.$extras?.total ?? 0)
   }
 }
