@@ -19,6 +19,9 @@ export interface Notification {
   timeout?: number
 }
 
+// Tipo para listeners de notificação
+type NotificationListener = (notification: Notification) => void
+
 export const useNotificationStore = defineStore('notification', () => {
   const notifications = ref<Notification[]>([])
   const history = ref<Notification[]>([])
@@ -26,6 +29,9 @@ export const useNotificationStore = defineStore('notification', () => {
   
   // Limite de histórico
   const historyLimit = 50
+  
+  // Listeners por categoria para permitir reação a notificações específicas
+  const listeners = ref<Map<NotificationCategory | '*', Set<NotificationListener>>>(new Map())
 
   /**
    * Adiciona uma nova notificação
@@ -63,6 +69,17 @@ export const useNotificationStore = defineStore('notification', () => {
     setTimeout(() => {
       remove(newNotification.id)
     }, newNotification.timeout || timeoutDuration)
+    
+    // Notifica listeners da categoria e listeners globais (*)
+    const categoryListeners = listeners.value.get(newNotification.category)
+    const globalListeners = listeners.value.get('*')
+    
+    if (categoryListeners) {
+      categoryListeners.forEach(listener => listener(newNotification))
+    }
+    if (globalListeners) {
+      globalListeners.forEach(listener => listener(newNotification))
+    }
     
     return newNotification
   }
@@ -104,6 +121,30 @@ export const useNotificationStore = defineStore('notification', () => {
     unreadCount.value = 0
   }
 
+  /**
+   * Registra um listener para notificações de uma categoria específica
+   * Use '*' para ouvir todas as categorias
+   */
+  function onNotification(category: NotificationCategory | '*', listener: NotificationListener) {
+    if (!listeners.value.has(category)) {
+      listeners.value.set(category, new Set())
+    }
+    listeners.value.get(category)!.add(listener)
+  }
+
+  /**
+   * Remove um listener previamente registrado
+   */
+  function offNotification(category: NotificationCategory | '*', listener: NotificationListener) {
+    const set = listeners.value.get(category)
+    if (set) {
+      set.delete(listener)
+      if (set.size === 0) {
+        listeners.value.delete(category)
+      }
+    }
+  }
+
   return {
     notifications,
     history,
@@ -112,6 +153,8 @@ export const useNotificationStore = defineStore('notification', () => {
     remove,
     markAsRead,
     markAllAsRead,
-    clearHistory
+    clearHistory,
+    onNotification,
+    offNotification
   }
 })

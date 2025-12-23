@@ -213,10 +213,11 @@
 
 <script lang="ts" setup>
 import type { Backup, BackupStatus, Connection, DatabaseType, RetentionType } from '@/types/api'
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { useDisplay } from 'vuetify'
 import { backupsApi, connectionsApi } from '@/services/api'
 import { useNotifier } from '@/composables/useNotifier'
+import { useNotificationStore } from '@/stores/notification'
 import {
   backupStatusOptions,
   getBackupStatusColor as getStatusColor,
@@ -227,6 +228,7 @@ import { getDatabaseColor } from '@/ui/database'
 import { formatDateTimePtBR as formatDate, formatDuration, formatFileSize } from '@/utils/format'
 
 const notify = useNotifier()
+const notificationStore = useNotificationStore()
 const { smAndUp, mdAndUp } = useDisplay()
 
 const loading = ref(false)
@@ -360,8 +362,27 @@ function getRetentionLabel(type: RetentionType): string {
   return labels[type] ?? type
 }
 
+/**
+ * Handler para notificações de backup
+ * Atualiza a lista automaticamente quando um backup é concluído ou falha
+ */
+function handleBackupNotification() {
+  // Pequeno delay para garantir que o backend já persistiu as alterações
+  setTimeout(() => {
+    loadBackups()
+  }, 500)
+}
+
 onMounted(() => {
   loadConnections()
   loadBackups()
+
+  // Registra listener para atualizar lista quando backup terminar
+  notificationStore.onNotification('backup', handleBackupNotification)
+})
+
+onUnmounted(() => {
+  // Remove listener para evitar memory leaks
+  notificationStore.offNotification('backup', handleBackupNotification)
 })
 </script>
