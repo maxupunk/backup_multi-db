@@ -13,8 +13,11 @@ import { registerPlugins } from '@/plugins'
 // Components
 import App from './App.vue'
 
-// Styles
-import 'unfonts.css'
+// Styles - Roboto font for Vuetify
+import '@fontsource/roboto/300.css'
+import '@fontsource/roboto/400.css'
+import '@fontsource/roboto/500.css'
+import '@fontsource/roboto/700.css'
 
 const app = createApp(App)
 
