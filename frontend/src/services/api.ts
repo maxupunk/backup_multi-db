@@ -342,10 +342,54 @@ export const backupsApi = {
   },
 
   /**
-   * Retorna a URL de download do backup
+   * Faz download do backup com autenticação
+   * @param id ID do backup
+   * @param fileName Nome do arquivo para salvar (opcional)
    */
-  getDownloadUrl (id: number): string {
-    return `${API_BASE}/backups/${id}/download`
+  async download (id: number, fileName?: string): Promise<void> {
+    const url = `${API_BASE}/backups/${id}/download`
+    const token = localStorage.getItem('token')
+    
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    })
+    
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}))
+      throw new ApiError(
+        extractErrorMessage(data),
+        response.status,
+        data,
+      )
+    }
+    
+    // Extrai o nome do arquivo do header Content-Disposition, se disponível
+    const contentDisposition = response.headers.get('Content-Disposition')
+    let downloadFileName = fileName ?? 'backup.sql.gz'
+    
+    if (contentDisposition) {
+      const match = contentDisposition.match(/filename="?([^"]+)"?/)
+      if (match?.[1]) {
+        downloadFileName = match[1]
+      }
+    }
+    
+    // Criar blob e iniciar download
+    const blob = await response.blob()
+    const blobUrl = window.URL.createObjectURL(blob)
+    
+    const link = document.createElement('a')
+    link.href = blobUrl
+    link.download = downloadFileName
+    document.body.appendChild(link)
+    link.click()
+    
+    // Cleanup
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(blobUrl)
   },
 }
 
