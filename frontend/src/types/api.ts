@@ -201,6 +201,7 @@ export interface Backup {
   errorMessage: string | null
   exitCode: number | null
   trigger: BackupTrigger
+  metadata: { isRestoreSafetyBackup?: boolean; [key: string]: unknown } | null
   createdAt: string
   updatedAt: string
   connection?: ConnectionSummary

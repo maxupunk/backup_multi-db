@@ -72,13 +72,29 @@
     <v-card>
       <v-data-table class="elevation-0" :headers="tableHeaders" :items="backups" :items-per-page="mdAndUp ? 20 : 10"
         :loading="loading" :mobile="!mdAndUp">
-        <!-- Connection -->
+        <!-- Connection + Database -->
         <template #item.connection="{ item }">
-          <div v-if="item.connection" class="d-flex align-center">
-            <v-chip class="mr-2" :color="getDatabaseColor(item.connection.type)" label size="x-small">
-              {{ item.connection.type.toUpperCase() }}
-            </v-chip>
-            <span class="font-weight-medium">{{ item.connection.name }}</span>
+          <div v-if="item.connection" class="d-flex flex-column gap-1 py-2">
+            <!-- Linha 1: tipo + nome da conexão -->
+            <div class="d-flex align-center gap-2">
+              <v-chip :color="getDatabaseColor(item.connection.type)" label size="x-small" class="flex-shrink-0">
+                {{ item.connection.type.toUpperCase() }}
+              </v-chip>
+              <span class="font-weight-medium text-body-2">{{ item.connection.name }}</span>
+            </div>
+
+            <!-- Linha 2: database -->
+            <div class="d-flex align-center gap-1 pl-1">
+              <v-icon icon="mdi-database-outline" size="13" color="medium-emphasis" />
+              <span class="text-caption text-medium-emphasis">{{ item.databaseName }}</span>
+            </div>
+
+            <!-- Linha 3: badge segurança (condicional) -->
+            <div v-if="item.metadata?.isRestoreSafetyBackup" class="pl-1">
+              <v-chip color="teal" label size="x-small" prepend-icon="mdi-shield-check" variant="tonal">
+                Backup de segurança
+              </v-chip>
+            </div>
           </div>
           <span v-else class="text-medium-emphasis">N/A</span>
 
@@ -123,11 +139,18 @@
 
         <!-- Trigger -->
         <template #item.trigger="{ item }">
-          <v-icon :color="item.trigger === 'scheduled' ? 'info' : 'warning'"
-            :icon="item.trigger === 'scheduled' ? 'mdi-clock-outline' : 'mdi-hand-pointing-right'" size="20" />
-          <v-tooltip activator="parent" location="top">
-            {{ item.trigger === 'scheduled' ? 'Agendado' : 'Manual' }}
-          </v-tooltip>
+          <template v-if="item.metadata?.isRestoreSafetyBackup">
+            <v-icon color="teal" icon="mdi-shield-check" size="20" />
+            <v-tooltip activator="parent" location="top">Backup de segurança (restauração)</v-tooltip>
+          </template>
+          <template v-else-if="item.trigger === 'scheduled'">
+            <v-icon color="info" icon="mdi-clock-outline" size="20" />
+            <v-tooltip activator="parent" location="top">Agendado</v-tooltip>
+          </template>
+          <template v-else>
+            <v-icon color="warning" icon="mdi-hand-pointing-right" size="20" />
+            <v-tooltip activator="parent" location="top">Manual</v-tooltip>
+          </template>
         </template>
 
         <!-- Created At -->
@@ -138,20 +161,28 @@
         <!-- Actions -->
         <template #item.actions="{ item }">
           <template v-if="mdAndUp">
+            <v-btn color="secondary" icon="mdi-information-outline" size="small" variant="text"
+              @click="openDetailDialog(item)">
+              <v-icon icon="mdi-information-outline" />
+              <v-tooltip activator="parent" location="top">Detalhes</v-tooltip>
+            </v-btn>
+
+            <v-btn v-if="item.connection" color="secondary" icon="mdi-open-in-new" size="small" variant="text"
+              :to="`/connections/${item.connection.id}`">
+              <v-icon icon="mdi-open-in-new" />
+              <v-tooltip activator="parent" location="top">Ir para a conexão</v-tooltip>
+            </v-btn>
+
             <v-btn v-if="item.status === 'completed' && item.filePath" color="primary" icon="mdi-download"
               :loading="downloadingId === item.id" size="small" variant="text" @click="downloadBackup(item)">
               <v-icon icon="mdi-download" />
-              <v-tooltip activator="parent" location="top">
-                Download
-              </v-tooltip>
+              <v-tooltip activator="parent" location="top">Download</v-tooltip>
             </v-btn>
 
             <v-btn v-if="item.status === 'completed' && item.filePath" color="warning" icon="mdi-backup-restore"
               size="small" variant="text" @click="openRestoreDialog(item)">
               <v-icon icon="mdi-backup-restore" />
-              <v-tooltip activator="parent" location="top">
-                Restaurar
-              </v-tooltip>
+              <v-tooltip activator="parent" location="top">Restaurar</v-tooltip>
             </v-btn>
 
             <v-btn color="error" :disabled="item.protected" icon="mdi-delete" size="small" variant="text"
@@ -168,6 +199,9 @@
               <v-btn v-bind="props" icon="mdi-dots-vertical" variant="text" />
             </template>
             <v-list density="compact">
+              <v-list-item prepend-icon="mdi-information-outline" title="Detalhes" @click="openDetailDialog(item)" />
+              <v-list-item v-if="item.connection" prepend-icon="mdi-open-in-new" title="Ir para a conexão"
+                :to="`/connections/${item.connection.id}`" />
               <v-list-item v-if="item.status === 'completed' && item.filePath" :disabled="downloadingId === item.id"
                 prepend-icon="mdi-download" title="Download" @click="downloadBackup(item)" />
               <v-list-item v-if="item.status === 'completed' && item.filePath"
@@ -192,6 +226,145 @@
         </template>
       </v-data-table>
     </v-card>
+
+    <!-- Backup Detail Dialog -->
+    <v-dialog v-model="detailDialog" max-width="560" scrollable>
+      <v-card v-if="backupDetail">
+        <v-card-title class="d-flex align-center justify-space-between">
+          <div class="d-flex align-center">
+            <v-icon class="mr-2" color="secondary" icon="mdi-information-outline" />
+            Detalhes do Backup
+          </div>
+          <v-btn icon="mdi-close" variant="text" @click="detailDialog = false" />
+        </v-card-title>
+
+        <v-divider />
+
+        <v-card-text class="pa-4">
+          <!-- Header: conexão + status -->
+          <div class="d-flex align-center justify-space-between mb-4">
+            <div class="d-flex align-center gap-2">
+              <v-chip v-if="backupDetail.connection" :color="getDatabaseColor(backupDetail.connection.type)" label
+                size="small">
+                {{ backupDetail.connection.type.toUpperCase() }}
+              </v-chip>
+              <div>
+                <div class="font-weight-medium">{{ backupDetail.connection?.name ?? 'N/A' }}</div>
+                <div class="text-caption text-medium-emphasis">{{ backupDetail.connection?.host }}</div>
+              </div>
+            </div>
+            <v-chip :color="getStatusColor(backupDetail.status)" label size="small">
+              <v-icon class="mr-1" :icon="getStatusIcon(backupDetail.status)" size="14" />
+              {{ getStatusLabel(backupDetail.status) }}
+            </v-chip>
+          </div>
+
+          <v-divider class="mb-4" />
+
+          <!-- Informações -->  
+          <v-row dense>
+            <v-col cols="6">
+              <div class="text-caption text-medium-emphasis">Database</div>
+              <div class="font-weight-medium d-flex align-center">
+                <v-icon icon="mdi-database-outline" size="14" class="mr-1" />
+                {{ backupDetail.databaseName }}
+              </div>
+            </v-col>
+
+            <v-col cols="6">
+              <div class="text-caption text-medium-emphasis">Retenção</div>
+              <v-chip :color="getRetentionColor(backupDetail.retentionType)" size="x-small" variant="tonal">
+                {{ getRetentionLabel(backupDetail.retentionType) }}
+              </v-chip>
+            </v-col>
+
+            <v-col cols="6" class="mt-2">
+              <div class="text-caption text-medium-emphasis">Tamanho</div>
+              <div class="font-weight-medium">
+                {{ backupDetail.fileSize ? formatFileSize(backupDetail.fileSize) : '—' }}
+              </div>
+            </v-col>
+
+            <v-col cols="6" class="mt-2">
+              <div class="text-caption text-medium-emphasis">Duração</div>
+              <div class="font-weight-medium">
+                {{ backupDetail.durationSeconds ? formatDuration(backupDetail.durationSeconds) : '—' }}
+              </div>
+            </v-col>
+
+            <v-col cols="6" class="mt-2">
+              <div class="text-caption text-medium-emphasis">Tipo</div>
+              <div class="d-flex align-center">
+                <template v-if="backupDetail.metadata?.isRestoreSafetyBackup">
+                  <v-icon size="16" class="mr-1" color="teal" icon="mdi-shield-check" />
+                  Segurança (restauração)
+                </template>
+                <template v-else-if="backupDetail.trigger === 'scheduled'">
+                  <v-icon size="16" class="mr-1" color="info" icon="mdi-clock-outline" />
+                  Agendado
+                </template>
+                <template v-else>
+                  <v-icon size="16" class="mr-1" color="warning" icon="mdi-hand-pointing-right" />
+                  Manual
+                </template>
+              </div>
+            </v-col>
+
+            <v-col cols="6" class="mt-2">
+              <div class="text-caption text-medium-emphasis">Comprimido</div>
+              <div class="d-flex align-center">
+                <v-icon size="16" class="mr-1"
+                  :color="backupDetail.compressed ? 'success' : 'grey'"
+                  :icon="backupDetail.compressed ? 'mdi-check-circle-outline' : 'mdi-close-circle-outline'" />
+                {{ backupDetail.compressed ? 'Sim' : 'Não' }}
+              </div>
+            </v-col>
+
+            <v-col cols="12" class="mt-2">
+              <div class="text-caption text-medium-emphasis">Arquivo</div>
+              <div class="font-weight-medium text-body-2" style="word-break: break-all;">
+                {{ backupDetail.fileName ?? '—' }}
+              </div>
+            </v-col>
+
+            <v-col v-if="backupDetail.checksum" cols="12" class="mt-2">
+              <div class="text-caption text-medium-emphasis">Checksum</div>
+              <div class="font-mono text-caption" style="word-break: break-all;">
+                {{ backupDetail.checksum }}
+              </div>
+            </v-col>
+
+            <v-col cols="6" class="mt-2">
+              <div class="text-caption text-medium-emphasis">Iniciado em</div>
+              <div class="text-body-2">{{ backupDetail.startedAt ? formatDate(backupDetail.startedAt) : '—' }}</div>
+            </v-col>
+
+            <v-col cols="6" class="mt-2">
+              <div class="text-caption text-medium-emphasis">Finalizado em</div>
+              <div class="text-body-2">{{ backupDetail.finishedAt ? formatDate(backupDetail.finishedAt) : '—' }}</div>
+            </v-col>
+          </v-row>
+
+          <!-- Erro -->
+          <v-alert v-if="backupDetail.errorMessage" class="mt-4" color="error" density="compact"
+            icon="mdi-alert-circle-outline" variant="tonal">
+            <div class="text-caption font-weight-medium mb-1">Mensagem de erro</div>
+            <div class="text-caption" style="word-break: break-all;">{{ backupDetail.errorMessage }}</div>
+          </v-alert>
+        </v-card-text>
+
+        <v-divider />
+
+        <v-card-actions>
+          <v-btn v-if="backupDetail.connection" color="secondary" prepend-icon="mdi-open-in-new" variant="tonal"
+            :to="`/connections/${backupDetail.connection.id}`">
+            Ir para a conexão
+          </v-btn>
+          <v-spacer />
+          <v-btn variant="text" @click="detailDialog = false">Fechar</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
 
     <!-- Delete Confirmation Dialog -->
     <v-dialog v-model="deleteDialog" max-width="400">
@@ -440,6 +613,15 @@ async function downloadBackup(backup: Backup) {
   } finally {
     downloadingId.value = null
   }
+}
+
+// Detail
+const detailDialog = ref(false)
+const backupDetail = ref<Backup | null>(null)
+
+function openDetailDialog(backup: Backup) {
+  backupDetail.value = backup
+  detailDialog.value = true
 }
 
 // Delete
