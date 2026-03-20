@@ -4,6 +4,8 @@ import Connection from '#models/connection'
 import { createReadStream, existsSync } from 'node:fs'
 import { AuditService } from '#services/audit_service'
 import { StorageDestinationService } from '#services/storage_destination_service'
+import { RestoreService, type RestoreOptions } from '#services/restore_service'
+import { restoreBackupValidator } from '#validators/restore_validator'
 import type { Readable } from 'node:stream'
 
 /**
@@ -212,6 +214,102 @@ export default class BackupsController {
     return response.ok({
       success: true,
       message: 'Backup removido com sucesso',
+    })
+  }
+
+  /**
+   * POST /api/backups/:id/restore
+   * Restaura um backup para o banco de dados
+   */
+  async restore(ctx: HttpContext) {
+    const { params, request, response } = ctx
+
+    // Validar payload
+    const payload = await request.validateUsing(restoreBackupValidator)
+
+    // Buscar backup com conexão
+    const backup = await Backup.query()
+      .where('id', params.id)
+      .preload('connection')
+      .first()
+
+    if (!backup) {
+      return response.notFound({
+        success: false,
+        message: 'Backup não encontrado',
+      })
+    }
+
+    if (backup.status !== 'completed') {
+      return response.unprocessableEntity({
+        success: false,
+        message: 'Apenas backups concluídos podem ser restaurados',
+      })
+    }
+
+    if (!backup.filePath || !backup.fileName) {
+      return response.unprocessableEntity({
+        success: false,
+        message: 'Arquivo de backup não disponível',
+      })
+    }
+
+    if (!backup.connection) {
+      return response.unprocessableEntity({
+        success: false,
+        message: 'Conexão associada ao backup não encontrada',
+      })
+    }
+
+    const options: RestoreOptions = {
+      mode: payload.mode ?? 'full',
+      targetDatabase: payload.targetDatabase,
+      noOwner: payload.noOwner,
+      noPrivileges: payload.noPrivileges,
+      noTablespaces: payload.noTablespaces,
+      noComments: payload.noComments,
+      noCreateDb: payload.noCreateDb,
+      skipSafetyBackup: payload.skipSafetyBackup,
+    }
+
+    const restoreService = new RestoreService()
+    const result = await restoreService.restore(backup, backup.connection, options)
+
+    const safetyBackupData = result.safetyBackup
+      ? {
+          id: result.safetyBackup.id,
+          fileName: result.safetyBackup.fileName,
+          fileSize: result.safetyBackup.fileSize,
+          success: result.safetyBackup.success,
+        }
+      : undefined
+
+    if (result.success) {
+      return response.ok({
+        success: true,
+        message: `Backup restaurado com sucesso em "${result.databaseName}"`,
+        data: {
+          databaseName: result.databaseName,
+          durationSeconds: result.durationSeconds,
+          warnings: result.warnings,
+          safetyBackup: safetyBackupData,
+        },
+      })
+    }
+
+    return response.unprocessableEntity({
+      success: false,
+      message: result.error?.includes('segurança')
+        ? result.error
+        : 'Falha ao restaurar backup',
+      error: result.error,
+      data: {
+        databaseName: result.databaseName,
+        durationSeconds: result.durationSeconds,
+        exitCode: result.exitCode,
+        warnings: result.warnings,
+        safetyBackup: safetyBackupData,
+      },
     })
   }
 }

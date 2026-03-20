@@ -78,6 +78,8 @@ router
         router.get('connections/:connectionId/backups', [BackupsController, 'byConnection'])
         router.get('backups/:id', [BackupsController, 'show'])
         router.get('backups/:id/download', [BackupsController, 'download'])
+        router.post('backups/:id/restore', [BackupsController, 'restore'])
+          .use(middleware.rateLimit({ limiter: 'strict' }))
         router.delete('backups/:id', [BackupsController, 'destroy'])
 
         // ==================== Dashboard Stats ====================

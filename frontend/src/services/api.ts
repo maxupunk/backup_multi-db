@@ -19,6 +19,8 @@ import type {
   LoginPayload,
   PaginatedResponse,
   RegisterPayload,
+  RestoreOptions,
+  RestoreResult,
   StorageDestination,
   StorageSpaceInfo,
   UpdateConnectionPayload,
@@ -406,6 +408,16 @@ export const backupsApi = {
     // Cleanup
     document.body.removeChild(link)
     window.URL.revokeObjectURL(blobUrl)
+  },
+
+  /**
+   * Restaura um backup para o banco de dados
+   */
+  async restore (id: number, options?: RestoreOptions): Promise<ApiResponse<RestoreResult>> {
+    return request<ApiResponse<RestoreResult>>(`/backups/${id}/restore`, {
+      method: 'POST',
+      body: JSON.stringify(options ?? {}),
+    })
   },
 }
 

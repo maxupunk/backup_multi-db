@@ -2,12 +2,23 @@
 # DOCKER COMPOSE - DESENVOLVIMENTO
 # DB Backup Manager
 # =============================================================================
+#
+# Estratégia de volumes:
+#   .:/app                              — bind mount do código para hot-reload
+#   backend_node_modules:/app/node_modules — named volume inicializado a partir
+#     da imagem Docker (binários Linux, compilados no stage "dependencies").
+#     Completamente isolado do host — nunca usa node_modules do Windows/Mac.
+#
+# Para forçar rebuild dos node_modules (ex: após instalar novo pacote):
+#   docker compose -f docker-compose.dev.yml down -v
+#   docker compose -f docker-compose.dev.yml up --build
+# =============================================================================
 
 services:
   backend:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: backend/Dockerfile
       target: development
     container_name: backup-manager-backend-dev
     restart: unless-stopped
@@ -27,13 +38,14 @@ services:
       - RETENTION_MONTHLY=${RETENTION_MONTHLY:-12}
       - RETENTION_YEARLY=${RETENTION_YEARLY:-5}
     volumes:
-      # Bind mount do código para hot-reload
+      # Código fonte do host → hot-reload
       - .:/app
-      # Evitar sobrescrever node_modules do container
-      - /app/node_modules
-      # Persistência dos backups (bind mount para fácil acesso)
+      # node_modules isolado: binários Linux inicializados a partir da imagem.
+      # Nunca compartilhado com o host.
+      - backend_node_modules:/app/node_modules
+      # Persistência dos backups
       - ./storage/backups:/app/storage/backups
-      # Persistência do SQLite (bind mount para fácil acesso)
+      # Persistência do banco SQLite
       - ./storage/database:/app/storage/database
     networks:
       - backup-network-dev
@@ -41,3 +53,9 @@ services:
 networks:
   backup-network-dev:
     driver: bridge
+
+volumes:
+  # Volume nomeado para node_modules — gerenciado exclusivamente pelo Docker.
+  # Popolado na primeira inicialização com os node_modules da imagem (Linux).
+  backend_node_modules:
+

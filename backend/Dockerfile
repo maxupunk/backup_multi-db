@@ -1,35 +1,23 @@
 # =============================================================================
 # DOCKERFILE - DB Backup Manager
-# Multi-stage build com Node 25-bookworm-slim
-# Inclui mysql-client e postgresql-client para mysqldump e pg_dump
+# =============================================================================
+# Build context: projeto raiz (..)
+# Stages:
+#   base           — imagem base com deps do sistema (mysql/pg clients, build tools)
+#   frontend-builder — compila o frontend Vue
+#   dependencies   — instala node_modules com npm ci (binários Linux)
+#   build          — compila a aplicação TypeScript
+#   production     — imagem final enxuta com apenas deps de produção
+#   development    — imagem dev com todos os node_modules compilados para Linux
 # =============================================================================
 
 # -----------------------------------------------------------------------------
-# Stage 1: Base - Instala dependências do sistema
+# Stage: base
+# Imagem base com dependências do SO necessárias em todos os stages.
+# python3 + build-essential são necessários para compilar better-sqlite3.
 # -----------------------------------------------------------------------------
 FROM node:25-bookworm-slim AS base
 
-# -----------------------------------------------------------------------------
-# Stage: Frontend Builder
-# -----------------------------------------------------------------------------
-FROM node:25-bookworm-slim AS frontend-builder
-WORKDIR /app-frontend
-COPY frontend/package*.json ./
-RUN npm install
-COPY frontend/ .
-# Force output to ./dist to avoid relative path issues with predefined vite config
-RUN npm run build-only -- --outDir dist
-
-# -----------------------------------------------------------------------------
-# Stage 1: Base - Instala dependências do sistema
-# -----------------------------------------------------------------------------
-FROM base AS final-base
-
-# Instalar dependências do sistema necessárias
-# - mysql-client: fornece mysqldump para backups MySQL/MariaDB
-# - postgresql-client: fornece pg_dump para backups PostgreSQL
-# - openssl: requerido para criptografia
-# - python3 + build-essential: requerido para compilar better-sqlite3
 RUN apt-get update && apt-get install -y --no-install-recommends \
     default-mysql-client \
     postgresql-client \
@@ -41,80 +29,100 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 # -----------------------------------------------------------------------------
-# Stage 2: Dependencies - Instala dependências Node.js
+# Stage: frontend-builder
+# Compila o frontend Vue/Vite. Roda em paralelo com o pipeline do backend.
 # -----------------------------------------------------------------------------
-FROM final-base AS dependencies
+FROM node:25-bookworm-slim AS frontend-builder
 
-# Copiar arquivos de configuração de dependências
+WORKDIR /app-frontend
+
+COPY frontend/package*.json ./
+RUN npm ci
+
+COPY frontend/ .
+RUN npm run build-only -- --outDir dist
+
+# -----------------------------------------------------------------------------
+# Stage: dependencies
+# Instala TODAS as dependências Node.js (incluindo devDeps para o build).
+# Os binários nativos (better-sqlite3) são compilados aqui para Linux/amd64.
+# Este stage é reutilizado pelos stages development e build via cache.
+# -----------------------------------------------------------------------------
+FROM base AS dependencies
+
+# Copiar apenas os manifestos primeiro para aproveitar o cache do Docker:
+# se package.json/package-lock.json não mudaram, o npm ci não é re-executado.
 COPY backend/package*.json ./
 
-# Instalar todas as dependências (incluindo devDependencies para build)
 RUN npm ci
 
 # -----------------------------------------------------------------------------
-# Stage 3: Build - Compila a aplicação
+# Stage: build
+# Compila TypeScript → JavaScript. Roda em cima do stage dependencies.
 # -----------------------------------------------------------------------------
 FROM dependencies AS build
 
-# Copiar código fonte
+# Código fonte do backend (node_modules excluído via .dockerignore)
 COPY backend/ .
 
-# Copiar build do frontend para a pasta public do backend
+# Build do frontend embutido no backend (pasta public)
 COPY --from=frontend-builder /app-frontend/dist ./public
 
-# Build da aplicação
 RUN node ace build
 
 # -----------------------------------------------------------------------------
-# Stage 4: Production - Imagem final otimizada
+# Stage: production
+# Imagem final enxuta: apenas o build compilado + deps de produção.
+# Roda como usuário não-root (appuser) por segurança.
 # -----------------------------------------------------------------------------
-FROM final-base AS production
+FROM base AS production
 
 ENV NODE_ENV=production
 ENV HOST=0.0.0.0
 ENV PORT=3333
 
-WORKDIR /app
-
-# Instalar PM2 globalmente
 RUN npm install -g pm2
 
-# Copiar build e package.json
+# Copiar apenas o build compilado e os manifestos de dependências
 COPY --from=build /app/build ./
 COPY --from=build /app/package*.json ./
-
-# Copiar configuração do PM2
 COPY backend/ecosystem.config.cjs ./
-
-# Instalar apenas dependências de produção
-RUN npm ci --only=production && npm cache clean --force
-
-# Copiar e configurar entrypoint
 COPY backend/docker-entrypoint.sh /docker-entrypoint.sh
+
 RUN chmod +x /docker-entrypoint.sh
 
-# Criar diretórios necessários (incluindo logs)
+# Instalar apenas dependências de produção (recompila módulos nativos)
+RUN npm ci --only=production && npm cache clean --force
+
+# Diretórios de dados e logs
 RUN mkdir -p /app/storage/backups /app/storage/database /app/logs
 
-# Criar usuário não-root para segurança
+# Usuário não-root
 RUN groupadd -r appgroup && useradd -r -g appgroup -m appuser \
-    && chown -R appuser:appgroup /app
-
-# Criar diretório PM2 para o usuário
-RUN mkdir -p /home/appuser/.pm2 \
+    && chown -R appuser:appgroup /app \
+    && mkdir -p /home/appuser/.pm2 \
     && chown -R appuser:appgroup /home/appuser/.pm2
 
 USER appuser
 
 EXPOSE 3333
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
     CMD node -e "fetch('http://localhost:3333/health').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"
 
 ENTRYPOINT ["/docker-entrypoint.sh"]
 
 # -----------------------------------------------------------------------------
-# Stage 5: Development - Imagem para desenvolvimento
+# Stage: development
+# Imagem para desenvolvimento local com hot-reload.
+#
+# Estratégia de volumes (definida no docker-compose.dev.yml):
+#   - Bind mount .:/app          → código do host (hot-reload)
+#   - Named volume node_modules  → /app/node_modules (binários Linux do container)
+#
+# O named volume é inicializado a partir desta imagem na primeira criação,
+# garantindo que os binários Linux (compilados no stage dependencies)
+# sejam usados — nunca os binários do host (Windows/Mac).
 # -----------------------------------------------------------------------------
 FROM dependencies AS development
 
@@ -122,18 +130,18 @@ ENV NODE_ENV=development
 ENV HOST=0.0.0.0
 ENV PORT=3333
 
-WORKDIR /app
-
-# Copiar código fonte
+# Código fonte copiado para a imagem (será sobrescrito pelo bind mount em dev,
+# mas é necessário para o container funcionar sem volumes montados).
+# node_modules NÃO são copiados (excluídos no .dockerignore) — vêm do stage
+# dependencies herdado, compilados corretamente para Linux.
 COPY backend/ .
 
-# Copiar e configurar entrypoint
 COPY backend/docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh
 
-# Criar diretórios necessários
 RUN mkdir -p /app/storage/backups /app/storage/database
 
 EXPOSE 3333
 
 ENTRYPOINT ["/docker-entrypoint.sh"]
+

@@ -11,10 +11,9 @@ export default class SchedulerProvider {
    * Inicia o scheduler quando a aplicação bootar
    */
   async boot() {
-    // Apenas iniciar em produção ou quando NODE_ENV != test
-    const env = this.app.nodeEnvironment
-
-    if (env === 'test') {
+    // Apenas iniciar quando a aplicação está rodando como servidor HTTP.
+    // 'console' = ace commands (migration:run, etc.), 'test' = testes, 'repl' = repl.
+    if (this.app.getEnvironment() !== 'web') {
       return
     }
 

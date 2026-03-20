@@ -207,6 +207,40 @@ export interface Backup {
 }
 
 /**
+ * Modo de restauração
+ */
+export type RestoreMode = 'full' | 'schema-only' | 'data-only'
+
+/**
+ * Opções para restauração de backup
+ */
+export interface RestoreOptions {
+  mode?: RestoreMode
+  targetDatabase?: string
+  noOwner?: boolean
+  noPrivileges?: boolean
+  noTablespaces?: boolean
+  noComments?: boolean
+  noCreateDb?: boolean
+  skipSafetyBackup?: boolean
+}
+
+/**
+ * Resultado de uma restauração
+ */
+export interface RestoreResult {
+  databaseName: string
+  durationSeconds: number
+  warnings?: string[]
+  safetyBackup?: {
+    id: number
+    fileName: string | null
+    fileSize: number | null
+    success: boolean
+  }
+}
+
+/**
  * Resumo de um backup (para listagens)
  */
 export interface BackupSummary {

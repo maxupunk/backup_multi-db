@@ -140,6 +140,56 @@ export class BackupService {
   }
 
   /**
+   * Cria um backup de segurança de um database antes de uma restauração.
+   * Não envia notificações — o resultado é retornado diretamente ao chamador.
+   */
+  async performSafetyBackup(
+    connection: Connection,
+    databaseName: string
+  ): Promise<{ backup: Backup; success: boolean }> {
+    const destination = await StorageDestinationService.resolveDestinationForConnection(connection)
+    const localBasePath = StorageDestinationService.getLocalBasePath(destination)
+
+    this.ensureDirectoryExists(join(localBasePath, connection.id.toString()))
+
+    // Criar registro de backup
+    const backup = new Backup()
+    backup.connectionId = connection.id
+    backup.connectionDatabaseId = null
+    backup.databaseName = databaseName
+    backup.storageDestinationId = destination?.id ?? null
+    backup.trigger = 'manual'
+    backup.compressed = true
+    backup.retentionType = this.determineRetentionType()
+    backup.metadata = { isRestoreSafetyBackup: true }
+    backup.markAsStarted()
+    await backup.save()
+
+    try {
+      const result = await this.performBackup(connection, databaseName, localBasePath)
+
+      if (result.success && destination) {
+        await this.uploadToRemoteDestination(destination, result)
+      }
+
+      if (result.success) {
+        backup.markAsCompleted(result.filePath!, result.fileName!, result.fileSize!, result.checksum)
+        await backup.save()
+        return { backup, success: true }
+      } else {
+        backup.markAsFailed(result.error ?? 'Erro ao criar backup de segurança', result.exitCode)
+        await backup.save()
+        return { backup, success: false }
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido'
+      backup.markAsFailed(errorMessage)
+      await backup.save()
+      return { backup, success: false }
+    }
+  }
+
+  /**
    * Executa o backup de UM database específico
    */
   async executeForDatabase(
