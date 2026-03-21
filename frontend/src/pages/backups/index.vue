@@ -704,19 +704,11 @@ async function restoreBackup() {
       payload.noCreateDb = true
     }
 
-    const response = await backupsApi.restore(backupToRestore.value.id, payload as any)
-    const safetyBackup = response.data?.safetyBackup
+    await backupsApi.restore(backupToRestore.value.id, payload as any)
 
-    if (safetyBackup?.success) {
-      notify(
-        `Backup de segurança criado: #${safetyBackup.id} (${safetyBackup.fileName ?? 'arquivo'})`,
-        'info'
-      )
-    }
-
-    notify(response.message ?? 'Backup restaurado com sucesso', 'success')
+    // Restauração agora é assíncrona — o progresso é acompanhado via SSE
+    notify('Restauração iniciada com sucesso. Acompanhe o progresso no painel.', 'info')
     restoreDialog.value = false
-    loadBackups()
   } catch (error: any) {
     const msg = error?.message ?? 'Erro ao restaurar backup'
     notify(msg, 'error')
@@ -766,10 +758,13 @@ onMounted(() => {
 
   // Registra listener para atualizar lista quando backup terminar
   notificationStore.onNotification('backup', handleBackupNotification)
+  // Também atualizar quando restauração terminar (cria safety backups)
+  notificationStore.onNotification('restore', handleBackupNotification)
 })
 
 onUnmounted(() => {
-  // Remove listener para evitar memory leaks
+  // Remove listeners para evitar memory leaks
   notificationStore.offNotification('backup', handleBackupNotification)
+  notificationStore.offNotification('restore', handleBackupNotification)
 })
 </script>

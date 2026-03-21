@@ -21,6 +21,7 @@ export type NotificationType =
 export type NotificationCategory =
   | 'system'
   | 'backup'
+  | 'restore'
   | 'storage'
   | 'connection'
   | 'auth'
@@ -52,6 +53,10 @@ export const NOTIFICATION_CHANNELS = {
   STORAGE: 'notifications/storage',
   /** Canal de conexões (teste, status) */
   CONNECTION: 'notifications/connection',
+  /** Canal de progresso de restauração */
+  RESTORE: 'notifications/restore',
+  /** Canal de progresso de backup */
+  BACKUP_PROGRESS: 'notifications/backup-progress',
 } as const
 
 /**
@@ -422,6 +427,81 @@ export class NotificationService {
       }
     )
     this.broadcast(NOTIFICATION_CHANNELS.CONNECTION, notification)
+  }
+
+  // ==================== Notificações de Restauração ====================
+
+  /**
+   * Notifica que uma restauração foi iniciada
+   */
+  static restoreStarted(
+    connectionName: string,
+    backupId: number,
+    databaseName: string
+  ): void {
+    const notification = this.createNotification(
+      'info',
+      'restore',
+      'Restauração Iniciada',
+      `A restauração de "${databaseName}" (conexão "${connectionName}") foi iniciada.`,
+      {
+        event: 'restore.started',
+        backupId,
+        connectionName,
+        databaseName,
+      }
+    )
+    this.broadcast(NOTIFICATION_CHANNELS.BACKUP, notification)
+  }
+
+  /**
+   * Notifica que uma restauração foi concluída
+   */
+  static restoreCompleted(
+    connectionName: string,
+    backupId: number,
+    databaseName: string,
+    durationSeconds: number
+  ): void {
+    const notification = this.createNotification(
+      'success',
+      'restore',
+      'Restauração Concluída',
+      `A restauração de "${databaseName}" (conexão "${connectionName}") foi concluída em ${durationSeconds}s.`,
+      {
+        event: 'restore.completed',
+        backupId,
+        connectionName,
+        databaseName,
+        durationSeconds,
+      }
+    )
+    this.broadcast(NOTIFICATION_CHANNELS.BACKUP, notification)
+  }
+
+  /**
+   * Notifica que uma restauração falhou
+   */
+  static restoreFailed(
+    connectionName: string,
+    backupId: number,
+    databaseName: string,
+    error: string
+  ): void {
+    const notification = this.createNotification(
+      'error',
+      'restore',
+      'Restauração Falhou',
+      `A restauração de "${databaseName}" (conexão "${connectionName}") falhou: ${error}`,
+      {
+        event: 'restore.failed',
+        backupId,
+        connectionName,
+        databaseName,
+        error,
+      }
+    )
+    this.broadcast(NOTIFICATION_CHANNELS.BACKUP, notification)
   }
 
   // ==================== Utilitários ====================

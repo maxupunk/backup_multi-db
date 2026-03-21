@@ -13,6 +13,7 @@ declare module 'vue' {
   export interface GlobalComponents {
     NotificationToast: typeof import('./components/NotificationToast.vue')['default']
     ReloadPrompt: typeof import('./components/common/ReloadPrompt.vue')['default']
+    RestoreProgressOverlay: typeof import('./components/RestoreProgressOverlay.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
   }

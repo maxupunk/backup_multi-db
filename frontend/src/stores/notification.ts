@@ -5,7 +5,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 
 export type NotificationType = 'info' | 'success' | 'warning' | 'error'
-export type NotificationCategory = 'system' | 'backup' | 'storage' | 'connection' | 'auth'
+export type NotificationCategory = 'system' | 'backup' | 'restore' | 'storage' | 'connection' | 'auth'
 
 export interface Notification {
   id: string

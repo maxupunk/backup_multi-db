@@ -8,6 +8,7 @@ import Backup from '#models/backup'
 import Connection from '#models/connection'
 import { StorageDestinationService } from '#services/storage_destination_service'
 import { BackupService } from '#services/backup_service'
+import type { RestoreProgressEmitter } from '#services/restore_progress_emitter'
 
 /**
  * Modo de restauração
@@ -79,7 +80,12 @@ export class RestoreService {
    * Se o database de destino existir (e skipSafetyBackup não estiver ativo),
    * cria um backup de segurança antes de restaurar.
    */
-  async restore(backup: Backup, connection: Connection, options: RestoreOptions): Promise<RestoreResult> {
+  async restore(
+    backup: Backup,
+    connection: Connection,
+    options: RestoreOptions,
+    emitter?: RestoreProgressEmitter
+  ): Promise<RestoreResult> {
     const startTime = Date.now()
     const targetDb = options.targetDatabase || backup.databaseName
 
@@ -91,7 +97,10 @@ export class RestoreService {
     let safetyBackup: SafetyBackupInfo | undefined
 
     try {
-      // 1. Verificar se o database existe e criar backup de segurança
+      // 1. Validar
+      emitter?.validating()
+
+      // 2. Verificar se o database existe e criar backup de segurança
       if (!options.skipSafetyBackup) {
         const dbExists = await this.checkDatabaseExists(connection, targetDb)
 
@@ -99,6 +108,8 @@ export class RestoreService {
           logger.info(
             `[Restore] Database "${targetDb}" existe. Criando backup de segurança antes da restauração...`
           )
+
+          emitter?.safetyBackupStarted()
 
           const backupService = new BackupService()
           const safetyResult = await backupService.performSafetyBackup(connection, targetDb)
@@ -115,6 +126,7 @@ export class RestoreService {
             logger.error(
               `[Restore] Backup de segurança falhou para "${targetDb}". Restauração abortada.`
             )
+            emitter?.safetyBackupFailed()
             return {
               success: false,
               databaseName: targetDb,
@@ -123,6 +135,8 @@ export class RestoreService {
               safetyBackup,
             }
           }
+
+          emitter?.safetyBackupCompleted()
 
           logger.info(
             `[Restore] Backup de segurança criado com sucesso: ID ${safetyResult.backup.id}, ` +
@@ -133,19 +147,28 @@ export class RestoreService {
         }
       }
 
-      // 2. Obter o stream do arquivo de backup
+      // 3. Preparar stream
+      emitter?.preparing()
+
+      // 4. Obter o stream do arquivo de backup
       const backupStream = await this.getBackupStream(backup)
 
-      // 3. Descomprimir se necessário
-      const sqlStream = backup.compressed ? backupStream.pipe(createGunzip()) : backupStream
+      // 5. Inserir contagem de bytes para progresso (antes da descompressão)
+      const totalBytes = backup.fileSize ?? 0
+      const trackedStream = emitter && totalBytes > 0
+        ? backupStream.pipe(this.createProgressTrackingStream(totalBytes, emitter))
+        : backupStream
 
-      // 4. Aplicar filtros conforme as opções
+      // 6. Descomprimir se necessário
+      const sqlStream = backup.compressed ? trackedStream.pipe(createGunzip()) : trackedStream
+
+      // 7. Aplicar filtros conforme as opções
       const filteredStream = this.applyFilters(sqlStream, connection.type, options)
 
-      // 5. Construir comando de restore
+      // 8. Construir comando de restore
       const restoreConfig = this.buildRestoreConfig(connection, targetDb)
 
-      // 6. Executar restore
+      // 9. Executar restore
       const result = await this.executeRestore(restoreConfig, filteredStream, targetDb)
 
       const durationSeconds = Math.round((Date.now() - startTime) / 1000)
@@ -155,11 +178,13 @@ export class RestoreService {
           `[Restore] Restauração concluída com sucesso - Backup ID: ${backup.id}, ` +
             `Database: "${targetDb}", Duração: ${durationSeconds}s`
         )
+        emitter?.completed(durationSeconds)
       } else {
         logger.error(
           `[Restore] Falha na restauração - Backup ID: ${backup.id}, ` +
             `Database: "${targetDb}", Erro: ${result.error}`
         )
+        emitter?.failed(result.error ?? 'Falha na restauração')
       }
 
       return { ...result, durationSeconds, safetyBackup }
@@ -169,6 +194,7 @@ export class RestoreService {
       logger.error(
         `[Restore] Erro inesperado na restauração - Backup ID: ${backup.id}, Erro: ${errorMessage}`
       )
+      emitter?.failed(errorMessage)
       return {
         success: false,
         databaseName: targetDb,
@@ -177,6 +203,27 @@ export class RestoreService {
         safetyBackup,
       }
     }
+  }
+
+  /**
+   * Cria um Transform stream que conta bytes e emite progresso.
+   * Posicionado antes do gunzip para contagem precisa (bytes comprimidos = fileSize do backup).
+   */
+  private createProgressTrackingStream(
+    totalBytes: number,
+    emitter: RestoreProgressEmitter
+  ): Transform {
+    let bytesRead = 0
+
+    return new Transform({
+      transform(chunk, _encoding, callback) {
+        bytesRead += chunk.length
+        const percent = (bytesRead / totalBytes) * 100
+        emitter.restoring(percent)
+        this.push(chunk)
+        callback()
+      },
+    })
   }
 
   /**

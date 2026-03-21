@@ -14,6 +14,7 @@ import Backup, { type BackupTrigger, type RetentionType } from '#models/backup'
 import { StorageDestinationService } from '#services/storage_destination_service'
 import { StorageSpaceService } from '#services/storage_space_service'
 import { NotificationService } from '#services/notification_service'
+import { BackupProgressEmitter } from '#services/backup_progress_emitter'
 
 /**
  * Resultado da execução de um backup individual
@@ -111,7 +112,9 @@ export class BackupService {
 
     // Executar backup de cada database
     for (const connDb of databases) {
-      const { backup, result } = await this.executeForDatabase(connection, connDb, trigger)
+      const emitter = new BackupProgressEmitter(connection.name, connDb.databaseName)
+      emitter.started()
+      const { backup, result } = await this.executeForDatabase(connection, connDb, trigger, emitter)
       results.push({
         databaseName: connDb.databaseName,
         backup,
@@ -195,7 +198,8 @@ export class BackupService {
   async executeForDatabase(
     connection: Connection,
     connDb: ConnectionDatabase,
-    trigger: BackupTrigger = 'manual'
+    trigger: BackupTrigger = 'manual',
+    emitter?: BackupProgressEmitter
   ): Promise<{ backup: Backup; result: BackupResult }> {
     const destination = await StorageDestinationService.resolveDestinationForConnection(connection)
     const destinationName = destination?.name ?? 'Local (padrão)'
@@ -233,7 +237,8 @@ export class BackupService {
 
     try {
       const localBasePath = StorageDestinationService.getLocalBasePath(destination)
-      const result = await this.performBackup(connection, connDb.databaseName, localBasePath)
+      emitter?.dumping()
+      const result = await this.performBackup(connection, connDb.databaseName, localBasePath, emitter)
 
       // Adicionar aviso de espaço baixo ao resultado, se houver
       if (spaceCheck.warning) {
@@ -242,15 +247,23 @@ export class BackupService {
 
       // Upload para destino remoto, se configurado
       if (result.success && destination) {
+        emitter?.uploading()
         await this.uploadToRemoteDestination(destination, result)
       }
 
       // Atualizar registro do backup com o resultado
       await this.updateBackupRecord(backup, connection, connDb, result)
 
+      if (result.success) {
+        emitter?.completed(backup.fileSize ?? 0, backup.durationSeconds ?? 0)
+      } else {
+        emitter?.failed(result.error ?? 'Erro desconhecido')
+      }
+
       return { backup, result }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido'
+      emitter?.failed(errorMessage)
       return await this.handleBackupError(backup, connection, connDb, errorMessage)
     }
   }
@@ -419,7 +432,8 @@ export class BackupService {
   private async performBackup(
     connection: Connection,
     databaseName: string,
-    basePath: string
+    basePath: string,
+    emitter?: BackupProgressEmitter
   ): Promise<BackupResult> {
     const { fileName, relativePath, fullPath } = this.buildFilePaths(connection, databaseName, basePath)
 
@@ -428,7 +442,7 @@ export class BackupService {
 
     const dumpConfig = this.buildDumpConfig(connection, databaseName)
 
-    return this.executeDumpProcess(dumpConfig, fullPath, relativePath, fileName)
+    return this.executeDumpProcess(dumpConfig, fullPath, relativePath, fileName, emitter)
   }
 
   /**
@@ -572,7 +586,8 @@ export class BackupService {
     config: DumpConfig,
     fullPath: string,
     relativePath: string,
-    fileName: string
+    fileName: string,
+    emitter?: BackupProgressEmitter
   ): Promise<BackupResult> {
     return new Promise((resolve) => {
       const dumpProcess = spawn(config.command, config.args, {
@@ -588,7 +603,7 @@ export class BackupService {
       // Configurar streams
       this.setupStreams(dumpProcess, gzip, outputStream, hash, (data) => {
         stderrData += data
-      })
+      }, emitter)
 
       // Configurar handlers de eventos
       this.setupEventHandlers(
@@ -610,10 +625,12 @@ export class BackupService {
     gzip: Gzip,
     outputStream: ReturnType<typeof createWriteStream>,
     hash: Hash,
-    onStderr: (data: string) => void
+    onStderr: (data: string) => void,
+    emitter?: BackupProgressEmitter
   ): void {
     const stdout = dumpProcess.stdout as Readable
     const stderr = dumpProcess.stderr as Readable
+    let bytesWritten = 0
 
     // Processar dados do stdout: calcular hash e comprimir
     stdout.on('data', (data: Buffer) => {
@@ -626,7 +643,11 @@ export class BackupService {
       gzip.end()
     })
 
-    // Conectar gzip ao arquivo de saída
+    // Conectar gzip ao arquivo de saída, contando bytes comprimidos
+    gzip.on('data', (chunk: Buffer) => {
+      bytesWritten += chunk.length
+      emitter?.progress(bytesWritten)
+    })
     gzip.pipe(outputStream)
 
     // Capturar erros do stderr

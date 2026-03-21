@@ -5,7 +5,9 @@ import { createReadStream, existsSync } from 'node:fs'
 import { AuditService } from '#services/audit_service'
 import { StorageDestinationService } from '#services/storage_destination_service'
 import { RestoreService, type RestoreOptions } from '#services/restore_service'
+import { RestoreProgressEmitter } from '#services/restore_progress_emitter'
 import { restoreBackupValidator } from '#validators/restore_validator'
+import logger from '@adonisjs/core/services/logger'
 import type { Readable } from 'node:stream'
 
 /**
@@ -219,7 +221,9 @@ export default class BackupsController {
 
   /**
    * POST /api/backups/:id/restore
-   * Restaura um backup para o banco de dados
+   * Inicia a restauração de um backup de forma assíncrona.
+   * Retorna 202 (Accepted) imediatamente com o restoreId.
+   * O progresso é acompanhado via SSE no canal notifications/restore.
    */
   async restore(ctx: HttpContext) {
     const { params, request, response } = ctx
@@ -272,43 +276,35 @@ export default class BackupsController {
       skipSafetyBackup: payload.skipSafetyBackup,
     }
 
+    const targetDb = options.targetDatabase || backup.databaseName
+
+    // Criar emissor de progresso
+    const emitter = new RestoreProgressEmitter(
+      backup.id,
+      targetDb,
+      backup.connection.name
+    )
+
+    // Notificar início (toast + progresso SSE)
+    emitter.started()
+
+    // Executar restauração em background (não aguarda)
     const restoreService = new RestoreService()
-    const result = await restoreService.restore(backup, backup.connection, options)
-
-    const safetyBackupData = result.safetyBackup
-      ? {
-          id: result.safetyBackup.id,
-          fileName: result.safetyBackup.fileName,
-          fileSize: result.safetyBackup.fileSize,
-          success: result.safetyBackup.success,
-        }
-      : undefined
-
-    if (result.success) {
-      return response.ok({
-        success: true,
-        message: `Backup restaurado com sucesso em "${result.databaseName}"`,
-        data: {
-          databaseName: result.databaseName,
-          durationSeconds: result.durationSeconds,
-          warnings: result.warnings,
-          safetyBackup: safetyBackupData,
-        },
+    restoreService
+      .restore(backup, backup.connection, options, emitter)
+      .catch((error) => {
+        const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido'
+        logger.error(`[Restore] Erro não tratado na restauração em background: ${errorMessage}`)
+        emitter.failed(errorMessage)
       })
-    }
 
-    return response.unprocessableEntity({
-      success: false,
-      message: result.error?.includes('segurança')
-        ? result.error
-        : 'Falha ao restaurar backup',
-      error: result.error,
+    // Retorna imediatamente — progresso é acompanhado via SSE
+    return response.accepted({
+      success: true,
+      message: 'Restauração iniciada com sucesso. Acompanhe o progresso em tempo real.',
       data: {
-        databaseName: result.databaseName,
-        durationSeconds: result.durationSeconds,
-        exitCode: result.exitCode,
-        warnings: result.warnings,
-        safetyBackup: safetyBackupData,
+        restoreId: emitter.getRestoreId(),
+        databaseName: targetDb,
       },
     })
   }

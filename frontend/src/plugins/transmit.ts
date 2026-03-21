@@ -3,6 +3,11 @@
  */
 import { Transmit } from '@adonisjs/transmit-client'
 import { useNotificationStore } from '@/stores/notification'
+import {
+  useOperationProgressStore,
+  type RestoreProgressEvent,
+  type BackupProgressEvent,
+} from '@/stores/operation-progress'
 import type { App } from 'vue'
 
 // Instância singleton do Transmit
@@ -11,38 +16,53 @@ export const transmit = new Transmit({
   baseUrl: window.location.origin,
 })
 
+async function subscribeToChannel(
+  channel: string,
+  handler: (data: unknown) => void
+): Promise<void> {
+  try {
+    const subscription = transmit.subscription(channel)
+    await subscription.create()
+    console.log(`[Transmit] Inscrito no canal: ${channel}`)
+    subscription.onMessage(handler)
+  } catch (error) {
+    console.error(`[Transmit] Erro ao se inscrever em ${channel}:`, error)
+  }
+}
+
 export default {
   install: (app: App) => {
-    // Injeta $transmit globalmente
     app.config.globalProperties.$transmit = transmit
     app.provide('transmit', transmit)
 
-    // Lista de canais para inscrição automática
-    const channels = [
+    const notificationChannels = [
       'notifications/global',
       'notifications/system',
       'notifications/backup',
       'notifications/storage',
-      'notifications/connection'
+      'notifications/connection',
     ]
 
     console.log('[Transmit] Inicializando inscrições SSE...')
 
-    // Se inscreve nos canais
-    channels.forEach(async (channel) => {
-      try {
-        const subscription = transmit.subscription(channel)
-        await subscription.create()
-        console.log(`[Transmit] Inscrito no canal: ${channel}`)
-
-        subscription.onMessage((data) => {
-          console.log(`[Transmit] Mensagem recebida em ${channel}:`, data)
-          const store = useNotificationStore()
-          store.add(data as any)
-        })
-      } catch (error) {
-        console.error(`[Transmit] Erro ao se inscrever em ${channel}:`, error)
-      }
+    notificationChannels.forEach((channel) => {
+      subscribeToChannel(channel, (data) => {
+        console.log(`[Transmit] Mensagem recebida em ${channel}:`, data)
+        const store = useNotificationStore()
+        store.add(data as any)
+      })
     })
-  }
+
+    subscribeToChannel('notifications/restore', (data) => {
+      console.log('[Transmit] Progresso de restauração:', data)
+      const store = useOperationProgressStore()
+      store.handleRestoreProgress(data as RestoreProgressEvent)
+    })
+
+    subscribeToChannel('notifications/backup-progress', (data) => {
+      console.log('[Transmit] Progresso de backup:', data)
+      const store = useOperationProgressStore()
+      store.handleBackupProgress(data as BackupProgressEvent)
+    })
+  },
 }

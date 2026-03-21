@@ -77,6 +77,7 @@
   </v-main>
 
   <NotificationToast />
+  <RestoreProgressOverlay />
 </template>
 
 <script lang="ts" setup>
@@ -86,6 +87,7 @@ import { useDisplay, useTheme } from 'vuetify'
 import { useAuthStore } from '@/stores/auth'
 import { useNotificationStore } from '@/stores/notification'
 import NotificationToast from '@/components/NotificationToast.vue'
+import RestoreProgressOverlay from '@/components/RestoreProgressOverlay.vue'
 
 const theme = useTheme()
 const { mdAndUp } = useDisplay()
