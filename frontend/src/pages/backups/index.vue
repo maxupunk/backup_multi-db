@@ -392,106 +392,150 @@
       </v-card>
     </v-dialog>
 
+    <!-- Create Database Dialog (usado ao restaurar) -->
+    <CreateDatabaseDialog
+      v-model="createDbDialog"
+      :connection-id="restore.form.targetConnectionId"
+      :connection-name="restore.selectedConnection.value?.name ?? ''"
+      :placeholder="restore.backup.value?.databaseName"
+      @created="onDatabaseCreated"
+    />
+
     <!-- Restore Dialog -->
-    <v-dialog v-model="restoreDialog" max-width="600" persistent>
-      <v-card>
-        <v-card-title class="d-flex align-center">
-          <v-icon class="mr-2" color="warning" icon="mdi-backup-restore" />
-          Restaurar Backup
+    <v-dialog v-model="restore.isOpen.value" max-width="640" persistent scrollable>
+      <v-card v-if="restore.backup.value">
+        <!-- Título com indicador de step -->
+        <v-card-title class="d-flex align-center justify-space-between pa-4">
+          <div class="d-flex align-center gap-2">
+            <v-icon color="warning" icon="mdi-backup-restore" />
+            <span>Restaurar Backup</span>
+          </div>
+          <v-chip :color="restore.step.value === 1 ? 'primary' : 'warning'" size="small" variant="tonal">
+            Etapa {{ restore.step.value }} de 2
+          </v-chip>
         </v-card-title>
 
-        <v-card-text v-if="backupToRestore">
-          <v-alert class="mb-3" color="info" density="compact" icon="mdi-shield-check" variant="tonal">
-            Se o database de destino já existir, um <strong>backup de segurança</strong> será criado automaticamente
-            antes de restaurar.
-          </v-alert>
+        <v-divider />
 
-          <v-alert class="mb-4" color="warning" density="compact" icon="mdi-alert" variant="tonal">
-            A restauração irá sobrescrever os dados existentes no banco de destino. Esta operação não pode ser desfeita.
-          </v-alert>
-
+        <!-- ── Etapa 1: Configuração ── -->
+        <v-card-text v-show="restore.step.value === 1" class="pa-4">
+          <!-- Cabeçalho: origem do backup -->
           <div class="mb-4">
-            <div class="text-body-2 text-medium-emphasis mb-1">Backup</div>
-            <div class="font-weight-medium">{{ backupToRestore.fileName }}</div>
+            <div class="text-caption text-medium-emphasis mb-1">Backup de origem</div>
+            <div class="font-weight-medium">{{ restore.backup.value.fileName }}</div>
             <div class="text-caption text-medium-emphasis">
-              {{ backupToRestore.connection?.name }} &bull; {{ backupToRestore.databaseName }}
-              <span v-if="backupToRestore.fileSize"> &bull; {{ formatFileSize(backupToRestore.fileSize) }}</span>
+              {{ restore.backup.value.connection?.name }} &bull; {{ restore.backup.value.databaseName }}
+              <span v-if="restore.backup.value.fileSize"> &bull; {{ formatFileSize(restore.backup.value.fileSize) }}</span>
             </div>
+          </div>
+
+          <v-alert class="mb-4" color="info" density="compact" icon="mdi-shield-check" variant="tonal">
+            Se o banco de destino já existir, um <strong>backup de segurança</strong> será criado automaticamente antes
+            de restaurar.
+          </v-alert>
+
+          <v-divider class="mb-4" />
+
+          <!-- Conexão de destino -->
+          <div class="text-subtitle-2 mb-3">Destino</div>
+
+          <v-select
+            v-model="restore.form.targetConnectionId"
+            class="mb-3"
+            density="comfortable"
+            hide-details="auto"
+            :items="connections"
+            item-title="name"
+            item-value="id"
+            label="Conexão de destino"
+            variant="outlined"
+          >
+            <template #item="{ props: itemProps, item: connItem }">
+              <v-list-item v-bind="itemProps">
+                <template #prepend>
+                  <v-chip :color="getDatabaseColor(connItem.raw.type)" label size="x-small" class="mr-2">
+                    {{ connItem.raw.type.toUpperCase() }}
+                  </v-chip>
+                </template>
+              </v-list-item>
+            </template>
+            <template #selection="{ item: connItem }">
+              <div class="d-flex align-center gap-2">
+                <v-chip :color="getDatabaseColor(connItem.raw.type)" label size="x-small">
+                  {{ connItem.raw.type.toUpperCase() }}
+                </v-chip>
+                <span>{{ connItem.raw.name }}</span>
+              </div>
+            </template>
+          </v-select>
+
+          <!-- Database de destino -->
+          <div class="d-flex align-start gap-2 mb-4">
+            <v-combobox
+              v-model="restore.form.targetDatabase"
+              class="flex-grow-1"
+              clearable
+              density="comfortable"
+              hide-details="auto"
+              :items="restore.targetDatabaseItems.value"
+              :loading="restore.loadingDatabases.value"
+              label="Database de destino"
+              :placeholder="restore.backup.value.databaseName"
+              persistent-placeholder
+              persistent-hint
+              hint="Selecione ou digite o nome do banco de destino"
+              variant="outlined"
+              no-data-text="Nenhum banco de dados encontrado na conexão"
+            />
+            <v-btn
+              color="primary"
+              density="comfortable"
+              icon="mdi-database-plus-outline"
+              style="margin-top: 2px"
+              variant="tonal"
+              :disabled="!restore.form.targetConnectionId"
+              @click="createDbDialog = true"
+            >
+              <v-icon icon="mdi-database-plus-outline" />
+              <v-tooltip activator="parent" location="top">Criar novo banco de dados</v-tooltip>
+            </v-btn>
           </div>
 
           <v-divider class="mb-4" />
 
           <!-- Modo de restauração -->
-          <div class="mb-4">
-            <div class="text-subtitle-2 mb-2">Modo de Restauração</div>
-            <v-radio-group v-model="restoreOptions.mode" density="compact" hide-details>
-              <v-radio label="Completo (Schema + Dados)" value="full" />
-              <v-radio label="Apenas Schema (estrutura)" value="schema-only" />
-              <v-radio label="Apenas Dados" value="data-only" />
-            </v-radio-group>
-          </div>
+          <div class="text-subtitle-2 mb-2">Modo de Restauração</div>
+          <v-radio-group v-model="restore.form.mode" density="compact" hide-details class="mb-4">
+            <v-radio label="Completo (Schema + Dados)" value="full" />
+            <v-radio label="Apenas Schema (estrutura)" value="schema-only" />
+            <v-radio label="Apenas Dados" value="data-only" />
+          </v-radio-group>
 
-          <!-- Database de destino -->
-          <v-text-field
-            v-model="restoreOptions.targetDatabase"
-            class="mb-2"
-            clearable
-            density="comfortable"
-            hide-details
-            hint="Deixe vazio para usar o database original"
-            label="Database de destino (opcional)"
-            persistent-hint
-            :placeholder="backupToRestore.databaseName"
-            variant="outlined"
-          />
-
-          <v-divider class="my-4" />
-
-          <!-- Opções PostgreSQL -->
-          <template v-if="restoreDbType === 'postgresql'">
-            <div class="text-subtitle-2 mb-2">Opções PostgreSQL</div>
-            <v-checkbox
-              v-model="restoreOptions.noOwner"
-              density="compact"
-              hide-details
-              label="Não restaurar owner (ALTER ... OWNER TO)"
-            />
-            <v-checkbox
-              v-model="restoreOptions.noPrivileges"
-              density="compact"
-              hide-details
-              label="Não restaurar privilégios (GRANT / REVOKE)"
-            />
-            <v-checkbox
-              v-model="restoreOptions.noTablespaces"
-              density="compact"
-              hide-details
-              label="Não restaurar tablespaces"
-            />
-            <v-checkbox
-              v-model="restoreOptions.noComments"
-              density="compact"
-              hide-details
-              label="Não restaurar comentários (COMMENT ON)"
-            />
+          <!-- Opções específicas por tipo de banco -->
+          <template v-if="restore.targetDbType.value === 'postgresql'">
+            <v-divider class="mb-3" />
+            <div class="text-subtitle-2 mb-1">Opções PostgreSQL</div>
+            <v-checkbox v-model="restore.form.noOwner" density="compact" hide-details
+              label="Não restaurar owner (ALTER ... OWNER TO)" />
+            <v-checkbox v-model="restore.form.noPrivileges" density="compact" hide-details
+              label="Não restaurar privilégios (GRANT / REVOKE)" />
+            <v-checkbox v-model="restore.form.noTablespaces" density="compact" hide-details
+              label="Não restaurar tablespaces" />
+            <v-checkbox v-model="restore.form.noComments" density="compact" hide-details
+              label="Não restaurar comentários (COMMENT ON)" />
           </template>
 
-          <!-- Opções MySQL/MariaDB -->
-          <template v-if="restoreDbType === 'mysql' || restoreDbType === 'mariadb'">
-            <div class="text-subtitle-2 mb-2">Opções MySQL / MariaDB</div>
-            <v-checkbox
-              v-model="restoreOptions.noCreateDb"
-              density="compact"
-              hide-details
-              label="Não executar CREATE DATABASE / USE"
-            />
+          <template v-if="restore.targetDbType.value === 'mysql' || restore.targetDbType.value === 'mariadb'">
+            <v-divider class="mb-3" />
+            <div class="text-subtitle-2 mb-1">Opções MySQL / MariaDB</div>
+            <v-checkbox v-model="restore.form.noCreateDb" density="compact" hide-details
+              label="Não executar CREATE DATABASE / USE" />
           </template>
 
-          <v-divider class="my-4" />
+          <v-divider class="my-3" />
 
-          <!-- Opções avançadas -->
           <v-checkbox
-            v-model="restoreOptions.skipSafetyBackup"
+            v-model="restore.form.skipSafetyBackup"
             color="error"
             density="compact"
             hide-details
@@ -499,15 +543,110 @@
           />
         </v-card-text>
 
-        <v-card-actions>
-          <v-spacer />
-          <v-btn :disabled="restoreLoading" variant="text" @click="restoreDialog = false">
+        <!-- ── Etapa 2: Confirmação ── -->
+        <v-card-text v-show="restore.step.value === 2" class="pa-4">
+          <v-alert class="mb-4" color="error" icon="mdi-alert" title="Atenção — operação destrutiva" variant="tonal">
+            Esta operação irá <strong>sobrescrever todos os dados</strong> no banco de destino. Esta ação
+            <strong>não pode ser desfeita</strong>.
+          </v-alert>
+
+          <!-- Resumo da operação -->
+          <v-card class="mb-4" color="surface-variant" variant="tonal">
+            <v-card-text class="pa-3">
+              <div class="text-caption text-medium-emphasis mb-1">De (backup)</div>
+              <div class="d-flex align-center gap-1 mb-3">
+                <v-chip :color="getDatabaseColor(restore.backup.value.connection?.type ?? 'postgresql')" label size="x-small">
+                  {{ (restore.backup.value.connection?.type ?? '').toUpperCase() }}
+                </v-chip>
+                <span class="font-weight-medium">{{ restore.backup.value.connection?.name }}</span>
+                <v-icon icon="mdi-chevron-right" size="14" />
+                <v-icon icon="mdi-database-outline" size="14" />
+                <span class="text-body-2">{{ restore.backup.value.databaseName }}</span>
+              </div>
+
+              <div class="text-caption text-medium-emphasis mb-1">Para (destino)</div>
+              <div class="d-flex align-center gap-1 mb-3">
+                <v-chip :color="getDatabaseColor(restore.targetDbType.value ?? 'postgresql')" label size="x-small">
+                  {{ (restore.targetDbType.value ?? '').toUpperCase() }}
+                </v-chip>
+                <span class="font-weight-medium">{{ restore.selectedConnection.value?.name }}</span>
+                <v-icon icon="mdi-chevron-right" size="14" />
+                <v-icon icon="mdi-database-outline" size="14" />
+                <span class="text-body-2 font-weight-bold">{{ restore.targetDatabaseName.value }}</span>
+              </div>
+
+              <div class="text-caption text-medium-emphasis mb-1">Modo</div>
+              <v-chip color="warning" size="small" variant="tonal">
+                {{ restore.form.mode === 'full' ? 'Completo' : restore.form.mode === 'schema-only' ? 'Apenas Schema' : 'Apenas Dados' }}
+              </v-chip>
+            </v-card-text>
+          </v-card>
+
+          <!-- Campo de confirmação -->
+          <div class="text-body-2 mb-2">
+            Para confirmar, digite o nome do banco de destino:
+            <code class="font-weight-bold">{{ restore.targetDatabaseName.value }}</code>
+          </div>
+          <v-text-field
+            v-model="restore.confirmationInput.value"
+            density="comfortable"
+            :error="restore.confirmationInput.value.length > 0 && !restore.isConfirmationValid.value"
+            hide-details="auto"
+            :hint="restore.isConfirmationValid.value ? 'Confirmação válida' : ''"
+            persistent-hint
+            label="Confirmação"
+            variant="outlined"
+            autocomplete="off"
+          />
+        </v-card-text>
+
+        <v-divider />
+
+        <!-- Ações -->
+        <v-card-actions class="pa-3">
+          <v-btn
+            :disabled="restore.restoreLoading.value"
+            variant="text"
+            @click="restore.close()"
+          >
             Cancelar
           </v-btn>
-          <v-btn color="warning" :loading="restoreLoading" variant="flat" @click="restoreBackup">
-            <v-icon class="mr-1" icon="mdi-backup-restore" />
-            Restaurar
+
+          <v-spacer />
+
+          <!-- Etapa 1: avançar -->
+          <v-btn
+            v-if="restore.step.value === 1"
+            color="warning"
+            variant="flat"
+            @click="restore.goToConfirmation()"
+          >
+            Próximo
+            <v-icon end icon="mdi-arrow-right" />
           </v-btn>
+
+          <!-- Etapa 2: voltar + confirmar -->
+          <template v-else>
+            <v-btn
+              :disabled="restore.restoreLoading.value"
+              variant="tonal"
+              @click="restore.goBack()"
+            >
+              <v-icon start icon="mdi-arrow-left" />
+              Voltar
+            </v-btn>
+            <v-btn
+              class="ml-2"
+              color="error"
+              :disabled="!restore.isConfirmationValid.value"
+              :loading="restore.restoreLoading.value"
+              variant="flat"
+              @click="restore.execute()"
+            >
+              <v-icon start icon="mdi-backup-restore" />
+              Restaurar agora
+            </v-btn>
+          </template>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -515,11 +654,13 @@
 </template>
 
 <script lang="ts" setup>
-import type { Backup, BackupStatus, Connection, DatabaseType, RestoreMode, RetentionType } from '@/types/api'
+import type { Backup, BackupStatus, Connection, RetentionType } from '@/types/api'
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { useDisplay } from 'vuetify'
 import { backupsApi, connectionsApi } from '@/services/api'
 import { useNotifier } from '@/composables/useNotifier'
+import { useRestoreDialog } from '@/composables/useRestoreDialog'
+import CreateDatabaseDialog from '@/components/common/CreateDatabaseDialog.vue'
 import { useNotificationStore } from '@/stores/notification'
 import {
   backupStatusOptions,
@@ -651,70 +792,15 @@ async function deleteBackup() {
 }
 
 // Restore
-const restoreDialog = ref(false)
-const restoreLoading = ref(false)
-const backupToRestore = ref<Backup | null>(null)
-
-const restoreOptions = reactive({
-  mode: 'full' as RestoreMode,
-  targetDatabase: '' as string,
-  noOwner: false,
-  noPrivileges: false,
-  noTablespaces: false,
-  noComments: false,
-  noCreateDb: false,
-  skipSafetyBackup: false,
-})
-
-const restoreDbType = computed(() => backupToRestore.value?.connection?.type ?? null)
+const restore = useRestoreDialog()
+const createDbDialog = ref(false)
 
 function openRestoreDialog(backup: Backup) {
-  backupToRestore.value = backup
-  // Resetar opções
-  restoreOptions.mode = 'full'
-  restoreOptions.targetDatabase = ''
-  restoreOptions.noOwner = false
-  restoreOptions.noPrivileges = false
-  restoreOptions.noTablespaces = false
-  restoreOptions.noComments = false
-  restoreOptions.noCreateDb = false
-  restoreOptions.skipSafetyBackup = false
-  restoreDialog.value = true
+  restore.open(backup, connections.value)
 }
 
-async function restoreBackup() {
-  if (!backupToRestore.value) return
-
-  restoreLoading.value = true
-  try {
-    const payload: Record<string, unknown> = {
-      mode: restoreOptions.mode,
-      skipSafetyBackup: restoreOptions.skipSafetyBackup || undefined,
-    }
-    if (restoreOptions.targetDatabase) {
-      payload.targetDatabase = restoreOptions.targetDatabase
-    }
-    if (restoreDbType.value === 'postgresql') {
-      if (restoreOptions.noOwner) payload.noOwner = true
-      if (restoreOptions.noPrivileges) payload.noPrivileges = true
-      if (restoreOptions.noTablespaces) payload.noTablespaces = true
-      if (restoreOptions.noComments) payload.noComments = true
-    }
-    if ((restoreDbType.value === 'mysql' || restoreDbType.value === 'mariadb') && restoreOptions.noCreateDb) {
-      payload.noCreateDb = true
-    }
-
-    await backupsApi.restore(backupToRestore.value.id, payload as any)
-
-    // Restauração agora é assíncrona — o progresso é acompanhado via SSE
-    notify('Restauração iniciada com sucesso. Acompanhe o progresso no painel.', 'info')
-    restoreDialog.value = false
-  } catch (error: any) {
-    const msg = error?.message ?? 'Erro ao restaurar backup'
-    notify(msg, 'error')
-  } finally {
-    restoreLoading.value = false
-  }
+function onDatabaseCreated(databaseName: string) {
+  restore.addDatabase(databaseName)
 }
 
 // Helpers

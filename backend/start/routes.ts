@@ -68,6 +68,11 @@ router
           .post('connections/:id/test', [ConnectionsController, 'test'])
           .use(middleware.rateLimit({ limiter: 'strict' }))
 
+        // Create database on existing connection
+        router
+          .post('connections/:id/create-database', [ConnectionsController, 'createDatabase'])
+          .use(middleware.rateLimit({ limiter: 'strict' }))
+
         // Backup manual - rateLimit de backup (5 req/5min)
         router
           .post('connections/:id/backup', [ConnectionsController, 'backup'])

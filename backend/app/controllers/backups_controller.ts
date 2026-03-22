@@ -265,6 +265,30 @@ export default class BackupsController {
       })
     }
 
+    // Resolver conexão de destino (pode ser diferente da origem)
+    // Cast necessário: Lucid declara o campo como BelongsTo<T>, mas após preload o valor é a instância da conexão
+    let targetConnection = backup.connection as unknown as Connection
+
+    if (payload.targetConnectionId && payload.targetConnectionId !== backup.connectionId) {
+      const specifiedConnection = await Connection.find(payload.targetConnectionId)
+
+      if (!specifiedConnection) {
+        return response.notFound({
+          success: false,
+          message: 'Conexão de destino não encontrada',
+        })
+      }
+
+      if (specifiedConnection.type !== backup.connection.type) {
+        return response.unprocessableEntity({
+          success: false,
+          message: `O tipo da conexão de destino (${specifiedConnection.type}) deve ser igual ao da conexão original do backup (${backup.connection.type})`,
+        })
+      }
+
+      targetConnection = specifiedConnection
+    }
+
     const options: RestoreOptions = {
       mode: payload.mode ?? 'full',
       targetDatabase: payload.targetDatabase,
@@ -282,7 +306,7 @@ export default class BackupsController {
     const emitter = new RestoreProgressEmitter(
       backup.id,
       targetDb,
-      backup.connection.name
+      targetConnection.name
     )
 
     // Notificar início (toast + progresso SSE)
@@ -291,7 +315,7 @@ export default class BackupsController {
     // Executar restauração em background (não aguarda)
     const restoreService = new RestoreService()
     restoreService
-      .restore(backup, backup.connection, options, emitter)
+      .restore(backup, targetConnection, options, emitter)
       .catch((error) => {
         const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido'
         logger.error(`[Restore] Erro não tratado na restauração em background: ${errorMessage}`)

@@ -11,6 +11,7 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
+    CreateDatabaseDialog: typeof import('./components/common/CreateDatabaseDialog.vue')['default']
     NotificationToast: typeof import('./components/NotificationToast.vue')['default']
     ReloadPrompt: typeof import('./components/common/ReloadPrompt.vue')['default']
     RestoreProgressOverlay: typeof import('./components/RestoreProgressOverlay.vue')['default']

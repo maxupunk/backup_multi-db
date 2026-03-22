@@ -12,6 +12,8 @@ export const restoreBackupValidator = vine.compile(
   vine.object({
     /** Modo de restauração */
     mode: vine.enum(restoreModes).optional(),
+    /** ID da conexão de destino (se diferente da conexão original) */
+    targetConnectionId: vine.number().positive().optional(),
     /** Database de destino (sobrescreve o original) */
     targetDatabase: vine.string().trim().minLength(1).maxLength(100).optional(),
     /** PostgreSQL: Não restaurar owners */

@@ -7,10 +7,12 @@ import {
   updateConnectionValidator,
   listConnectionsValidator,
   discoverDatabasesValidator,
+  createDatabaseValidator,
 } from '#validators/connection_validator'
 import { BackupService } from '#services/backup_service'
 import { AuditService } from '#services/audit_service'
 import { NotificationService } from '#services/notification_service'
+import { DatabaseManagementService } from '#services/database_management_service'
 
 /**
  * Controller para gerenciamento de conexões de banco de dados
@@ -602,6 +604,62 @@ export default class ConnectionsController {
         error: error instanceof Error ? error.message : 'Erro desconhecido',
       })
     }
+  }
+
+  /**
+   * POST /api/connections/:id/create-database
+   * Cria um banco de dados novo na conexão existente.
+   * O nome é validado para evitar nomes inválidos.
+   */
+  async createDatabase(ctx: HttpContext) {
+    const { params, request, response } = ctx
+
+    const connection = await Connection.find(params.id)
+
+    if (!connection) {
+      return response.notFound({
+        success: false,
+        message: 'Conexão não encontrada',
+      })
+    }
+
+    const { databaseName } = await request.validateUsing(createDatabaseValidator)
+
+    const service = new DatabaseManagementService()
+
+    const alreadyExists = await service.databaseExists(connection, databaseName)
+    if (alreadyExists) {
+      return response.unprocessableEntity({
+        success: false,
+        message: `O banco de dados "${databaseName}" já existe nesta conexão`,
+      })
+    }
+
+    const result = await service.createDatabase(connection, databaseName)
+
+    if (!result.success) {
+      return response.unprocessableEntity({
+        success: false,
+        message: result.error ?? 'Falha ao criar o banco de dados',
+      })
+    }
+
+    await AuditService.log(
+      {
+        action: 'connection.updated',
+        entityType: 'connection',
+        entityId: connection.id,
+        entityName: connection.name,
+        description: `Banco de dados "${databaseName}" criado via conexão "${connection.name}"`,
+      },
+      ctx
+    )
+
+    return response.created({
+      success: true,
+      message: `Banco de dados "${databaseName}" criado com sucesso`,
+      data: { databaseName },
+    })
   }
 
   /**

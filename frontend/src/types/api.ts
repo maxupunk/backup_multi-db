@@ -217,6 +217,8 @@ export type RestoreMode = 'full' | 'schema-only' | 'data-only'
  */
 export interface RestoreOptions {
   mode?: RestoreMode
+  /** ID da conexão de destino (se diferente da conexão original do backup) */
+  targetConnectionId?: number
   targetDatabase?: string
   noOwner?: boolean
   noPrivileges?: boolean

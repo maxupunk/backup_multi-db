@@ -86,3 +86,18 @@ export const discoverDatabasesValidator = vine.compile(
     password: vine.string().optional(),
   })
 )
+
+/**
+ * Validator para criação de banco de dados via conexão existente.
+ * O nome deve seguir convenções de identificadores válidos para MySQL/PostgreSQL.
+ */
+export const createDatabaseValidator = vine.compile(
+  vine.object({
+    databaseName: vine
+      .string()
+      .trim()
+      .minLength(1)
+      .maxLength(63)
+      .regex(/^[a-zA-Z_][a-zA-Z0-9_-]*$/),
+  })
+)

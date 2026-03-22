@@ -231,6 +231,22 @@ export const connectionsApi = {
       body: JSON.stringify(payload),
     })
   },
+
+  /**
+   * Cria um novo banco de dados na conexão especificada
+   */
+  async createDatabase (
+    connectionId: number,
+    databaseName: string,
+  ): Promise<ApiResponse<{ databaseName: string }>> {
+    return request<ApiResponse<{ databaseName: string }>>(
+      `/connections/${connectionId}/create-database`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ databaseName }),
+      },
+    )
+  },
 }
 
 export const storageDestinationsApi = {
