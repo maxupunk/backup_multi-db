@@ -10,6 +10,12 @@
       </v-col>
 
       <v-col cols="12" sm="auto">
+        <v-btn :block="!smAndUp" color="secondary" prepend-icon="mdi-database-import-outline" variant="tonal" @click="openImportDialog">
+          Importar
+        </v-btn>
+      </v-col>
+
+      <v-col cols="12" sm="auto">
         <v-btn :block="!smAndUp" color="primary" :loading="loading" prepend-icon="mdi-refresh" @click="loadBackups">
           Atualizar
         </v-btn>
@@ -142,6 +148,10 @@
           <template v-if="item.metadata?.isRestoreSafetyBackup">
             <v-icon color="teal" icon="mdi-shield-check" size="20" />
             <v-tooltip activator="parent" location="top">Backup de segurança (restauração)</v-tooltip>
+          </template>
+          <template v-else-if="item.metadata?.isImported">
+            <v-icon color="purple" icon="mdi-database-import-outline" size="20" />
+            <v-tooltip activator="parent" location="top">Importado</v-tooltip>
           </template>
           <template v-else-if="item.trigger === 'scheduled'">
             <v-icon color="info" icon="mdi-clock-outline" size="20" />
@@ -299,6 +309,10 @@
                   <v-icon size="16" class="mr-1" color="teal" icon="mdi-shield-check" />
                   Segurança (restauração)
                 </template>
+                <template v-else-if="backupDetail.metadata?.isImported">
+                  <v-icon size="16" class="mr-1" color="purple" icon="mdi-database-import-outline" />
+                  Importado
+                </template>
                 <template v-else-if="backupDetail.trigger === 'scheduled'">
                   <v-icon size="16" class="mr-1" color="info" icon="mdi-clock-outline" />
                   Agendado
@@ -394,6 +408,9 @@
 
     <!-- Restore Dialog -->
     <RestoreDialog ref="restoreDialogRef" @success="loadBackups" />
+
+    <!-- Import Dialog -->
+    <ImportBackupDialog ref="importDialogRef" @success="loadBackups" />
   </div>
 </template>
 
@@ -404,6 +421,7 @@ import { useDisplay } from 'vuetify'
 import { backupsApi, connectionsApi } from '@/services/api'
 import { useNotifier } from '@/composables/useNotifier'
 import RestoreDialog from '@/components/backups/RestoreDialog.vue'
+import ImportBackupDialog from '@/components/backups/ImportBackupDialog.vue'
 import { useNotificationStore } from '@/stores/notification'
 import {
   backupStatusOptions,
@@ -539,6 +557,13 @@ const restoreDialogRef = ref<InstanceType<typeof RestoreDialog> | null>(null)
 
 function openRestoreDialog(backup: Backup) {
   restoreDialogRef.value?.open(backup, connections.value)
+}
+
+// Import
+const importDialogRef = ref<InstanceType<typeof ImportBackupDialog> | null>(null)
+
+function openImportDialog() {
+  importDialogRef.value?.open(connections.value)
 }
 
 // Helpers

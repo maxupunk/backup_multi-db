@@ -20,6 +20,7 @@ export default class extends BaseSchema {
           'backup.failed',
           'backup.deleted',
           'backup.downloaded',
+          'backup.imported',
           'settings.updated',
         ])
         .notNullable()

@@ -14,6 +14,7 @@ export type AuditAction =
   | 'backup.failed'
   | 'backup.deleted'
   | 'backup.downloaded'
+  | 'backup.imported'
   | 'settings.updated'
 
 /**
@@ -95,6 +96,7 @@ export default class AuditLog extends BaseModel {
       'backup.failed': 'Backup falhou',
       'backup.deleted': 'Backup removido',
       'backup.downloaded': 'Backup baixado',
+      'backup.imported': 'Backup importado',
       'settings.updated': 'Configurações atualizadas',
     }
     return descriptions[action]
@@ -114,6 +116,7 @@ export default class AuditLog extends BaseModel {
       'backup.failed': 'mdi-alert-circle',
       'backup.deleted': 'mdi-delete',
       'backup.downloaded': 'mdi-download',
+      'backup.imported': 'mdi-database-import',
       'settings.updated': 'mdi-cog',
     }
     return icons[action]

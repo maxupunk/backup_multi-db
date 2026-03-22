@@ -444,6 +444,7 @@
     { title: 'Backup Falhou', value: 'backup.failed', entity: 'backup' },
     { title: 'Backup Removido', value: 'backup.deleted', entity: 'backup' },
     { title: 'Backup Baixado', value: 'backup.downloaded', entity: 'backup' },
+    { title: 'Backup Importado', value: 'backup.imported', entity: 'backup' },
     { title: 'Configurações Atualizadas', value: 'settings.updated', entity: 'settings' },
   ]
 

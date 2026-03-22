@@ -45,9 +45,10 @@ const bodyParserConfig = defineConfig({
 
     /**
      * Maximum limit of data to parse including all files
-     * and fields
+     * and fields.
+     * Aumentado para suportar importação de arquivos de backup grandes.
      */
-    limit: '20mb',
+    limit: '500mb',
     types: ['multipart/form-data'],
   },
 })

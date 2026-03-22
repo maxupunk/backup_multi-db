@@ -353,6 +353,31 @@ export interface BackupResult {
   checksum: string
 }
 
+/**
+ * Formatos de arquivo de backup suportados para importação
+ */
+export type ImportedFileFormat = 'sql' | 'sql.gz' | 'dump' | 'zip' | 'tar'
+
+/**
+ * Resultado de verificação de integridade de um arquivo importado
+ */
+export interface IntegrityCheckResult {
+  valid: boolean
+  message: string
+  warnings?: string[]
+}
+
+/**
+ * Resultado da importação de um arquivo de backup
+ */
+export interface ImportBackupResult {
+  backup: Backup
+  format: ImportedFileFormat
+  checksum: string
+  fileSize: number
+  integrity: IntegrityCheckResult | null
+}
+
 // ==================== Audit Logs ====================
 
 /**
@@ -368,6 +393,7 @@ export type AuditAction
     | 'backup.failed'
     | 'backup.deleted'
     | 'backup.downloaded'
+    | 'backup.imported'
     | 'settings.updated'
 
 /**

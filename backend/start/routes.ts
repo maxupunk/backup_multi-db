@@ -87,6 +87,11 @@ router
           .use(middleware.rateLimit({ limiter: 'strict' }))
         router.delete('backups/:id', [BackupsController, 'destroy'])
 
+        // Importação de backup externo (multipart) — deve vir antes de :id
+        router
+          .post('backups/import', [BackupsController, 'import'])
+          .use(middleware.rateLimit({ limiter: 'backup' }))
+
         // ==================== Dashboard Stats ====================
         router.get('/stats', async () => {
           const connectionModule = await import('#models/connection')

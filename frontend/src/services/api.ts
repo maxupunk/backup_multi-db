@@ -16,6 +16,7 @@ import type {
   CreateConnectionPayload,
   CreateStorageDestinationPayload,
   DashboardStats,
+  ImportBackupResult,
   LoginPayload,
   PaginatedResponse,
   RegisterPayload,
@@ -434,6 +435,33 @@ export const backupsApi = {
       method: 'POST',
       body: JSON.stringify(options ?? {}),
     })
+  },
+
+  /**
+   * Importa um arquivo de backup externo para o sistema.
+   * Envia multipart/form-data com o arquivo e metadados.
+   */
+  async import (formData: FormData): Promise<ApiResponse<ImportBackupResult>> {
+    const url = `${API_BASE}/backups/import`
+    const token = localStorage.getItem('token')
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        Accept: 'application/json',
+        // Não definir Content-Type: o browser seta multipart/form-data com boundary automaticamente
+      },
+      body: formData,
+    })
+
+    const data = await response.json()
+
+    if (!response.ok) {
+      throw new ApiError(extractErrorMessage(data), response.status, data)
+    }
+
+    return data as ApiResponse<ImportBackupResult>
   },
 }
 

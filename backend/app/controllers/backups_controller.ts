@@ -6,7 +6,9 @@ import { AuditService } from '#services/audit_service'
 import { StorageDestinationService } from '#services/storage_destination_service'
 import { RestoreService, type RestoreOptions } from '#services/restore_service'
 import { RestoreProgressEmitter } from '#services/restore_progress_emitter'
+import { BackupImportService } from '#services/backup_import_service'
 import { restoreBackupValidator } from '#validators/restore_validator'
+import { importBackupValidator } from '#validators/import_validator'
 import logger from '@adonisjs/core/services/logger'
 import type { Readable } from 'node:stream'
 
@@ -331,5 +333,95 @@ export default class BackupsController {
         databaseName: targetDb,
       },
     })
+  }
+
+  /**
+   * POST /api/backups/import
+   * Importa um arquivo de backup externo e o registra no sistema.
+   *
+   * Formatos suportados: .sql | .sql.gz | .gz | .dump | .pgdump | .zip | .tar | .tar.gz | .tgz
+   *
+   * Aceita multipart/form-data com:
+   *   - file          : arquivo de backup
+   *   - connectionId  : ID da conexão de banco
+   *   - databaseName  : nome do database
+   *   - verifyIntegrity (optional, default false): verifica magic bytes / SQL content
+   */
+  async import(ctx: HttpContext) {
+    const { request, response } = ctx
+
+    // Validar campos do formulário
+    const payload = await request.validateUsing(importBackupValidator)
+
+    // Recuperar o arquivo enviado
+    const file = request.file('file', {
+      size: '500mb',
+      extnames: ['sql', 'gz', 'dump', 'pgdump', 'pg_dump', 'zip', 'tar', 'tgz'],
+    })
+
+    if (!file) {
+      return response.unprocessableEntity({
+        success: false,
+        message: 'Nenhum arquivo enviado. Inclua o campo "file" no formulário multipart.',
+      })
+    }
+
+    // Validar que o arquivo foi processado sem erros pelo multipart parser
+    if (file.hasErrors) {
+      const firstError = file.errors[0]
+      return response.unprocessableEntity({
+        success: false,
+        message: firstError?.message ?? 'Arquivo inválido',
+      })
+    }
+
+    // Verificar conexão
+    const connection = await Connection.find(payload.connectionId)
+
+    if (!connection) {
+      return response.notFound({
+        success: false,
+        message: 'Conexão não encontrada',
+      })
+    }
+
+    try {
+      const importService = new BackupImportService()
+
+      const result = await importService.import(file, connection, {
+        connectionId: payload.connectionId,
+        databaseName: payload.databaseName,
+        verifyIntegrity: payload.verifyIntegrity ?? false,
+      })
+
+      // Auditoria
+      await AuditService.logBackupImported(result.backup.id, connection.name, ctx)
+
+      return response.created({
+        success: true,
+        message: 'Backup importado com sucesso',
+        data: {
+          backup: result.backup.serialize(),
+          format: result.format,
+          checksum: result.checksum,
+          fileSize: result.fileSize,
+          integrity: result.integrityResult
+            ? {
+                valid: result.integrityResult.valid,
+                message: result.integrityResult.message,
+                warnings: result.integrityResult.warnings,
+              }
+            : null,
+        },
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Erro ao importar backup'
+      logger.error(`[Import] ${message}`)
+
+      return response.unprocessableEntity({
+        success: false,
+        message,
+      })
+    }
   }
 }

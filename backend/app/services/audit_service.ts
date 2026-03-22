@@ -242,6 +242,26 @@ export class AuditService {
     )
   }
 
+  /**
+   * Registra importação de arquivo de backup externo
+   */
+  static async logBackupImported(
+    backupId: number,
+    connectionName: string,
+    ctx?: HttpContext
+  ): Promise<AuditLog> {
+    return this.log(
+      {
+        action: 'backup.imported',
+        entityType: 'backup',
+        entityId: backupId,
+        entityName: connectionName,
+        description: `Arquivo de backup importado para a conexão "${connectionName}"`,
+      },
+      ctx
+    )
+  }
+
   // ==================== Métodos de Configurações ====================
 
   /**
