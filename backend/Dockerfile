@@ -19,12 +19,22 @@
 FROM node:25.8.1-trixie AS base
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    default-mysql-client \
-    postgresql-client \
-    openssl \
-    python3 \
-    build-essential \
-    && rm -rf /var/lib/apt/lists/*
+        ca-certificates \
+        curl \
+        gnupg \
+        && install -d /usr/share/postgresql-common/pgdg \
+        && curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+            | gpg --dearmor -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg \
+        && . /etc/os-release \
+        && echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" \
+            > /etc/apt/sources.list.d/pgdg.list \
+        && apt-get update && apt-get install -y --no-install-recommends \
+        default-mysql-client \
+        postgresql-client-18 \
+        openssl \
+        python3 \
+        build-essential \
+        && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
