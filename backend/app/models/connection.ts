@@ -174,6 +174,15 @@ export default class Connection extends BaseModel {
   }
 
   /**
+   * Retorna os argumentos de SSL para clientes MySQL/MariaDB (mysql / mysqldump).
+   * Usa SSL somente quando explicitamente habilitado via options.ssl.
+   * Por padrão desabilita SSL para evitar falha em servidores sem suporte.
+   */
+  getMysqlSslArgs(): string[] {
+    return this.options?.ssl === true ? [] : ['--skip-ssl']
+  }
+
+  /**
    * Converte frequência para milissegundos
    */
   getScheduleIntervalMs(): number | null {

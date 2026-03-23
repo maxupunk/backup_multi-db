@@ -269,6 +269,7 @@ export class RestoreService {
           '-P', connection.port.toString(),
           '-u', connection.username,
           `--password=${password}`,
+          ...connection.getMysqlSslArgs(),
           '-e', 'SELECT 1',
           databaseName,
         ]
@@ -315,6 +316,7 @@ export class RestoreService {
         '-P', connection.port.toString(),
         '-u', connection.username,
         `--password=${password}`,
+        ...connection.getMysqlSslArgs(),
         '-e', `DROP DATABASE IF EXISTS \`${safeName}\`; CREATE DATABASE \`${safeName}\`;`,
       ]
       env = { ...process.env }
@@ -699,6 +701,7 @@ export class RestoreService {
         '-P', connection.port.toString(),
         '-u', connection.username,
         `--password=${password}`,
+        ...connection.getMysqlSslArgs(),
         targetDatabase,
       ],
       env: processEnv,
