@@ -15,6 +15,7 @@ export interface RestoreFormOptions {
   noComments: boolean
   noCreateDb: boolean
   skipSafetyBackup: boolean
+  clearBeforeRestore: boolean
 }
 
 const DEFAULT_FORM: RestoreFormOptions = {
@@ -27,6 +28,7 @@ const DEFAULT_FORM: RestoreFormOptions = {
   noComments: false,
   noCreateDb: false,
   skipSafetyBackup: false,
+  clearBeforeRestore: false,
 }
 
 /**
@@ -169,6 +171,10 @@ export function useRestoreDialog(onSuccess?: () => void) {
 
     if (form.skipSafetyBackup) {
       payload.skipSafetyBackup = true
+    }
+
+    if (form.clearBeforeRestore) {
+      payload.clearBeforeRestore = true
     }
 
     if (targetDbType.value === 'postgresql') {

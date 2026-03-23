@@ -226,6 +226,8 @@ export interface RestoreOptions {
   noComments?: boolean
   noCreateDb?: boolean
   skipSafetyBackup?: boolean
+  /** Limpar o banco de destino antes de restaurar */
+  clearBeforeRestore?: boolean
 }
 
 /**

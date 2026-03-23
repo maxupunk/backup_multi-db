@@ -28,5 +28,7 @@ export const restoreBackupValidator = vine.compile(
     noCreateDb: vine.boolean().optional(),
     /** Pular verificação e backup de segurança antes da restauração */
     skipSafetyBackup: vine.boolean().optional(),
+    /** Limpar o banco de destino antes de restaurar (DROP + recriar schema/database) */
+    clearBeforeRestore: vine.boolean().optional(),
   })
 )

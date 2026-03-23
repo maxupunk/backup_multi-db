@@ -300,6 +300,7 @@ export default class BackupsController {
       noComments: payload.noComments,
       noCreateDb: payload.noCreateDb,
       skipSafetyBackup: payload.skipSafetyBackup,
+      clearBeforeRestore: payload.clearBeforeRestore,
     }
 
     const targetDb = options.targetDatabase || backup.databaseName

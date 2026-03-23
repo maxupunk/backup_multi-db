@@ -134,6 +134,13 @@
         <v-divider class="my-3" />
 
         <v-checkbox
+          v-model="form.clearBeforeRestore"
+          color="warning"
+          density="compact"
+          hide-details
+          label="Limpar banco de destino antes de restaurar (remove todos os dados existentes)"
+        />
+        <v-checkbox
           v-model="form.skipSafetyBackup"
           color="error"
           density="compact"

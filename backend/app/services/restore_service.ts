@@ -35,6 +35,8 @@ export interface RestoreOptions {
   noCreateDb?: boolean
   /** Pular verificação e backup de segurança antes da restauração */
   skipSafetyBackup?: boolean
+  /** Limpar o banco de destino antes de restaurar (DROP + recriar schema/database) */
+  clearBeforeRestore?: boolean
 }
 
 /**
@@ -147,7 +149,15 @@ export class RestoreService {
         }
       }
 
-      // 3. Preparar stream
+      // 3. Limpar banco de destino, se solicitado
+      if (options.clearBeforeRestore) {
+        logger.info(`[Restore] Limpando banco de dados "${targetDb}" antes da restauração...`)
+        emitter?.clearingDatabase()
+        await this.clearDatabase(connection, targetDb)
+        logger.info(`[Restore] Banco de dados "${targetDb}" limpo com sucesso.`)
+      }
+
+      // 4. Preparar stream
       emitter?.preparing()
 
       // 4. Obter o stream do arquivo de backup
@@ -269,6 +279,60 @@ export class RestoreService {
 
       proc.on('error', () => resolve(false))
       proc.on('close', (code) => resolve(code === 0))
+    })
+  }
+
+  /**
+   * Limpa todos os objetos do banco de destino antes da restauração.
+   * PostgreSQL: descarta e recria o schema public.
+   * MySQL/MariaDB: dropa e recria o database.
+   */
+  private clearDatabase(connection: Connection, databaseName: string): Promise<void> {
+    const password = connection.getDecryptedPassword()
+    let command: string
+    let args: string[]
+    let env: NodeJS.ProcessEnv
+
+    if (connection.type === 'postgresql') {
+      command = 'psql'
+      args = [
+        '-h', connection.host,
+        '-p', connection.port.toString(),
+        '-U', connection.username,
+        '-d', databaseName,
+        '--no-password',
+        '-c', 'DROP SCHEMA public CASCADE;',
+        '-c', 'CREATE SCHEMA public;',
+        '-c', 'GRANT ALL ON SCHEMA public TO public;',
+      ]
+      env = { ...process.env, PGPASSWORD: password }
+    } else {
+      // MySQL / MariaDB: escapa backticks no nome do banco para evitar SQL injection
+      const safeName = databaseName.replace(/`/g, '``')
+      command = 'mysql'
+      args = [
+        '-h', connection.host,
+        '-P', connection.port.toString(),
+        '-u', connection.username,
+        `--password=${password}`,
+        '-e', `DROP DATABASE IF EXISTS \`${safeName}\`; CREATE DATABASE \`${safeName}\`;`,
+      ]
+      env = { ...process.env }
+    }
+
+    return new Promise<void>((resolve, reject) => {
+      const proc = spawn(command, args, { env, stdio: ['ignore', 'pipe', 'pipe'] })
+      const stderr: string[] = []
+
+      proc.stderr?.on('data', (chunk: Buffer) => stderr.push(chunk.toString()))
+      proc.on('error', (err) => reject(err))
+      proc.on('close', (code) => {
+        if (code === 0) {
+          resolve()
+        } else {
+          reject(new Error(`Falha ao limpar o banco de dados (exit code ${code}): ${stderr.join('').trim()}`))
+        }
+      })
     })
   }
 

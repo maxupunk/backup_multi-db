@@ -8,6 +8,7 @@ import { NotificationService, NOTIFICATION_CHANNELS } from '#services/notificati
 export type RestoreStageKey =
   | 'validating'
   | 'safety_backup'
+  | 'clearing'
   | 'preparing'
   | 'restoring'
   | 'completed'
@@ -95,6 +96,13 @@ export class RestoreProgressEmitter {
    */
   safetyBackupFailed(): void {
     this.emitProgress('safety_backup', 0, 'Backup de segurança falhou')
+  }
+
+  /**
+   * Estágio: limpando banco de dados antes da restauração
+   */
+  clearingDatabase(): void {
+    this.emitProgress('clearing', 0, 'Limpando banco de dados...')
   }
 
   /**

@@ -17,6 +17,7 @@ export type OperationType = 'backup' | 'restore'
 export type RestoreStageKey =
   | 'validating'
   | 'safety_backup'
+  | 'clearing'
   | 'preparing'
   | 'restoring'
   | 'completed'
@@ -93,6 +94,7 @@ export interface BackupProgressEvent {
 export const RESTORE_STAGES: StageDefinition[] = [
   { key: 'validating', label: 'Validando backup', icon: 'mdi-check-circle-outline' },
   { key: 'safety_backup', label: 'Backup de segurança', icon: 'mdi-shield-check' },
+  { key: 'clearing', label: 'Limpando banco de dados', icon: 'mdi-database-remove-outline' },
   { key: 'preparing', label: 'Preparando dados', icon: 'mdi-database-import-outline' },
   { key: 'restoring', label: 'Restaurando', icon: 'mdi-backup-restore' },
 ]
@@ -109,9 +111,10 @@ export const BACKUP_STAGES: StageDefinition[] = [
 const RESTORE_STAGE_ORDER: Record<string, number> = {
   validating: 0,
   safety_backup: 1,
-  preparing: 2,
-  restoring: 3,
-  completed: 4,
+  clearing: 2,
+  preparing: 3,
+  restoring: 4,
+  completed: 5,
   failed: -1,
 }
 
