@@ -29,10 +29,7 @@ export default class extends BaseSchema {
         .comment('ID do database específico backupeado')
 
       // Nome do database (denormalizado para facilitar exibição)
-      table
-        .string('database_name', 100)
-        .notNullable()
-        .comment('Nome do banco de dados backupeado')
+      table.string('database_name', 100).notNullable().comment('Nome do banco de dados backupeado')
 
       // Status do backup
       table

@@ -145,7 +145,9 @@ export class RestoreService {
               `arquivo: ${safetyResult.backup.fileName}`
           )
         } else {
-          logger.info(`[Restore] Database "${targetDb}" não existe. Restauração prosseguirá sem backup de segurança.`)
+          logger.info(
+            `[Restore] Database "${targetDb}" não existe. Restauração prosseguirá sem backup de segurança.`
+          )
         }
       }
 
@@ -165,9 +167,10 @@ export class RestoreService {
 
       // 5. Inserir contagem de bytes para progresso (antes da descompressão)
       const totalBytes = backup.fileSize ?? 0
-      const trackedStream = emitter && totalBytes > 0
-        ? backupStream.pipe(this.createProgressTrackingStream(totalBytes, emitter))
-        : backupStream
+      const trackedStream =
+        emitter && totalBytes > 0
+          ? backupStream.pipe(this.createProgressTrackingStream(totalBytes, emitter))
+          : backupStream
 
       // 6. Descomprimir se necessário
       const sqlStream = backup.compressed ? trackedStream.pipe(createGunzip()) : trackedStream
@@ -251,26 +254,35 @@ export class RestoreService {
         // Conecta diretamente no database — se não existir, o processo falha
         command = 'psql'
         args = [
-          '-h', connection.host,
-          '-p', connection.port.toString(),
-          '-U', connection.username,
-          '-d', databaseName,
+          '-h',
+          connection.host,
+          '-p',
+          connection.port.toString(),
+          '-U',
+          connection.username,
+          '-d',
+          databaseName,
           '--no-password',
           '--tuples-only',
           '--quiet',
-          '-c', 'SELECT 1',
+          '-c',
+          'SELECT 1',
         ]
         env = { ...process.env, PGPASSWORD: password }
       } else {
         // MySQL / MariaDB: tenta usar o database
         command = 'mysql'
         args = [
-          '-h', connection.host,
-          '-P', connection.port.toString(),
-          '-u', connection.username,
+          '-h',
+          connection.host,
+          '-P',
+          connection.port.toString(),
+          '-u',
+          connection.username,
           `--password=${password}`,
           ...connection.getMysqlSslArgs(),
-          '-e', 'SELECT 1',
+          '-e',
+          'SELECT 1',
           databaseName,
         ]
         env = { ...process.env }
@@ -297,14 +309,21 @@ export class RestoreService {
     if (connection.type === 'postgresql') {
       command = 'psql'
       args = [
-        '-h', connection.host,
-        '-p', connection.port.toString(),
-        '-U', connection.username,
-        '-d', databaseName,
+        '-h',
+        connection.host,
+        '-p',
+        connection.port.toString(),
+        '-U',
+        connection.username,
+        '-d',
+        databaseName,
         '--no-password',
-        '-c', 'DROP SCHEMA public CASCADE;',
-        '-c', 'CREATE SCHEMA public;',
-        '-c', 'GRANT ALL ON SCHEMA public TO public;',
+        '-c',
+        'DROP SCHEMA public CASCADE;',
+        '-c',
+        'CREATE SCHEMA public;',
+        '-c',
+        'GRANT ALL ON SCHEMA public TO public;',
       ]
       env = { ...process.env, PGPASSWORD: password }
     } else {
@@ -312,12 +331,16 @@ export class RestoreService {
       const safeName = databaseName.replace(/`/g, '``')
       command = 'mysql'
       args = [
-        '-h', connection.host,
-        '-P', connection.port.toString(),
-        '-u', connection.username,
+        '-h',
+        connection.host,
+        '-P',
+        connection.port.toString(),
+        '-u',
+        connection.username,
         `--password=${password}`,
         ...connection.getMysqlSslArgs(),
-        '-e', `DROP DATABASE IF EXISTS \`${safeName}\`; CREATE DATABASE \`${safeName}\`;`,
+        '-e',
+        `DROP DATABASE IF EXISTS \`${safeName}\`; CREATE DATABASE \`${safeName}\`;`,
       ]
       env = { ...process.env }
     }
@@ -332,7 +355,11 @@ export class RestoreService {
         if (code === 0) {
           resolve()
         } else {
-          reject(new Error(`Falha ao limpar o banco de dados (exit code ${code}): ${stderr.join('').trim()}`))
+          reject(
+            new Error(
+              `Falha ao limpar o banco de dados (exit code ${code}): ${stderr.join('').trim()}`
+            )
+          )
         }
       })
     })
@@ -358,7 +385,10 @@ export class RestoreService {
 
     // Tentar buscar do storage remoto
     if (destination) {
-      const download = await StorageDestinationService.getDownloadStream(destination, backup.filePath)
+      const download = await StorageDestinationService.getDownloadStream(
+        destination,
+        backup.filePath
+      )
       return download.stream
     }
 
@@ -368,11 +398,7 @@ export class RestoreService {
   /**
    * Aplica filtros de transformação no stream SQL baseado nas opções
    */
-  private applyFilters(
-    stream: Readable,
-    dbType: string,
-    options: RestoreOptions
-  ): Readable {
+  private applyFilters(stream: Readable, dbType: string, options: RestoreOptions): Readable {
     let currentStream: Readable = stream
 
     if (options.mode === 'schema-only') {
@@ -386,9 +412,7 @@ export class RestoreService {
         currentStream = currentStream.pipe(this.createLineFilter(/^\s*ALTER\s+.*\s+OWNER\s+TO\s+/i))
       }
       if (options.noPrivileges) {
-        currentStream = currentStream.pipe(
-          this.createLineFilter(/^\s*(GRANT|REVOKE)\s+/i)
-        )
+        currentStream = currentStream.pipe(this.createLineFilter(/^\s*(GRANT|REVOKE)\s+/i))
       }
       if (options.noTablespaces) {
         currentStream = currentStream.pipe(
@@ -401,9 +425,7 @@ export class RestoreService {
     }
 
     if ((dbType === 'mysql' || dbType === 'mariadb') && options.noCreateDb) {
-      currentStream = currentStream.pipe(
-        this.createLineFilter(/^\s*(CREATE\s+DATABASE|USE\s+`)/i)
-      )
+      currentStream = currentStream.pipe(this.createLineFilter(/^\s*(CREATE\s+DATABASE|USE\s+`)/i))
     }
 
     return currentStream
@@ -682,12 +704,17 @@ export class RestoreService {
       return {
         command: 'psql',
         args: [
-          '-h', connection.host,
-          '-p', connection.port.toString(),
-          '-U', connection.username,
-          '-d', targetDatabase,
+          '-h',
+          connection.host,
+          '-p',
+          connection.port.toString(),
+          '-U',
+          connection.username,
+          '-d',
+          targetDatabase,
           '--no-password',
-          '-v', 'ON_ERROR_STOP=1',
+          '-v',
+          'ON_ERROR_STOP=1',
         ],
         env: { ...processEnv, PGPASSWORD: password },
       }
@@ -697,9 +724,12 @@ export class RestoreService {
     return {
       command: 'mysql',
       args: [
-        '-h', connection.host,
-        '-P', connection.port.toString(),
-        '-u', connection.username,
+        '-h',
+        connection.host,
+        '-P',
+        connection.port.toString(),
+        '-u',
+        connection.username,
         `--password=${password}`,
         ...connection.getMysqlSslArgs(),
         targetDatabase,
@@ -739,7 +769,8 @@ export class RestoreService {
           success: false,
           databaseName,
           durationSeconds: 0,
-          error: `Falha ao executar ${config.command}: ${error.message}. ` +
+          error:
+            `Falha ao executar ${config.command}: ${error.message}. ` +
             'Verifique se o binário está instalado e no PATH.',
         })
       })

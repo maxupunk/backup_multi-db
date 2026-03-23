@@ -1,4 +1,11 @@
-import { createReadStream, createWriteStream, openSync, readSync, closeSync, statSync } from 'node:fs'
+import {
+  createReadStream,
+  createWriteStream,
+  openSync,
+  readSync,
+  closeSync,
+  statSync,
+} from 'node:fs'
 import { mkdir, rename, unlink } from 'node:fs/promises'
 import { pipeline } from 'node:stream/promises'
 import { createHash } from 'node:crypto'
@@ -113,9 +120,7 @@ export class BackupImportService {
       integrityResult = await this.verifyIntegrity(tmpPath, format)
 
       if (!integrityResult.valid) {
-        logger.warn(
-          `[Import] Falha na verificação de integridade: ${integrityResult.message}`
-        )
+        logger.warn(`[Import] Falha na verificação de integridade: ${integrityResult.message}`)
         throw new Error(`Falha na verificação de integridade: ${integrityResult.message}`)
       }
 
@@ -216,7 +221,10 @@ export class BackupImportService {
 
   // ─── Verificação de integridade ────────────────────────────────────────────
 
-  async verifyIntegrity(filePath: string, format: ImportedFileFormat): Promise<IntegrityCheckResult> {
+  async verifyIntegrity(
+    filePath: string,
+    format: ImportedFileFormat
+  ): Promise<IntegrityCheckResult> {
     try {
       switch (format) {
         case 'sql':
@@ -456,10 +464,7 @@ export class BackupImportService {
       // EXDEV = cross-device rename (e.g. /tmp → volume mount no Docker)
       if ((err as NodeJS.ErrnoException).code !== 'EXDEV') throw err
 
-      await pipeline(
-        createReadStream(tmpPath),
-        createWriteStream(destPath)
-      )
+      await pipeline(createReadStream(tmpPath), createWriteStream(destPath))
       await unlink(tmpPath)
     }
 

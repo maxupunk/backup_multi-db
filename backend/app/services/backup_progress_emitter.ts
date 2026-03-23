@@ -66,7 +66,12 @@ export class BackupProgressEmitter {
 
     this.lastEmitTime = now
     const formattedSize = this.formatBytes(bytesWritten)
-    this.emitProgress('compressing', 0, `Comprimindo dados... ${formattedSize} escritos`, bytesWritten)
+    this.emitProgress(
+      'compressing',
+      0,
+      `Comprimindo dados... ${formattedSize} escritos`,
+      bytesWritten
+    )
   }
 
   /**

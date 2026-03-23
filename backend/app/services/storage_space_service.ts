@@ -112,9 +112,7 @@ export class StorageSpaceService {
     const defaultSpaceInfo = await this.getDestinationSpaceInfo(null)
     if (defaultSpaceInfo) {
       // Verifica se já não existe um destino local padrão cadastrado
-      const hasDefaultLocal = destinations.some(
-        (d) => d.isDefault && d.type === 'local'
-      )
+      const hasDefaultLocal = destinations.some((d) => d.isDefault && d.type === 'local')
       if (!hasDefaultLocal) {
         results.push(defaultSpaceInfo)
       }
@@ -156,7 +154,8 @@ export class StorageSpaceService {
     }
 
     if (spaceInfo.isLowSpace) {
-      result.warning = `Espaço em disco baixo no armazenamento "${spaceInfo.destinationName}": ` +
+      result.warning =
+        `Espaço em disco baixo no armazenamento "${spaceInfo.destinationName}": ` +
         `apenas ${spaceInfo.freePercent.toFixed(1)}% livre (${this.formatBytes(spaceInfo.freeBytes)}). ` +
         `Recomenda-se ter pelo menos ${this.LOW_SPACE_THRESHOLD_PERCENT}% de espaço livre.`
 

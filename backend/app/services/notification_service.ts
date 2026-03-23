@@ -4,16 +4,18 @@ import logger from '@adonisjs/core/services/logger'
 /**
  * Tipo compatível com Broadcastable do Transmit
  */
-type BroadcastableValue = { [key: string]: BroadcastableValue } | string | number | boolean | null | BroadcastableValue[]
+type BroadcastableValue =
+  | { [key: string]: BroadcastableValue }
+  | string
+  | number
+  | boolean
+  | null
+  | BroadcastableValue[]
 
 /**
  * Tipos de notificação suportados
  */
-export type NotificationType =
-  | 'info'
-  | 'success'
-  | 'warning'
-  | 'error'
+export type NotificationType = 'info' | 'success' | 'warning' | 'error'
 
 /**
  * Categorias de notificação para filtro no frontend
@@ -97,10 +99,7 @@ export class NotificationService {
   /**
    * Envia uma notificação para um canal específico e também para o canal global
    */
-  private static broadcast(
-    channel: string,
-    notification: Notification
-  ): void {
+  private static broadcast(channel: string, notification: Notification): void {
     try {
       // Cria um payload limpo sem valores undefined
       // O Transmit Broadcastable não aceita undefined
@@ -167,7 +166,11 @@ export class NotificationService {
   /**
    * Envia uma notificação genérica do sistema
    */
-  static systemInfo(title: string, message: string, data?: Record<string, BroadcastableValue>): void {
+  static systemInfo(
+    title: string,
+    message: string,
+    data?: Record<string, BroadcastableValue>
+  ): void {
     const notification = this.createNotification('info', 'system', title, message, data)
     this.broadcast(NOTIFICATION_CHANNELS.SYSTEM, notification)
   }
@@ -175,7 +178,11 @@ export class NotificationService {
   /**
    * Envia um erro do sistema
    */
-  static systemError(title: string, message: string, data?: Record<string, BroadcastableValue>): void {
+  static systemError(
+    title: string,
+    message: string,
+    data?: Record<string, BroadcastableValue>
+  ): void {
     const notification = this.createNotification('error', 'system', title, message, data)
     this.broadcast(NOTIFICATION_CHANNELS.SYSTEM, notification)
   }
@@ -185,11 +192,7 @@ export class NotificationService {
   /**
    * Notifica que um backup foi iniciado
    */
-  static backupStarted(
-    connectionName: string,
-    connectionId: number,
-    trigger: string
-  ): void {
+  static backupStarted(connectionName: string, connectionId: number, trigger: string): void {
     const notification = this.createNotification(
       'info',
       'backup',
@@ -236,11 +239,7 @@ export class NotificationService {
   /**
    * Notifica que um backup falhou
    */
-  static backupFailed(
-    connectionName: string,
-    connectionId: number,
-    error: string
-  ): void {
+  static backupFailed(connectionName: string, connectionId: number, error: string): void {
     const notification = this.createNotification(
       'error',
       'backup',
@@ -265,18 +264,12 @@ export class NotificationService {
     message: string,
     data?: Record<string, BroadcastableValue>
   ): void {
-    const notification = this.createNotification(
-      'warning',
-      'backup',
-      'Alerta de Backup',
-      message,
-      {
-        event: 'backup.warning',
-        connectionId,
-        connectionName,
-        ...data,
-      }
-    )
+    const notification = this.createNotification('warning', 'backup', 'Alerta de Backup', message, {
+      event: 'backup.warning',
+      connectionId,
+      connectionName,
+      ...data,
+    })
     this.broadcast(NOTIFICATION_CHANNELS.BACKUP, notification)
   }
 
@@ -314,11 +307,7 @@ export class NotificationService {
   /**
    * Notifica erro de armazenamento
    */
-  static storageError(
-    destinationName: string,
-    error: string,
-    destinationId?: number
-  ): void {
+  static storageError(destinationName: string, error: string, destinationId?: number): void {
     const data: Record<string, BroadcastableValue> = {
       event: 'storage.error',
       destinationName,
@@ -386,11 +375,7 @@ export class NotificationService {
   /**
    * Notifica que uma conexão falhou no teste
    */
-  static connectionTestFailed(
-    connectionName: string,
-    connectionId: number,
-    error: string
-  ): void {
+  static connectionTestFailed(connectionName: string, connectionId: number, error: string): void {
     const notification = this.createNotification(
       'error',
       'connection',
@@ -434,11 +419,7 @@ export class NotificationService {
   /**
    * Notifica que uma restauração foi iniciada
    */
-  static restoreStarted(
-    connectionName: string,
-    backupId: number,
-    databaseName: string
-  ): void {
+  static restoreStarted(connectionName: string, backupId: number, databaseName: string): void {
     const notification = this.createNotification(
       'info',
       'restore',

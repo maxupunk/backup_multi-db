@@ -19,16 +19,10 @@ export default class extends BaseSchema {
         .comment('ID da conexão pai')
 
       // Nome do banco de dados
-      table
-        .string('database_name', 100)
-        .notNullable()
-        .comment('Nome do banco de dados')
+      table.string('database_name', 100).notNullable().comment('Nome do banco de dados')
 
       // Se está habilitado para backup
-      table
-        .boolean('enabled')
-        .defaultTo(true)
-        .comment('Se o database está habilitado para backup')
+      table.boolean('enabled').defaultTo(true).comment('Se o database está habilitado para backup')
 
       // Timestamps
       table.timestamp('created_at').notNullable()

@@ -53,7 +53,9 @@ export class DatabaseManagementService {
       })
 
       proc.on('error', (err) => {
-        logger.error(`[DatabaseManagement] Erro ao criar database "${databaseName}": ${err.message}`)
+        logger.error(
+          `[DatabaseManagement] Erro ao criar database "${databaseName}": ${err.message}`
+        )
         resolve({ success: false, error: err.message })
       })
 
@@ -63,7 +65,9 @@ export class DatabaseManagementService {
           resolve({ success: true })
         } else {
           const errorMsg = stderr.trim() || `Processo encerrou com código ${code}`
-          logger.error(`[DatabaseManagement] Falha ao criar database "${databaseName}": ${errorMsg}`)
+          logger.error(
+            `[DatabaseManagement] Falha ao criar database "${databaseName}": ${errorMsg}`
+          )
           resolve({ success: false, error: errorMsg })
         }
       })
@@ -82,14 +86,19 @@ export class DatabaseManagementService {
       return {
         command: 'psql',
         args: [
-          '-h', connection.host,
-          '-p', connection.port.toString(),
-          '-U', connection.username,
-          '-d', databaseName,
+          '-h',
+          connection.host,
+          '-p',
+          connection.port.toString(),
+          '-U',
+          connection.username,
+          '-d',
+          databaseName,
           '--no-password',
           '--tuples-only',
           '--quiet',
-          '-c', 'SELECT 1',
+          '-c',
+          'SELECT 1',
         ],
         env: { ...process.env, PGPASSWORD: password },
       }
@@ -99,11 +108,15 @@ export class DatabaseManagementService {
     return {
       command: 'mysql',
       args: [
-        '-h', connection.host,
-        '-P', connection.port.toString(),
-        '-u', connection.username,
+        '-h',
+        connection.host,
+        '-P',
+        connection.port.toString(),
+        '-u',
+        connection.username,
         `--password=${password}`,
-        '-e', 'SELECT 1',
+        '-e',
+        'SELECT 1',
         databaseName,
       ],
       env: { ...process.env },
@@ -120,11 +133,15 @@ export class DatabaseManagementService {
       return {
         command: 'psql',
         args: [
-          '-h', connection.host,
-          '-p', connection.port.toString(),
-          '-U', connection.username,
+          '-h',
+          connection.host,
+          '-p',
+          connection.port.toString(),
+          '-U',
+          connection.username,
           '--no-password',
-          '-c', `CREATE DATABASE "${databaseName}"`,
+          '-c',
+          `CREATE DATABASE "${databaseName}"`,
         ],
         env: { ...process.env, PGPASSWORD: password },
       }
@@ -134,11 +151,15 @@ export class DatabaseManagementService {
     return {
       command: 'mysql',
       args: [
-        '-h', connection.host,
-        '-P', connection.port.toString(),
-        '-u', connection.username,
+        '-h',
+        connection.host,
+        '-P',
+        connection.port.toString(),
+        '-u',
+        connection.username,
         `--password=${password}`,
-        '-e', `CREATE DATABASE \`${databaseName}\``,
+        '-e',
+        `CREATE DATABASE \`${databaseName}\``,
       ],
       env: { ...process.env },
     }

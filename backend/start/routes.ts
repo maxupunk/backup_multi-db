@@ -83,7 +83,8 @@ router
         router.get('connections/:connectionId/backups', [BackupsController, 'byConnection'])
         router.get('backups/:id', [BackupsController, 'show'])
         router.get('backups/:id/download', [BackupsController, 'download'])
-        router.post('backups/:id/restore', [BackupsController, 'restore'])
+        router
+          .post('backups/:id/restore', [BackupsController, 'restore'])
           .use(middleware.rateLimit({ limiter: 'strict' }))
         router.delete('backups/:id', [BackupsController, 'destroy'])
 
@@ -103,15 +104,21 @@ router
 
           const today = DateTime.now().startOf('day')
 
-          const [totalConnections, activeConnections, totalBackups, backupsToday, recentBackups, storageSpaces] =
-            await Promise.all([
-              Connection.query().count('* as total').first(),
-              Connection.query().where('status', 'active').count('* as total').first(),
-              Backup.query().count('* as total').first(),
-              Backup.query().where('createdAt', '>=', today.toSQL()).count('* as total').first(),
-              Backup.query().preload('connection').orderBy('createdAt', 'desc').limit(5),
-              StorageSpaceService.getAllDestinationsSpaceInfo(),
-            ])
+          const [
+            totalConnections,
+            activeConnections,
+            totalBackups,
+            backupsToday,
+            recentBackups,
+            storageSpaces,
+          ] = await Promise.all([
+            Connection.query().count('* as total').first(),
+            Connection.query().where('status', 'active').count('* as total').first(),
+            Backup.query().count('* as total').first(),
+            Backup.query().where('createdAt', '>=', today.toSQL()).count('* as total').first(),
+            Backup.query().preload('connection').orderBy('createdAt', 'desc').limit(5),
+            StorageSpaceService.getAllDestinationsSpaceInfo(),
+          ])
 
           return {
             success: true,

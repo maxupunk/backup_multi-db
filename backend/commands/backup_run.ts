@@ -33,10 +33,7 @@ export default class BackupRun extends BaseCommand {
         }
       })
 
-      const selectedId = await this.prompt.choice(
-        'Select a connection to backup',
-        choices
-      )
+      const selectedId = await this.prompt.choice('Select a connection to backup', choices)
 
       const connection = connections.find((c) => c.id.toString() === selectedId)
 

@@ -176,7 +176,12 @@ export class BackupService {
       }
 
       if (result.success) {
-        backup.markAsCompleted(result.filePath!, result.fileName!, result.fileSize!, result.checksum)
+        backup.markAsCompleted(
+          result.filePath!,
+          result.fileName!,
+          result.fileSize!,
+          result.checksum
+        )
         await backup.save()
         return { backup, success: true }
       } else {
@@ -238,7 +243,12 @@ export class BackupService {
     try {
       const localBasePath = StorageDestinationService.getLocalBasePath(destination)
       emitter?.dumping()
-      const result = await this.performBackup(connection, connDb.databaseName, localBasePath, emitter)
+      const result = await this.performBackup(
+        connection,
+        connDb.databaseName,
+        localBasePath,
+        emitter
+      )
 
       // Adicionar aviso de espaço baixo ao resultado, se houver
       if (spaceCheck.warning) {
@@ -278,7 +288,7 @@ export class BackupService {
   ): Promise<{ backup: Backup; result: BackupResult }> {
     // Buscar o primeiro database habilitado
     const databases = await connection.getEnabledDatabases()
-    
+
     if (databases.length === 0) {
       // Criar backup de erro se não houver databases
       const backup = new Backup()
@@ -309,7 +319,9 @@ export class BackupService {
   private async createBackupRecord(
     connection: Connection,
     connDb: ConnectionDatabase,
-    destination: Awaited<ReturnType<typeof StorageDestinationService.resolveDestinationForConnection>>,
+    destination: Awaited<
+      ReturnType<typeof StorageDestinationService.resolveDestinationForConnection>
+    >,
     trigger: BackupTrigger
   ): Promise<Backup> {
     const backup = new Backup()
@@ -435,7 +447,11 @@ export class BackupService {
     basePath: string,
     emitter?: BackupProgressEmitter
   ): Promise<BackupResult> {
-    const { fileName, relativePath, fullPath } = this.buildFilePaths(connection, databaseName, basePath)
+    const { fileName, relativePath, fullPath } = this.buildFilePaths(
+      connection,
+      databaseName,
+      basePath
+    )
 
     // Garantir que o diretório da conexão existe
     this.ensureDirectoryExists(join(basePath, connection.id.toString()))
@@ -498,10 +514,14 @@ export class BackupService {
     return {
       command: 'pg_dump',
       args: [
-        '-h', connection.host,
-        '-p', connection.port.toString(),
-        '-U', connection.username,
-        '-d', databaseName,
+        '-h',
+        connection.host,
+        '-p',
+        connection.port.toString(),
+        '-U',
+        connection.username,
+        '-d',
+        databaseName,
         '--no-password',
       ],
       env: { ...env, PGPASSWORD: password },
@@ -520,9 +540,12 @@ export class BackupService {
     return {
       command: 'pg_dumpall',
       args: [
-        '-h', connection.host,
-        '-p', connection.port.toString(),
-        '-U', connection.username,
+        '-h',
+        connection.host,
+        '-p',
+        connection.port.toString(),
+        '-U',
+        connection.username,
         '--no-password',
       ],
       env: { ...env, PGPASSWORD: password },
@@ -541,9 +564,12 @@ export class BackupService {
     return {
       command: 'mysqldump',
       args: [
-        '-h', connection.host,
-        '-P', connection.port.toString(),
-        '-u', connection.username,
+        '-h',
+        connection.host,
+        '-P',
+        connection.port.toString(),
+        '-u',
+        connection.username,
         `--password=${password}`,
         ...connection.getMysqlSslArgs(),
         '--single-transaction',
@@ -567,9 +593,12 @@ export class BackupService {
     return {
       command: 'mysqldump',
       args: [
-        '-h', connection.host,
-        '-P', connection.port.toString(),
-        '-u', connection.username,
+        '-h',
+        connection.host,
+        '-P',
+        connection.port.toString(),
+        '-u',
+        connection.username,
         `--password=${password}`,
         ...connection.getMysqlSslArgs(),
         '--single-transaction',
@@ -603,9 +632,16 @@ export class BackupService {
       let stderrData = ''
 
       // Configurar streams
-      this.setupStreams(dumpProcess, gzip, outputStream, hash, (data) => {
-        stderrData += data
-      }, emitter)
+      this.setupStreams(
+        dumpProcess,
+        gzip,
+        outputStream,
+        hash,
+        (data) => {
+          stderrData += data
+        },
+        emitter
+      )
 
       // Configurar handlers de eventos
       this.setupEventHandlers(
@@ -679,7 +715,8 @@ export class BackupService {
     dumpProcess.on('error', (error) => {
       resolve({
         success: false,
-        error: `Falha ao executar ${context.command}: ${error.message}. ` +
+        error:
+          `Falha ao executar ${context.command}: ${error.message}. ` +
           'Verifique se o binário está instalado e no PATH.',
       })
     })

@@ -49,13 +49,14 @@ module.exports = {
   // Deploy configuration (opcional - para deploy remoto)
   deploy: {
     production: {
-      user: 'node',
-      host: 'localhost',
-      ref: 'origin/main',
-      repo: 'git@github.com:user/repo.git',
-      path: '/var/www/backup-manager',
+      'user': 'node',
+      'host': 'localhost',
+      'ref': 'origin/main',
+      'repo': 'git@github.com:user/repo.git',
+      'path': '/var/www/backup-manager',
       'pre-deploy-local': '',
-      'post-deploy': 'npm install && npm run build && pm2 reload ecosystem.config.cjs --env production',
+      'post-deploy':
+        'npm install && npm run build && pm2 reload ecosystem.config.cjs --env production',
       'pre-setup': '',
     },
   },

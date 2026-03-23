@@ -63,11 +63,7 @@ export class RestoreProgressEmitter {
    */
   started(): void {
     this.emitProgress('validating', 0, 'Restauração iniciada')
-    NotificationService.restoreStarted(
-      this.connectionName,
-      this.backupId,
-      this.databaseName
-    )
+    NotificationService.restoreStarted(this.connectionName, this.backupId, this.databaseName)
   }
 
   /**
@@ -129,7 +125,11 @@ export class RestoreProgressEmitter {
 
     this.lastEmittedProgress = roundedProgress
     this.lastEmitTime = now
-    this.emitProgress('restoring', roundedProgress, `Restaurando banco de dados... ${roundedProgress}%`)
+    this.emitProgress(
+      'restoring',
+      roundedProgress,
+      `Restaurando banco de dados... ${roundedProgress}%`
+    )
   }
 
   /**
@@ -150,12 +150,7 @@ export class RestoreProgressEmitter {
    */
   failed(error: string): void {
     this.emitProgress('failed', 0, error)
-    NotificationService.restoreFailed(
-      this.connectionName,
-      this.backupId,
-      this.databaseName,
-      error
-    )
+    NotificationService.restoreFailed(this.connectionName, this.backupId, this.databaseName, error)
   }
 
   /**

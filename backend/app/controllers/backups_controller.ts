@@ -140,7 +140,10 @@ export default class BackupsController {
       if (existsSync(fullPath)) {
         stream = createReadStream(fullPath)
       } else if (destination) {
-        const download = await StorageDestinationService.getDownloadStream(destination, backup.filePath)
+        const download = await StorageDestinationService.getDownloadStream(
+          destination,
+          backup.filePath
+        )
         stream = download.stream
         contentLength = download.contentLength ?? contentLength
       } else {
@@ -234,10 +237,7 @@ export default class BackupsController {
     const payload = await request.validateUsing(restoreBackupValidator)
 
     // Buscar backup com conexão
-    const backup = await Backup.query()
-      .where('id', params.id)
-      .preload('connection')
-      .first()
+    const backup = await Backup.query().where('id', params.id).preload('connection').first()
 
     if (!backup) {
       return response.notFound({
@@ -306,24 +306,18 @@ export default class BackupsController {
     const targetDb = options.targetDatabase || backup.databaseName
 
     // Criar emissor de progresso
-    const emitter = new RestoreProgressEmitter(
-      backup.id,
-      targetDb,
-      targetConnection.name
-    )
+    const emitter = new RestoreProgressEmitter(backup.id, targetDb, targetConnection.name)
 
     // Notificar início (toast + progresso SSE)
     emitter.started()
 
     // Executar restauração em background (não aguarda)
     const restoreService = new RestoreService()
-    restoreService
-      .restore(backup, targetConnection, options, emitter)
-      .catch((error) => {
-        const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido'
-        logger.error(`[Restore] Erro não tratado na restauração em background: ${errorMessage}`)
-        emitter.failed(errorMessage)
-      })
+    restoreService.restore(backup, targetConnection, options, emitter).catch((error) => {
+      const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido'
+      logger.error(`[Restore] Erro não tratado na restauração em background: ${errorMessage}`)
+      emitter.failed(errorMessage)
+    })
 
     // Retorna imediatamente — progresso é acompanhado via SSE
     return response.accepted({

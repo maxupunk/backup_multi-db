@@ -23,7 +23,7 @@ services:
     container_name: backup-manager-backend-dev
     restart: unless-stopped
     ports:
-      - "${PORT:-3333}:3333"
+      - '${PORT:-3333}:3333'
     environment:
       - NODE_ENV=development
       - HOST=0.0.0.0
@@ -58,4 +58,3 @@ volumes:
   # Volume nomeado para node_modules — gerenciado exclusivamente pelo Docker.
   # Popolado na primeira inicialização com os node_modules da imagem (Linux).
   backend_node_modules:
-
