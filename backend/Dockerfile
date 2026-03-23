@@ -16,7 +16,7 @@
 # Imagem base com dependências do SO necessárias em todos os stages.
 # python3 + build-essential são necessários para compilar better-sqlite3.
 # -----------------------------------------------------------------------------
-FROM node:25-bookworm-slim AS base
+FROM node:25.8.1-trixie AS base
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     default-mysql-client \
@@ -32,7 +32,7 @@ WORKDIR /app
 # Stage: frontend-builder
 # Compila o frontend Vue/Vite. Roda em paralelo com o pipeline do backend.
 # -----------------------------------------------------------------------------
-FROM node:25-bookworm-slim AS frontend-builder
+FROM node:25.8.1-trixie AS frontend-builder
 
 WORKDIR /app-frontend
 
@@ -89,7 +89,8 @@ COPY --from=build /app/package*.json ./
 COPY backend/ecosystem.config.cjs ./
 COPY backend/docker-entrypoint.sh /docker-entrypoint.sh
 
-RUN chmod +x /docker-entrypoint.sh
+RUN sed -i 's/\r$//' /docker-entrypoint.sh \
+    && chmod +x /docker-entrypoint.sh
 
 # Instalar apenas dependências de produção (recompila módulos nativos)
 RUN npm ci --only=production && npm cache clean --force
@@ -137,7 +138,8 @@ ENV PORT=3333
 COPY backend/ .
 
 COPY backend/docker-entrypoint.sh /docker-entrypoint.sh
-RUN chmod +x /docker-entrypoint.sh
+RUN sed -i 's/\r$//' /docker-entrypoint.sh \
+    && chmod +x /docker-entrypoint.sh
 
 RUN mkdir -p /app/storage/backups /app/storage/database
 
