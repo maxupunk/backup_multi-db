@@ -84,6 +84,7 @@ export const discoverDatabasesValidator = vine.compile(
     port: vine.number().positive().max(65535),
     username: vine.string().trim().minLength(1).maxLength(100),
     password: vine.string().optional(),
+    ssl: vine.boolean().optional(),
   })
 )
 

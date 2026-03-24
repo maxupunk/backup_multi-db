@@ -484,6 +484,7 @@ export default class ConnectionsController {
           user: connection.username,
           password: password,
           connectTimeout: 10000,
+          ...(connection.options?.ssl === true ? { ssl: {} } : {}),
         })
 
         const [rows] = await conn.query('SELECT VERSION() as version')
@@ -675,7 +676,8 @@ export default class ConnectionsController {
         payload.host,
         payload.port,
         payload.username,
-        payload.password ?? ''
+        payload.password ?? '',
+        payload.ssl
       )
 
       return response.ok({
@@ -702,7 +704,8 @@ export default class ConnectionsController {
     host: string,
     port: number,
     username: string,
-    password: string
+    password: string,
+    ssl?: boolean
   ): Promise<string[]> {
     if (type === 'postgresql') {
       const { default: pg } = await import('pg')
@@ -736,6 +739,7 @@ export default class ConnectionsController {
         user: username,
         password,
         connectTimeout: 10000,
+        ...(ssl === true ? { ssl: {} } : {}),
       })
 
       const [rows] = await conn.query(`
