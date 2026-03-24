@@ -1,0 +1,34 @@
+# =============================================================================
+# DOCKER COMPOSE - DESENVOLVIMENTO
+# DB Backup Manager
+# =============================================================================
+#
+# Estratégia de volumes:
+#   ./backend:/app                         — bind mount do código para hot-reload
+#   backend_node_modules:/app/node_modules — named volume inicializado a partir
+#     da imagem Docker (binários Linux, compilados no stage "dependencies").
+#     Completamente isolado do host — nunca usa node_modules do Windows/Mac.
+#
+# Para forçar rebuild dos node_modules (ex: após instalar novo pacote):
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml down -v
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+#
+# Para usar a porta externa definida em backend/.env:
+#   cd backend && npm run docker:dev
+# =============================================================================
+
+services:
+  backend:
+    build:
+      target: development
+    environment:
+      NODE_ENV: development
+      LOG_LEVEL: debug
+    volumes:
+      - ./backend:/app
+      - backend_node_modules:/app/node_modules
+      - ./backend/storage/backups:/app/storage/backups
+      - ./backend/storage/database:/app/storage/database
+
+volumes:
+  backend_node_modules:
