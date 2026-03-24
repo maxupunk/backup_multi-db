@@ -509,7 +509,7 @@ export class BackupService {
     connection: Connection,
     databaseName: string,
     password: string,
-    env: NodeJS.ProcessEnv
+    processEnv: NodeJS.ProcessEnv
   ): DumpConfig {
     return {
       command: 'pg_dump',
@@ -524,7 +524,7 @@ export class BackupService {
         databaseName,
         '--no-password',
       ],
-      env: { ...env, PGPASSWORD: password },
+      env: { ...processEnv, PGPASSWORD: password },
     }
   }
 
@@ -535,7 +535,7 @@ export class BackupService {
   private buildPostgresDumpAllConfig(
     connection: Connection,
     password: string,
-    env: NodeJS.ProcessEnv
+    processEnv: NodeJS.ProcessEnv
   ): DumpConfig {
     return {
       command: 'pg_dumpall',
@@ -548,7 +548,7 @@ export class BackupService {
         connection.username,
         '--no-password',
       ],
-      env: { ...env, PGPASSWORD: password },
+      env: { ...processEnv, PGPASSWORD: password },
     }
   }
 
@@ -559,7 +559,7 @@ export class BackupService {
     connection: Connection,
     databaseName: string,
     password: string,
-    env: NodeJS.ProcessEnv
+    processEnv: NodeJS.ProcessEnv
   ): DumpConfig {
     return {
       command: 'mysqldump',
@@ -577,7 +577,7 @@ export class BackupService {
         '--triggers',
         databaseName,
       ],
-      env,
+      env: processEnv,
     }
   }
 
@@ -588,7 +588,7 @@ export class BackupService {
   private buildMySqlAllDatabasesConfig(
     connection: Connection,
     password: string,
-    env: NodeJS.ProcessEnv
+    processEnv: NodeJS.ProcessEnv
   ): DumpConfig {
     return {
       command: 'mysqldump',
@@ -606,7 +606,7 @@ export class BackupService {
         '--triggers',
         '--all-databases',
       ],
-      env,
+      env: processEnv,
     }
   }
 
