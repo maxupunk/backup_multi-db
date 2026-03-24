@@ -216,20 +216,17 @@ docker compose down
 
 ### Variáveis de Ambiente (Produção)
 
-Crie um arquivo `.env` no diretório `backend/` com:
+Use o mesmo template do backend:
 
 ```bash
-# Obrigatórios
-APP_KEY=<gerado com: node ace generate:key>
-DB_ENCRYPTION_KEY=<gerado com: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))">
+cd backend
+cp .env.example .env
 
-# Opcionais
-PORT=3333
-TZ=America/Sao_Paulo
-RETENTION_DAILY=7
-RETENTION_WEEKLY=4
-RETENTION_MONTHLY=12
-RETENTION_YEARLY=5
+# Gere a APP_KEY
+node ace generate:key
+
+# Gere a chave de criptografia e copie para DB_ENCRYPTION_KEY no .env
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
 
 ## 📖 API Endpoints
