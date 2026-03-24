@@ -156,3 +156,5 @@ RUN mkdir -p /app/storage/backups /app/storage/database
 EXPOSE 3333
 
 ENTRYPOINT ["/docker-entrypoint.sh"]
+
+FROM production AS final
