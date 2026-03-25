@@ -17,6 +17,8 @@ services:
         required: false
     expose:
       - '3333'
+    networks:
+      - dokploy-network
     environment:
       NODE_ENV: production
       HOST: 0.0.0.0
@@ -56,3 +58,7 @@ volumes:
     name: backup-multi-db-data
   sqlite-data:
     name: backup-multi-db-sqlite
+
+networks:
+  dokploy-network:
+    external: true
