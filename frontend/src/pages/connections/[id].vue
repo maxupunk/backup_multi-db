@@ -17,7 +17,7 @@
       <v-col cols="12" md="8">
         <v-card>
           <v-card-text>
-            <v-form ref="formRef" :disabled="loading" @submit.prevent="submit">
+            <v-form ref="formRef" :disabled="loading" autocomplete="off" @submit.prevent="submit">
               <!-- Basic Info -->
               <h3 class="text-h6 mb-4">Informações Básicas</h3>
 
@@ -50,14 +50,15 @@
                 </v-col>
 
                 <v-col cols="12" sm="6">
-                  <v-text-field v-model="form.username" label="Usuário *" prepend-inner-icon="mdi-account"
-                    :rules="[rules.required]" />
+                  <v-text-field v-model="form.username" autocomplete="new-username" label="Usuário *"
+                    name="database-username" prepend-inner-icon="mdi-account" :rules="[rules.required]" />
                 </v-col>
 
                 <v-col cols="12" sm="6">
                   <v-text-field v-model="form.password" :append-inner-icon="showPassword ? 'mdi-eye-off' : 'mdi-eye'"
-                    :label="isEditing ? 'Nova Senha (deixe vazio para manter)' : 'Senha'" prepend-inner-icon="mdi-lock"
-                    :rules="[]" :type="showPassword ? 'text' : 'password'"
+                    autocomplete="new-password" :label="isEditing ? 'Nova Senha (deixe vazio para manter)' : 'Senha'"
+                    name="database-password" prepend-inner-icon="mdi-lock" :rules="[]"
+                    :type="showPassword ? 'text' : 'password'"
                     @click:append-inner="showPassword = !showPassword" @update:model-value="markPasswordAsModified" />
                 </v-col>
 
