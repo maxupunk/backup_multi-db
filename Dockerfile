@@ -106,11 +106,12 @@ RUN sed -i 's/\r$//' /docker-entrypoint.sh \
 RUN npm ci --only=production && npm cache clean --force
 
 # Diretórios de dados e logs
-RUN mkdir -p /app/storage/backups /app/storage/database /app/logs
+RUN mkdir -p /app/storage/backups /app/storage/database /app/logs /app_data/backups /app_data/database
 
 # Usuário não-root
 RUN groupadd -r appgroup && useradd -r -g appgroup -m appuser \
     && chown -R appuser:appgroup /app \
+    && chown -R appuser:appgroup /app_data \
     && mkdir -p /home/appuser/.pm2 \
     && chown -R appuser:appgroup /home/appuser/.pm2
 
@@ -151,7 +152,7 @@ COPY backend/docker-entrypoint.sh /docker-entrypoint.sh
 RUN sed -i 's/\r$//' /docker-entrypoint.sh \
     && chmod +x /docker-entrypoint.sh
 
-RUN mkdir -p /app/storage/backups /app/storage/database
+RUN mkdir -p /app/storage/backups /app/storage/database /app_data/backups /app_data/database
 
 EXPOSE 3333
 
