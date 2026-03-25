@@ -54,9 +54,11 @@ services:
 
 volumes:
   backup-data:
-    driver: local
+    name: backup_multi_db_backup_data
+    external: true
   sqlite-data:
-    driver: local
+    name: backup_multi_db_sqlite_data
+    external: true
 
 networks:
   dokploy-network:
