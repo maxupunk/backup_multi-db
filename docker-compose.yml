@@ -15,7 +15,7 @@ services:
         required: false
       - path: ./backend/.env
         required: false
-    ports:
+    expose:
       - '3333'
     environment:
       NODE_ENV: production
@@ -43,8 +43,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
-    networks:
-      - dokploy-network
     deploy:
       resources:
         limits:
@@ -55,11 +53,5 @@ services:
 volumes:
   backup-data:
     name: backup_multi_db_backup_data
-    external: true
   sqlite-data:
     name: backup_multi_db_sqlite_data
-    external: true
-
-networks:
-  dokploy-network:
-    external: true
