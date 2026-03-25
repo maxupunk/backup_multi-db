@@ -20,17 +20,45 @@
 services:
   backend:
     build:
+      context: .
+      dockerfile: Dockerfile
       target: development
-    environment:
-      NODE_ENV: development
-      LOG_LEVEL: debug
+    restart: unless-stopped
+    env_file:
+      - path: ./.env
+        required: false
+      - path: ./backend/.env
+        required: false
     ports:
       - '${DOCKER_EXTERNAL_PORT:-3333}:3333'
+    environment:
+      NODE_ENV: development
+      HOST: 0.0.0.0
+      PORT: 3333
+      LOG_LEVEL: debug
+      TZ: ${TZ:-America/Sao_Paulo}
+      BACKUP_STORAGE_PATH: /app/storage/backups
+      RETENTION_DAILY: ${RETENTION_DAILY:-7}
+      RETENTION_WEEKLY: ${RETENTION_WEEKLY:-4}
+      RETENTION_MONTHLY: ${RETENTION_MONTHLY:-12}
+      RETENTION_YEARLY: ${RETENTION_YEARLY:-5}
     volumes:
       - ./backend:/app
       - backend_node_modules:/app/node_modules
       - ./backend/storage/backups:/app/storage/backups
       - ./backend/storage/database:/app/storage/database
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://localhost:3333/health').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
 
 volumes:
   backend_node_modules:

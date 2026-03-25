@@ -18,7 +18,7 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "typecheck": "tsc --noEmit",
-    "docker:dev": "docker compose --env-file .env -f ../docker-compose.yml -f ../docker-compose.dev.yml up --build"
+    "docker:dev": "docker compose --env-file .env -f ../docker-compose.dev.yml up --build"
   },
   "imports": {
     "#controllers/*": "./app/controllers/*.js",

@@ -29,8 +29,8 @@ services:
       RETENTION_MONTHLY: ${RETENTION_MONTHLY:-12}
       RETENTION_YEARLY: ${RETENTION_YEARLY:-5}
     volumes:
-      - backup-data:/app/storage/backups
-      - sqlite-data:/app/storage/database
+      - ${BACKUP_STORAGE_SOURCE:-../files/backup-data}:/app/storage/backups
+      - ${SQLITE_STORAGE_SOURCE:-../files/sqlite-data}:/app/storage/database
     healthcheck:
       test:
         [
@@ -49,9 +49,3 @@ services:
           memory: 512M
         reservations:
           memory: 256M
-
-volumes:
-  backup-data:
-    name: backup_multi_db_backup_data
-  sqlite-data:
-    name: backup_multi_db_sqlite_data
