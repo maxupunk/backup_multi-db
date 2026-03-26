@@ -32,8 +32,8 @@ services:
       RETENTION_MONTHLY: ${RETENTION_MONTHLY:-12}
       RETENTION_YEARLY: ${RETENTION_YEARLY:-5}
     volumes:
-      - backup-data:/app_data/backups
-      - sqlite-data:/app_data/database
+      - "../files/backups:/app_data/backups"
+      - "../files/database:/app_data/database"
     healthcheck:
       test:
         [
@@ -52,12 +52,6 @@ services:
           memory: 512M
         reservations:
           memory: 256M
-
-volumes:
-  backup-data:
-    name: backup-multi-db-data
-  sqlite-data:
-    name: backup-multi-db-sqlite
 
 networks:
   dokploy-network:
