@@ -10,7 +10,7 @@ const dbConfig = defineConfig({
       connection: {
         filename: app.inTest
           ? ':memory:'
-          : (env.get('SQLITE_DATABASE_PATH') ?? app.makePath('storage/database/app.sqlite3')),
+          : (env.get('SQLITE_DATABASE_PATH') ?? '/app_data/database/app.sqlite3'),
       },
       useNullAsDefault: true,
       migrations: {
