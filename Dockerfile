@@ -91,25 +91,19 @@ ENV NODE_ENV=production
 ENV HOST=0.0.0.0
 ENV PORT=3333
 
-RUN npm install -g pm2
-
 # Copiar apenas o build compilado e os manifestos de dependências
 COPY --from=build /app/build ./
 COPY --from=build /app/package*.json ./
-COPY backend/ecosystem.config.cjs ./
 COPY backend/docker-entrypoint.sh /docker-entrypoint.sh
 
 RUN sed -i 's/\r$//' /docker-entrypoint.sh \
     && chmod +x /docker-entrypoint.sh
 
 # Instalar apenas dependências de produção (recompila módulos nativos)
-RUN npm ci --only=production && npm cache clean --force
+RUN npm ci --omit=dev && npm cache clean --force
 
 # Diretórios de dados e logs
 RUN mkdir -p /app/storage/backups /app/storage/database /app/logs /app_data/backups /app_data/database
-
-# PM2 rodando como root permite escrever nos bind mounts do host sem conflitos de UID/GID
-ENV PM2_HOME=/root/.pm2
 
 EXPOSE 3333
 

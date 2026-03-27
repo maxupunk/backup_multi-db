@@ -47,11 +47,8 @@ echo -e "${GREEN}✅ Migrations executadas com sucesso!${NC}"
 
 # Determinar modo de execução
 if [ "$NODE_ENV" = "production" ]; then
-    echo -e "${GREEN}🏭 Iniciando em modo PRODUÇÃO com PM2...${NC}"
-    
-    # PM2 executa em foreground (--no-daemon) para funcionar corretamente com Docker
-    # --env production carrega as variáveis de ambiente de produção do ecosystem.config.cjs
-    exec pm2-runtime ecosystem.config.cjs --env production
+    echo -e "${GREEN}🏭 Iniciando em modo PRODUÇÃO com Node.js...${NC}"
+    exec node bin/server.js
 else
     echo -e "${YELLOW}🔧 Iniciando em modo DESENVOLVIMENTO com HMR...${NC}"
     exec node ace serve --hmr

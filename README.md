@@ -191,7 +191,7 @@ cd backend
 docker compose -f docker-compose.dev.yml up --build
 ```
 
-### Produção (com PM2)
+### Produção (somente Docker)
 
 ```bash
 cd backend
@@ -201,14 +201,9 @@ docker compose up --build -d
 
 # Verificar status
 docker compose ps
-docker exec backup-manager-backend pm2 status
 
 # Ver logs
 docker compose logs -f
-docker exec backup-manager-backend pm2 logs
-
-# Reiniciar aplicação
-docker exec backup-manager-backend pm2 restart backup-manager
 
 # Parar
 docker compose down
