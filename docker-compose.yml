@@ -18,7 +18,7 @@ services:
     expose:
       - '3333'
     networks:
-      - dokploy-network
+      - system-network
     environment:
       NODE_ENV: production
       HOST: 0.0.0.0
@@ -32,8 +32,8 @@ services:
       RETENTION_MONTHLY: ${RETENTION_MONTHLY:-12}
       RETENTION_YEARLY: ${RETENTION_YEARLY:-5}
     volumes:
-      - "../files/backups:/app_data/backups"
-      - "../files/database:/app_data/database"
+      - backup_data:/app_data/backups
+      - database_data:/app_data/database
     healthcheck:
       test:
         [
@@ -54,5 +54,9 @@ services:
           memory: 256M
 
 networks:
-  dokploy-network:
+  system-network:
     external: true
+
+volumes:
+  backup_data:
+  database_data:
