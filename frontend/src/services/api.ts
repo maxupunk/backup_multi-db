@@ -24,6 +24,7 @@ import type {
   RestoreResult,
   StorageDestination,
   StorageSpaceInfo,
+  SystemStatus,
   UpdateConnectionPayload,
   UpdateStorageDestinationPayload,
 } from '@/types/api'
@@ -474,6 +475,12 @@ export const statsApi = {
    */
   async get (): Promise<ApiResponse<DashboardStats>> {
     return request<ApiResponse<DashboardStats>>('/stats')
+  },
+}
+
+export const systemApi = {
+  async status (): Promise<ApiResponse<SystemStatus>> {
+    return request<ApiResponse<SystemStatus>>('/system/status')
   },
 }
 

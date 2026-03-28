@@ -29,6 +29,10 @@ export default class SchedulerProvider {
    * Para o scheduler ao desligar a aplicação
    */
   async shutdown() {
+    if (this.app.getEnvironment() !== 'web') {
+      return
+    }
+
     const scheduler = getScheduler()
     scheduler.stop()
   }

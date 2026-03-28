@@ -30,7 +30,7 @@ services:
       - path: ./backend/.env
         required: false
     ports:
-      - '${DOCKER_EXTERNAL_PORT:-}:3333'
+      - '${DOCKER_EXTERNAL_PORT:-3344}:3333'
     environment:
       NODE_ENV: development
       HOST: 0.0.0.0

@@ -69,6 +69,28 @@
                 </template>
               </v-list-item>
 
+              <v-list-item>
+                <template #prepend>
+                  <v-icon icon="mdi-cog-sync" />
+                </template>
+                <v-list-item-title>Status do Work/Jobs</v-list-item-title>
+                <template #append>
+                  <v-chip :color="getJobsStatusColor()" label size="small">
+                    {{ getJobsStatusLabel() }}
+                  </v-chip>
+                </template>
+              </v-list-item>
+
+              <v-list-item v-if="jobsActiveCount !== null">
+                <template #prepend>
+                  <v-icon icon="mdi-format-list-numbered" />
+                </template>
+                <v-list-item-title>Jobs Ativos</v-list-item-title>
+                <template #append>
+                  <span class="text-medium-emphasis">{{ jobsActiveCount }}</span>
+                </template>
+              </v-list-item>
+
               <v-list-item v-if="apiLatency">
                 <template #prepend>
                   <v-icon icon="mdi-speedometer" />
@@ -458,7 +480,7 @@
 import type { StorageDestination, StorageDestinationType, StorageSpaceInfo } from '@/types/api'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useTheme } from 'vuetify'
-import { ApiError, healthCheck, storageDestinationsApi } from '@/services/api'
+import { ApiError, healthCheck, storageDestinationsApi, systemApi } from '@/services/api'
 import { useDisplay } from 'vuetify'
 import { useDebouncedFn } from '@/composables/useDebouncedFn'
 import { useNotifier } from '@/composables/useNotifier'
@@ -470,6 +492,8 @@ const notify = useNotifier()
 const apiStatus = ref<'online' | 'offline'>('offline')
 const apiLatency = ref<number | null>(null)
 const checkingApi = ref(false)
+const jobsRuntimeStatus = ref<'ok' | 'down' | 'unknown'>('unknown')
+const jobsActiveCount = ref<number | null>(null)
 
 const storageDestinations = ref<StorageDestination[]>([])
 const loadingDestinations = ref(false)
@@ -597,14 +621,43 @@ async function checkApi() {
     await healthCheck()
     apiLatency.value = Date.now() - startTime
     apiStatus.value = 'online'
+    await checkJobsStatus()
     notify('API está online', 'success')
   } catch {
     apiStatus.value = 'offline'
     apiLatency.value = null
+    jobsRuntimeStatus.value = 'down'
+    jobsActiveCount.value = null
     notify('API está offline', 'error')
   } finally {
     checkingApi.value = false
   }
+}
+
+async function checkJobsStatus() {
+  const response = await systemApi.status()
+  const jobs = response.data?.jobs
+
+  if (!jobs) {
+    jobsRuntimeStatus.value = 'unknown'
+    jobsActiveCount.value = null
+    return
+  }
+
+  jobsRuntimeStatus.value = jobs.isRunning && jobs.status === 'ok' ? 'ok' : 'down'
+  jobsActiveCount.value = jobs.activeJobs
+}
+
+function getJobsStatusColor(): string {
+  if (jobsRuntimeStatus.value === 'ok') return 'success'
+  if (jobsRuntimeStatus.value === 'down') return 'error'
+  return 'grey'
+}
+
+function getJobsStatusLabel(): string {
+  if (jobsRuntimeStatus.value === 'ok') return 'Rodando e OK'
+  if (jobsRuntimeStatus.value === 'down') return 'Parado/Erro'
+  return 'Desconhecido'
 }
 
 function formatDestinationType(type: StorageDestinationType): string {

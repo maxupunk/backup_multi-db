@@ -334,6 +334,21 @@ export interface DashboardStats {
     createdAt: string
   }[]
   storageSpaces: StorageSpaceInfo[]
+  jobs?: {
+    isRunning: boolean
+    activeJobs: number
+    status: 'ok' | 'down'
+  }
+}
+
+export interface JobsSystemStatus {
+  isRunning: boolean
+  activeJobs: number
+  status: 'ok' | 'down'
+}
+
+export interface SystemStatus {
+  jobs: JobsSystemStatus
 }
 
 /**
