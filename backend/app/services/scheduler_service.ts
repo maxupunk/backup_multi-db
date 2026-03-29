@@ -105,6 +105,12 @@ export class SchedulerService {
       return
     }
 
+    if (connection.status !== 'active') {
+      logger.warn(`Tentativa de agendar conexão ${connection.id} sem status ativo`)
+      this.unscheduleConnection(connection.id)
+      return
+    }
+
     // Remover job existente se houver
     this.unscheduleConnection(connection.id)
 
@@ -148,7 +154,11 @@ export class SchedulerService {
    * Atualiza o agendamento de uma conexão
    */
   async updateConnectionSchedule(connection: Connection): Promise<void> {
-    if (connection.scheduleEnabled && connection.scheduleFrequency) {
+    if (
+      connection.scheduleEnabled &&
+      connection.scheduleFrequency &&
+      connection.status === 'active'
+    ) {
       await this.scheduleConnection(connection)
     } else {
       this.unscheduleConnection(connection.id)
@@ -181,14 +191,23 @@ export class SchedulerService {
         return
       }
 
-      const { backup, result } = await this.backupService.execute(connection, 'scheduled')
+      const result = await this.backupService.executeAll(connection, 'scheduled')
 
-      if (result.success) {
+      if (result.totalDatabases === 0) {
+        logger.warn(`Conexão ${connectionId} não possui databases habilitados para backup agendado`)
+        return
+      }
+
+      if (result.failed === 0) {
         logger.info(
-          `Backup agendado concluído para conexão ${connectionId}: ${result.fileName} (${backup.getFormattedSize()})`
+          `Backup agendado concluído para conexão ${connectionId}: ` +
+            `${result.successful}/${result.totalDatabases} database(s) com sucesso`
         )
       } else {
-        logger.error(`Falha no backup agendado da conexão ${connectionId}: ${result.error}`)
+        logger.error(
+          `Backup agendado concluído com falhas para conexão ${connectionId}: ` +
+            `${result.successful} sucesso, ${result.failed} falha(s)`
+        )
       }
     } catch (error) {
       logger.error(`Erro ao executar backup agendado da conexão ${connectionId}:`, error)

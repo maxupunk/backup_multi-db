@@ -18,6 +18,7 @@ import { DockerContainerDiscoveryService } from '#services/docker_container_disc
 import { NetworkReachabilityResolver } from '#services/network_reachability_resolver'
 import { ContainerPortResolver } from '#services/container_port_resolver'
 import { ConnectionSuggestionMapper } from '#services/connection_suggestion_mapper'
+import { getScheduler } from '#services/scheduler_service'
 
 /**
  * Controller para gerenciamento de conexões de banco de dados
@@ -118,6 +119,7 @@ export default class ConnectionsController {
 
     // Registrar auditoria
     await AuditService.logConnectionCreated(connection.id, connection.name, ctx)
+    await this.syncScheduler(connection)
 
     return response.created({
       success: true,
@@ -307,6 +309,7 @@ export default class ConnectionsController {
     if (Object.keys(changes).length > 0) {
       await AuditService.logConnectionUpdated(connection.id, connection.name, changes, ctx)
     }
+    await this.syncScheduler(connection)
 
     // Recarregar databases
     await connection.load('databases', (query) => {
@@ -349,6 +352,7 @@ export default class ConnectionsController {
 
     // Registrar auditoria
     await AuditService.logConnectionDeleted(connectionId, connectionName, ctx)
+    getScheduler().unscheduleConnection(connectionId)
 
     return response.ok({
       success: true,
@@ -380,6 +384,7 @@ export default class ConnectionsController {
       connection.lastTestedAt = DateTime.now()
 
       await connection.save()
+      await this.syncScheduler(connection)
 
       // Registrar auditoria
       await AuditService.logConnectionTested(
@@ -421,6 +426,7 @@ export default class ConnectionsController {
       connection.lastError = error instanceof Error ? error.message : 'Erro desconhecido'
       connection.lastTestedAt = DateTime.now()
       await connection.save()
+      await this.syncScheduler(connection)
 
       // Registrar auditoria de falha
       await AuditService.logConnectionTested(
@@ -510,6 +516,10 @@ export default class ConnectionsController {
         error: error instanceof Error ? error.message : 'Erro de conexão desconhecido',
       }
     }
+  }
+
+  private async syncScheduler(connection: Connection): Promise<void> {
+    await getScheduler().updateConnectionSchedule(connection)
   }
 
   /**
@@ -776,9 +786,9 @@ export default class ConnectionsController {
 
       await client.connect()
       const result = await client.query(`
-        SELECT datname 
-        FROM pg_database 
-        WHERE datistemplate = false 
+        SELECT datname
+        FROM pg_database
+        WHERE datistemplate = false
           AND datallowconn = true
           AND datname NOT IN ('postgres')
         ORDER BY datname
@@ -799,7 +809,7 @@ export default class ConnectionsController {
       })
 
       const [rows] = await conn.query(`
-        SHOW DATABASES 
+        SHOW DATABASES
         WHERE \`Database\` NOT IN ('information_schema', 'mysql', 'performance_schema', 'sys')
       `)
       await conn.end()

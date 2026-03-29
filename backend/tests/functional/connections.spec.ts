@@ -2,6 +2,7 @@ import { test } from '@japa/runner'
 import User from '#models/user'
 import Connection from '#models/connection'
 import ConnectionDatabase from '#models/connection_database'
+import { getScheduler } from '#services/scheduler_service'
 
 test.group('Connections', (group) => {
   let user: User
@@ -13,6 +14,13 @@ test.group('Connections', (group) => {
       password: 'Password123!',
       isActive: true,
     })
+
+    const scheduler = getScheduler()
+    await scheduler.start()
+
+    return () => {
+      scheduler.stop()
+    }
   })
 
   test('create a new connection', async ({ client }) => {
@@ -37,6 +45,34 @@ test.group('Connections', (group) => {
         name: 'Test Connection',
       },
     })
+  })
+
+  test('create a scheduled connection registers a scheduler job', async ({ client }) => {
+    const initialJobs = getScheduler().getStats().activeJobs
+    const token = await User.accessTokens.create(user)
+    const response = await client
+      .post('/api/connections')
+      .header('Authorization', `Bearer ${token.value!.release()}`)
+      .json({
+        name: 'Scheduled Connection',
+        type: 'postgresql',
+        host: 'localhost',
+        port: 5432,
+        databases: ['scheduled_db'],
+        username: 'user',
+        password: 'password',
+        scheduleEnabled: true,
+        scheduleFrequency: '1h',
+      })
+
+    response.assertStatus(201)
+
+    const schedulerStats = getScheduler().getStats()
+    if (schedulerStats.activeJobs !== initialJobs + 1) {
+      throw new Error(
+        `Era esperado ${initialJobs + 1} job(s) agendado(s), mas foram encontrados ${schedulerStats.activeJobs}`
+      )
+    }
   })
 
   test('list connections', async ({ client }) => {
@@ -146,6 +182,63 @@ test.group('Connections', (group) => {
         host: '192.168.1.1',
       },
     })
+  })
+
+  test('update a connection schedule registers and removes scheduler jobs', async ({ client }) => {
+    const initialJobs = getScheduler().getStats().activeJobs
+    const connection = await Connection.create({
+      name: 'Scheduled Update Connection',
+      type: 'postgresql',
+      host: 'localhost',
+      port: 5432,
+      username: 'user',
+      passwordEncrypted: 'password',
+      status: 'active',
+      scheduleEnabled: false,
+      scheduleFrequency: null,
+    })
+
+    await ConnectionDatabase.create({
+      connectionId: connection.id,
+      databaseName: 'scheduled_update_db',
+      enabled: true,
+    })
+
+    const token = await User.accessTokens.create(user)
+
+    const enableResponse = await client
+      .put(`/api/connections/${connection.id}`)
+      .header('Authorization', `Bearer ${token.value!.release()}`)
+      .json({
+        scheduleEnabled: true,
+        scheduleFrequency: '1h',
+      })
+
+    enableResponse.assertStatus(200)
+
+    let schedulerStats = getScheduler().getStats()
+    if (schedulerStats.activeJobs !== initialJobs + 1) {
+      throw new Error(
+        `Era esperado ${initialJobs + 1} job(s) agendado(s) após habilitar, mas foram encontrados ${schedulerStats.activeJobs}`
+      )
+    }
+
+    const disableResponse = await client
+      .put(`/api/connections/${connection.id}`)
+      .header('Authorization', `Bearer ${token.value!.release()}`)
+      .json({
+        scheduleEnabled: false,
+        scheduleFrequency: null,
+      })
+
+    disableResponse.assertStatus(200)
+
+    schedulerStats = getScheduler().getStats()
+    if (schedulerStats.activeJobs !== initialJobs) {
+      throw new Error(
+        `Era esperado ${initialJobs} job(s) agendado(s) após desabilitar, mas foram encontrados ${schedulerStats.activeJobs}`
+      )
+    }
   })
 
   test('delete a connection', async ({ client }) => {

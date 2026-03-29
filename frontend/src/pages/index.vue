@@ -89,6 +89,52 @@
       </v-col>
     </v-row>
 
+    <v-row class="mb-6">
+      <v-col cols="12">
+        <v-card class="scheduler-card">
+          <v-card-text class="pa-5">
+            <div class="d-flex flex-column flex-md-row align-md-center justify-space-between ga-4">
+              <div class="d-flex align-center">
+                <v-avatar :color="schedulerCard.color" class="mr-4" size="56" variant="tonal">
+                  <v-icon :icon="schedulerCard.icon" size="28" />
+                </v-avatar>
+
+                <div>
+                  <div class="d-flex align-center flex-wrap ga-2 mb-1">
+                    <h2 class="text-h6 font-weight-medium">Agendador de Backups</h2>
+                    <v-chip :color="schedulerCard.color" label size="small" variant="tonal">
+                      {{ schedulerCard.statusLabel }}
+                    </v-chip>
+                  </div>
+
+                  <p class="text-body-2 text-medium-emphasis mb-0">
+                    {{ schedulerCard.description }}
+                  </p>
+                </div>
+              </div>
+
+              <div class="d-flex flex-wrap ga-3">
+                <v-sheet class="scheduler-metric" rounded="lg">
+                  <div class="text-caption text-medium-emphasis mb-1">Jobs ativos</div>
+                  <div class="text-h5 font-weight-bold">
+                    {{ schedulerCard.activeJobs }}
+                  </div>
+                </v-sheet>
+
+                <v-sheet class="scheduler-metric" rounded="lg">
+                  <div class="text-caption text-medium-emphasis mb-1">Situação</div>
+                  <div class="d-flex align-center font-weight-medium" :class="schedulerCard.textClass">
+                    <v-icon :icon="schedulerCard.icon" size="18" start />
+                    {{ schedulerCard.summary }}
+                  </div>
+                </v-sheet>
+              </div>
+            </div>
+          </v-card-text>
+        </v-card>
+      </v-col>
+    </v-row>
+
     <!-- Storage Space Cards -->
     <v-row v-if="stats?.storageSpaces?.length" class="mb-6">
       <v-col cols="12">
@@ -224,8 +270,8 @@
 </template>
 
 <script lang="ts" setup>
-import type { BackupStatus, DashboardStats, StorageSpaceInfo } from '@/types/api'
-import { onMounted, ref } from 'vue'
+import type { BackupStatus, DashboardStats, JobsSystemStatus, StorageSpaceInfo } from '@/types/api'
+import { computed, onMounted, ref } from 'vue'
 import { statsApi } from '@/services/api'
 import { useNotifier } from '@/composables/useNotifier'
 import { getBackupStatusColor as getStatusColor, getBackupStatusLabel as getStatusLabel } from '@/ui/backup'
@@ -235,6 +281,26 @@ const notify = useNotifier()
 
 const loading = ref(false)
 const stats = ref<DashboardStats | null>(null)
+
+type SchedulerCardState = {
+  activeJobs: number
+  color: 'success' | 'warning' | 'error'
+  description: string
+  icon: string
+  statusLabel: string
+  summary: string
+  textClass: string
+}
+
+const schedulerCard = computed<SchedulerCardState>(() => {
+  const jobs = stats.value?.jobs
+
+  if (!jobs) {
+    return buildSchedulerCardState(null)
+  }
+
+  return buildSchedulerCardState(jobs)
+})
 
 async function loadStats() {
   loading.value = true
@@ -291,6 +357,54 @@ function getProgressColor(usedPercent: number): string {
   return 'success'
 }
 
+function buildSchedulerCardState(jobs: JobsSystemStatus | null): SchedulerCardState {
+  if (!jobs) {
+    return {
+      activeJobs: 0,
+      color: 'warning',
+      description: 'O dashboard ainda não recebeu informações do agendador.',
+      icon: 'mdi-help-circle-outline',
+      statusLabel: 'Status indisponível',
+      summary: 'Sem dados',
+      textClass: 'text-warning',
+    }
+  }
+
+  if (jobs.status === 'down' || !jobs.isRunning) {
+    return {
+      activeJobs: jobs.activeJobs,
+      color: 'error',
+      description: 'O serviço de agendamento não está em execução. Backups automáticos não serão disparados.',
+      icon: 'mdi-alert-circle-outline',
+      statusLabel: 'Inativo',
+      summary: 'Scheduler parado',
+      textClass: 'text-error',
+    }
+  }
+
+  if (jobs.activeJobs === 0) {
+    return {
+      activeJobs: 0,
+      color: 'warning',
+      description: 'O scheduler está ativo, mas nenhuma conexão possui job agendado no momento.',
+      icon: 'mdi-clock-outline',
+      statusLabel: 'Sem jobs',
+      summary: 'Aguardando conexões agendadas',
+      textClass: 'text-warning',
+    }
+  }
+
+  return {
+    activeJobs: jobs.activeJobs,
+    color: 'success',
+    description: `O scheduler está em execução com ${jobs.activeJobs} job(s) ativo(s) para backups automáticos.`,
+    icon: 'mdi-check-decagram-outline',
+    statusLabel: 'Operando',
+    summary: 'Jobs em execução',
+    textClass: 'text-success',
+  }
+}
+
 onMounted(() => {
   loadStats()
 })
@@ -328,5 +442,19 @@ onMounted(() => {
   background: linear-gradient(135deg,
       rgba(var(--v-theme-warning), 0.05) 0%,
       rgb(var(--v-theme-surface)) 100%);
+}
+
+.scheduler-card {
+  background: linear-gradient(135deg,
+      rgb(var(--v-theme-surface)) 0%,
+      rgb(var(--v-theme-surface-bright)) 100%);
+  border: 1px solid rgba(var(--v-border-color), 0.08);
+}
+
+.scheduler-metric {
+  min-width: 160px;
+  padding: 16px;
+  background: rgba(var(--v-theme-surface-variant), 0.35);
+  border: 1px solid rgba(var(--v-border-color), 0.08);
 }
 </style>
