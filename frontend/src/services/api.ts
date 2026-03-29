@@ -16,6 +16,7 @@ import type {
   CreateConnectionPayload,
   CreateStorageDestinationPayload,
   DashboardStats,
+  DockerHostsResponseData,
   ImportBackupResult,
   LoginPayload,
   PaginatedResponse,
@@ -232,6 +233,10 @@ export const connectionsApi = {
       method: 'POST',
       body: JSON.stringify(payload),
     })
+  },
+
+  async listDockerHosts (): Promise<ApiResponse<DockerHostsResponseData>> {
+    return request<ApiResponse<DockerHostsResponseData>>('/connections/docker-hosts')
   },
 
   /**

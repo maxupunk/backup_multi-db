@@ -34,6 +34,7 @@ services:
     volumes:
       - backup_data:/app_data/backups
       - database_data:/app_data/database
+      - /var/run/docker.sock:/var/run/docker.sock
     healthcheck:
       test:
         [

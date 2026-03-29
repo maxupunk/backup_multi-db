@@ -57,6 +57,8 @@ router
           .post('connections/discover-databases', [ConnectionsController, 'discoverDatabases'])
           .use(middleware.rateLimit({ limiter: 'strict' }))
 
+        router.get('connections/docker-hosts', [ConnectionsController, 'dockerHosts'])
+
         router.resource('connections', ConnectionsController).apiOnly()
 
         // ==================== Storage Destinations ====================

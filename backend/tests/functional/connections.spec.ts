@@ -214,4 +214,18 @@ test.group('Connections', (group) => {
       success: false,
     })
   })
+
+  test('list docker hosts suggestions', async ({ client }) => {
+    const token = await User.accessTokens.create(user)
+    const response = await client
+      .get('/api/connections/docker-hosts')
+      .header('Authorization', `Bearer ${token.value!.release()}`)
+
+    response.assertStatus(200)
+    response.assertBodyContains({ success: true })
+    const body = response.body()
+    if (!Array.isArray(body.data?.hosts)) {
+      throw new Error('Resposta inválida: data.hosts deve ser um array')
+    }
+  })
 })

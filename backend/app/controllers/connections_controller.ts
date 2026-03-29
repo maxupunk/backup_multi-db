@@ -13,6 +13,11 @@ import { BackupService } from '#services/backup_service'
 import { AuditService } from '#services/audit_service'
 import { NotificationService } from '#services/notification_service'
 import { DatabaseManagementService } from '#services/database_management_service'
+import { DockerEnvironmentService } from '#services/docker_environment_service'
+import { DockerContainerDiscoveryService } from '#services/docker_container_discovery_service'
+import { NetworkReachabilityResolver } from '#services/network_reachability_resolver'
+import { ContainerPortResolver } from '#services/container_port_resolver'
+import { ConnectionSuggestionMapper } from '#services/connection_suggestion_mapper'
 
 /**
  * Controller para gerenciamento de conexões de banco de dados
@@ -661,6 +666,57 @@ export default class ConnectionsController {
       message: `Banco de dados "${databaseName}" criado com sucesso`,
       data: { databaseName },
     })
+  }
+
+  async dockerHosts({ response }: HttpContext) {
+    try {
+      const environmentService = new DockerEnvironmentService()
+      const environment = await environmentService.getContext()
+
+      if (!environment.dockerAvailable) {
+        return response.ok({
+          success: true,
+          data: {
+            dockerAvailable: false,
+            unavailableReason: environment.unavailableReason,
+            backendContainerId: environment.backendContainerId,
+            hosts: [],
+          },
+        })
+      }
+
+      const discoveryService = new DockerContainerDiscoveryService()
+      const containers = await discoveryService.listEligibleContainers()
+      const mapper = new ConnectionSuggestionMapper(
+        new NetworkReachabilityResolver(),
+        new ContainerPortResolver()
+      )
+      const hosts = mapper.map(containers, {
+        backendNetworkIds: environment.backendNetworkIds,
+        dockerHostIp: environment.dockerHostIp,
+      })
+
+      return response.ok({
+        success: true,
+        data: {
+          dockerAvailable: true,
+          unavailableReason: null,
+          backendContainerId: environment.backendContainerId,
+          hosts,
+        },
+      })
+    } catch (error) {
+      return response.ok({
+        success: true,
+        data: {
+          dockerAvailable: false,
+          unavailableReason:
+            error instanceof Error ? error.message : 'Falha ao descobrir containers Docker',
+          backendContainerId: null,
+          hosts: [],
+        },
+      })
+    }
   }
 
   /**

@@ -100,6 +100,35 @@ export interface UpdateConnectionPayload {
   } | null
 }
 
+export type DockerHostResolutionSource = 'docker_dns' | 'host_ip' | 'fallback'
+
+export interface DockerPortOption {
+  containerPort: number
+  hostPort: number
+  protocol: string
+  display: string
+}
+
+export interface DockerHostSuggestion {
+  containerId: string
+  containerName: string
+  databaseTypeHint: DatabaseType | null
+  sameNetwork: boolean
+  suggestedHost: string
+  hostResolutionSource: DockerHostResolutionSource
+  networkNames: string[]
+  portOptions: DockerPortOption[]
+  hasExternalPort: boolean
+  connectivityWarning: string | null
+}
+
+export interface DockerHostsResponseData {
+  dockerAvailable: boolean
+  unavailableReason: string | null
+  backendContainerId: string | null
+  hosts: DockerHostSuggestion[]
+}
+
 export type StorageDestinationConfigPayload =
   | {
       basePath?: string

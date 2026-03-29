@@ -40,12 +40,20 @@
 
               <v-row>
                 <v-col cols="12" sm="8">
-                  <v-text-field v-model="form.host" label="Host *" placeholder="localhost ou IP do servidor"
-                    prepend-inner-icon="mdi-server" :rules="[rules.required]" />
+                  <HostSelectorField
+                    v-model="form.host"
+                    :loading="loadingDockerHosts"
+                    :required-rule="rules.required"
+                    :suggestions="dockerHostSuggestions"
+                    :unavailable-reason="dockerUnavailableReason"
+                    @suggestion-selected="onDockerSuggestionSelected"
+                  />
                 </v-col>
 
                 <v-col cols="12" sm="4">
-                  <v-text-field v-model.number="form.port" label="Porta *" prepend-inner-icon="mdi-ethernet"
+                  <v-select v-if="selectedDockerPortItems.length > 0" v-model="form.port" :items="selectedDockerPortItems"
+                    label="Porta *" prepend-inner-icon="mdi-ethernet" :rules="[rules.required, rules.port]" />
+                  <v-text-field v-else v-model.number="form.port" label="Porta *" prepend-inner-icon="mdi-ethernet"
                     :rules="[rules.required, rules.port]" type="number" />
                 </v-col>
 
@@ -258,7 +266,7 @@
 </template>
 
 <script lang="ts" setup>
-import type { DatabaseType, ScheduleFrequency, StorageDestination } from '@/types/api'
+import type { DatabaseType, DockerHostSuggestion, ScheduleFrequency, StorageDestination } from '@/types/api'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useDisplay } from 'vuetify'
@@ -266,6 +274,7 @@ import { connectionsApi, storageDestinationsApi } from '@/services/api'
 import { useNotifier } from '@/composables/useNotifier'
 import { useStorageDestinationOptions } from '@/composables/useStorageDestinationOptions'
 import { databaseTypeOptions, defaultDatabasePorts } from '@/ui/database'
+import HostSelectorField from '@/components/connections/HostSelectorField.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -280,6 +289,10 @@ const loading = ref(false)
 const passwordModified = ref(false)
 const loadingDestinations = ref(false)
 const storageDestinations = ref<StorageDestination[]>([])
+const loadingDockerHosts = ref(false)
+const dockerUnavailableReason = ref('')
+const dockerHostSuggestions = ref<DockerHostSuggestion[]>([])
+const selectedDockerSuggestion = ref<DockerHostSuggestion | null>(null)
 
 // Estado para descoberta de databases
 const discoveringDatabases = ref(false)
@@ -309,7 +322,7 @@ function getConnectionId(): number {
 const form = reactive({
   name: '',
   type: 'mysql' as DatabaseType,
-  host: 'localhost',
+  host: '',
   port: 3306,
   databases: [] as string[],
   username: '',
@@ -339,6 +352,17 @@ const rules = {
 // Computed para verificar se pode testar conexão
 const canDiscoverDatabases = computed(() => {
   return form.host && form.port && form.username && form.type
+})
+
+const selectedDockerPortItems = computed(() => {
+  if (!selectedDockerSuggestion.value) {
+    return []
+  }
+
+  return selectedDockerSuggestion.value.portOptions.map((option) => ({
+    title: option.display,
+    value: option.hostPort,
+  }))
 })
 
 // Computed para opções de databases incluindo "Todos os bancos"
@@ -376,7 +400,35 @@ function handleDatabaseSelection(selected: string[]) {
 }
 
 function onTypeChange(type: DatabaseType) {
+  if (selectedDockerSuggestion.value?.databaseTypeHint === type) {
+    return
+  }
   form.port = defaultPorts[type]
+}
+
+function onDockerSuggestionSelected(suggestion: DockerHostSuggestion | null) {
+  selectedDockerSuggestion.value = suggestion
+
+  if (!suggestion) {
+    return
+  }
+
+  if (suggestion.databaseTypeHint) {
+    form.type = suggestion.databaseTypeHint
+  }
+
+  const firstPortOption = suggestion.portOptions[0]
+  if (suggestion.portOptions.length === 1 && firstPortOption) {
+    form.port = firstPortOption.hostPort
+    return
+  }
+
+  if (suggestion.portOptions.length > 1) {
+    const hasCurrentPortInOptions = suggestion.portOptions.some((option) => option.hostPort === form.port)
+    if (!hasCurrentPortInOptions && firstPortOption) {
+      form.port = firstPortOption.hostPort
+    }
+  }
 }
 
 function markPasswordAsModified() {
@@ -395,7 +447,7 @@ async function discoverDatabases() {
     const response = await connectionsApi.discoverDatabases({
       type: form.type,
       host: form.host,
-      port: form.port,
+      port: Number(form.port),
       username: form.username,
       password: form.password || undefined,
     })
@@ -420,6 +472,29 @@ async function discoverDatabases() {
 }
 
 const storageDestinationOptions = useStorageDestinationOptions(storageDestinations)
+
+async function loadDockerHosts() {
+  loadingDockerHosts.value = true
+  dockerUnavailableReason.value = ''
+  try {
+    const response = await connectionsApi.listDockerHosts()
+    if (!response.success || !response.data) {
+      dockerHostSuggestions.value = []
+      return
+    }
+
+    dockerHostSuggestions.value = response.data.hosts ?? []
+    if (!response.data.dockerAvailable && response.data.unavailableReason) {
+      dockerUnavailableReason.value = response.data.unavailableReason
+    }
+  } catch (error) {
+    dockerHostSuggestions.value = []
+    selectedDockerSuggestion.value = null
+    dockerUnavailableReason.value = error instanceof Error ? error.message : 'Docker indisponível'
+  } finally {
+    loadingDockerHosts.value = false
+  }
+}
 
 async function loadStorageDestinations() {
   loadingDestinations.value = true
@@ -477,7 +552,7 @@ async function submit() {
         name: form.name,
         type: form.type,
         host: form.host,
-        port: form.port,
+        port: Number(form.port),
         databases: form.databases,
         username: form.username,
         storageDestinationId: form.storageDestinationId,
@@ -498,7 +573,7 @@ async function submit() {
         name: form.name,
         type: form.type,
         host: form.host,
-        port: form.port,
+        port: Number(form.port),
         databases: form.databases,
         username: form.username,
         password: form.password,
@@ -541,6 +616,7 @@ async function testConnection() {
 }
 
 onMounted(() => {
+  loadDockerHosts()
   loadStorageDestinations()
   loadConnection()
 })

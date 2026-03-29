@@ -13,6 +13,7 @@ declare module 'vue' {
   export interface GlobalComponents {
     CreateDatabaseDialog: typeof import('./components/common/CreateDatabaseDialog.vue')['default']
     FileDropZone: typeof import('./components/backups/FileDropZone.vue')['default']
+    HostSelectorField: typeof import('./components/connections/HostSelectorField.vue')['default']
     ImportBackupDialog: typeof import('./components/backups/ImportBackupDialog.vue')['default']
     NotificationToast: typeof import('./components/NotificationToast.vue')['default']
     ReloadPrompt: typeof import('./components/common/ReloadPrompt.vue')['default']
