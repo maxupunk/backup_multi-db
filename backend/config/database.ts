@@ -1,6 +1,6 @@
 import app from '@adonisjs/core/services/app'
 import { defineConfig } from '@adonisjs/lucid'
-import env from '#start/env'
+import { getSqliteDatabasePath } from '#config/storage_paths'
 
 const dbConfig = defineConfig({
   connection: 'sqlite',
@@ -8,9 +8,7 @@ const dbConfig = defineConfig({
     sqlite: {
       client: 'better-sqlite3',
       connection: {
-        filename: app.inTest
-          ? ':memory:'
-          : (env.get('SQLITE_DATABASE_PATH') ?? '/app_data/database/app.sqlite3'),
+        filename: app.inTest ? ':memory:' : getSqliteDatabasePath(),
       },
       useNullAsDefault: true,
       migrations: {

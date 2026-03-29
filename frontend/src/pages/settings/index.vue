@@ -318,12 +318,14 @@
             <v-divider class="my-6" />
 
             <template v-if="destinationForm.type === 'local'">
-              <v-text-field v-model="destinationConfig.basePath" label="Base Path" placeholder="/app/storage/backups"
+              <v-text-field v-model="destinationConfig.basePath" label="Base Path"
+                :placeholder="DEFAULT_LOCAL_STORAGE_BASE_PATH"
                 prepend-inner-icon="mdi-folder" />
 
-              <v-alert v-if="destinationConfig.basePath && destinationConfig.basePath.trim() !== '/app/storage/backups'"
+              <v-alert
+                v-if="destinationConfig.basePath && destinationConfig.basePath.trim() !== DEFAULT_LOCAL_STORAGE_BASE_PATH"
                 class="mt-2" density="compact" icon="mdi-alert-circle" type="warning" variant="tonal">
-                <strong>Atenção:</strong> Somente a pasta <code>/app/storage/backups</code> é salva permanentemente.
+                <strong>Atenção:</strong> Somente a pasta <code>{{ DEFAULT_LOCAL_STORAGE_BASE_PATH }}</code> é salva permanentemente.
                 Se você usar outra pasta, seus backups podem ser <strong>perdidos</strong> quando o sistema reiniciar.
                 <br>
                 <small class="text-medium-emphasis">
@@ -488,6 +490,7 @@ import { useNotifier } from '@/composables/useNotifier'
 const theme = useTheme()
 const { mdAndUp } = useDisplay()
 const notify = useNotifier()
+const DEFAULT_LOCAL_STORAGE_BASE_PATH = '/app_data/backups'
 
 const apiStatus = ref<'online' | 'offline'>('offline')
 const apiLatency = ref<number | null>(null)
@@ -755,7 +758,7 @@ function resetDestinationConfig() {
 function onDestinationTypeChange() {
   resetDestinationConfig()
   if (destinationForm.type === 'local') {
-    destinationConfig.basePath = '/app/storage/backups'
+    destinationConfig.basePath = DEFAULT_LOCAL_STORAGE_BASE_PATH
   }
 }
 
@@ -767,7 +770,7 @@ function openCreateDestination() {
   destinationForm.status = 'active'
   destinationForm.isDefault = false
   resetDestinationConfig()
-  destinationConfig.basePath = '/app/storage/backups'
+  destinationConfig.basePath = DEFAULT_LOCAL_STORAGE_BASE_PATH
   destinationDialog.value = true
 }
 

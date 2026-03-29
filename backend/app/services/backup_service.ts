@@ -5,9 +5,8 @@ import { createGzip, type Gzip } from 'node:zlib'
 import { join } from 'node:path'
 import type { Readable } from 'node:stream'
 import { DateTime } from 'luxon'
-import app from '@adonisjs/core/services/app'
-import env from '#start/env'
 import logger from '@adonisjs/core/services/logger'
+import { getBackupStoragePath } from '#config/storage_paths'
 import Connection from '#models/connection'
 import ConnectionDatabase from '#models/connection_database'
 import Backup, { type BackupTrigger, type RetentionType } from '#models/backup'
@@ -69,7 +68,7 @@ export class BackupService {
   private readonly storagePath: string
 
   constructor() {
-    this.storagePath = env.get('BACKUP_STORAGE_PATH') ?? app.makePath('storage/backups')
+    this.storagePath = getBackupStoragePath()
     this.ensureDirectoryExists(this.storagePath)
   }
 

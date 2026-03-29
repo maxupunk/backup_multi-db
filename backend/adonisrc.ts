@@ -49,6 +49,7 @@ export default defineConfig({
     () => import('@adonisjs/auth/auth_provider'),
     () => import('@adonisjs/static/static_provider'),
     () => import('@adonisjs/limiter/limiter_provider'),
+    () => import('#providers/startup_provider'),
     () => import('#providers/scheduler_provider'),
     () => import('@adonisjs/transmit/transmit_provider'),
   ],

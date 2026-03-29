@@ -1,9 +1,8 @@
-import app from '@adonisjs/core/services/app'
-import env from '#start/env'
 import { existsSync, mkdirSync } from 'node:fs'
 import { unlink } from 'node:fs/promises'
 import { dirname, join, posix } from 'node:path'
 import type { Readable } from 'node:stream'
+import { DEFAULT_LOCAL_STORAGE_NAME, getBackupStoragePath } from '#config/storage_paths'
 import StorageDestination from '#models/storage_destination'
 import type Backup from '#models/backup'
 import type Connection from '#models/connection'
@@ -47,8 +46,59 @@ export class StorageDestinationService {
     return StorageDestination.find(backup.storageDestinationId)
   }
 
+  static async ensureDefaultLocalDestination(): Promise<StorageDestination> {
+    const fallbackPath = getBackupStoragePath()
+
+    if (!existsSync(fallbackPath)) {
+      mkdirSync(fallbackPath, { recursive: true })
+    }
+
+    const defaultLocal = await StorageDestination.query()
+      .where('type', 'local')
+      .where('isDefault', true)
+      .first()
+
+    if (defaultLocal) {
+      const config = defaultLocal.getDecryptedConfig()
+      if (config?.type !== 'local' || !config.basePath?.trim()) {
+        defaultLocal.setConfig({ type: 'local', basePath: fallbackPath })
+        await defaultLocal.save()
+      }
+      return defaultLocal
+    }
+
+    const existingLocal = await StorageDestination.query()
+      .where('type', 'local')
+      .where('status', 'active')
+      .orderBy('createdAt', 'asc')
+      .first()
+
+    if (existingLocal) {
+      existingLocal.isDefault = true
+      const config = existingLocal.getDecryptedConfig()
+      if (config?.type !== 'local' || !config.basePath?.trim()) {
+        existingLocal.setConfig({ type: 'local', basePath: fallbackPath })
+      }
+      await existingLocal.save()
+      await StorageDestination.query().whereNot('id', existingLocal.id).update({ isDefault: false })
+      return existingLocal
+    }
+
+    const destination = await StorageDestination.create({
+      name: DEFAULT_LOCAL_STORAGE_NAME,
+      type: 'local',
+      status: 'active',
+      isDefault: true,
+      configEncrypted: JSON.stringify({ type: 'local', basePath: fallbackPath }),
+    })
+
+    await StorageDestination.query().whereNot('id', destination.id).update({ isDefault: false })
+
+    return destination
+  }
+
   static getLocalBasePath(destination: StorageDestination | null): string {
-    const fallback = env.get('BACKUP_STORAGE_PATH') ?? app.makePath('storage/backups')
+    const fallback = getBackupStoragePath()
     if (!destination) return fallback
 
     const config = destination.getDecryptedConfig()

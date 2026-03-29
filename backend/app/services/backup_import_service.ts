@@ -12,9 +12,8 @@ import { createHash } from 'node:crypto'
 import { createGunzip } from 'node:zlib'
 import { join, extname } from 'node:path'
 import type { MultipartFile } from '@adonisjs/core/types/bodyparser'
-import app from '@adonisjs/core/services/app'
-import env from '#start/env'
 import logger from '@adonisjs/core/services/logger'
+import { getBackupStoragePath } from '#config/storage_paths'
 import Backup from '#models/backup'
 import Connection from '#models/connection'
 
@@ -89,7 +88,7 @@ export class BackupImportService {
   private readonly storagePath: string
 
   constructor() {
-    this.storagePath = env.get('BACKUP_STORAGE_PATH') ?? app.makePath('storage/backups')
+    this.storagePath = getBackupStoragePath()
   }
 
   // ─── Public API ────────────────────────────────────────────────────────────
