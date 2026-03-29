@@ -38,76 +38,13 @@
           </v-card-text>
         </v-card>
 
-        <!-- System Info -->
-        <v-card>
-          <v-card-title class="d-flex align-center">
-            <v-icon class="mr-2" color="info" icon="mdi-information" />
-            Informações do Sistema
-          </v-card-title>
-
-          <v-card-text>
-            <v-list density="compact">
-              <v-list-item>
-                <template #prepend>
-                  <v-icon icon="mdi-tag" />
-                </template>
-                <v-list-item-title>Versão</v-list-item-title>
-                <template #append>
-                  <span class="text-medium-emphasis">1.0.0</span>
-                </template>
-              </v-list-item>
-
-              <v-list-item>
-                <template #prepend>
-                  <v-icon icon="mdi-server" />
-                </template>
-                <v-list-item-title>Status da API</v-list-item-title>
-                <template #append>
-                  <v-chip :color="apiStatus === 'online' ? 'success' : 'error'" label size="small">
-                    {{ apiStatus === 'online' ? 'Online' : 'Offline' }}
-                  </v-chip>
-                </template>
-              </v-list-item>
-
-              <v-list-item>
-                <template #prepend>
-                  <v-icon icon="mdi-cog-sync" />
-                </template>
-                <v-list-item-title>Status do Work/Jobs</v-list-item-title>
-                <template #append>
-                  <v-chip :color="getJobsStatusColor()" label size="small">
-                    {{ getJobsStatusLabel() }}
-                  </v-chip>
-                </template>
-              </v-list-item>
-
-              <v-list-item v-if="jobsActiveCount !== null">
-                <template #prepend>
-                  <v-icon icon="mdi-format-list-numbered" />
-                </template>
-                <v-list-item-title>Jobs Ativos</v-list-item-title>
-                <template #append>
-                  <span class="text-medium-emphasis">{{ jobsActiveCount }}</span>
-                </template>
-              </v-list-item>
-
-              <v-list-item v-if="apiLatency">
-                <template #prepend>
-                  <v-icon icon="mdi-speedometer" />
-                </template>
-                <v-list-item-title>Latência</v-list-item-title>
-                <template #append>
-                  <span class="text-medium-emphasis">{{ apiLatency }}ms</span>
-                </template>
-              </v-list-item>
-            </v-list>
-
-            <v-btn block class="mt-4" color="info" :loading="checkingApi" prepend-icon="mdi-refresh" variant="tonal"
-              @click="checkApi">
-              Verificar Conexão
-            </v-btn>
-          </v-card-text>
-        </v-card>
+        <SystemInfoCard
+          :api-latency="apiLatency"
+          :api-status="apiStatus"
+          :checking="checkingApi"
+          :system="systemStatus"
+          @refresh="checkApi"
+        />
       </v-col>
 
       <v-col cols="12" md="6">
@@ -479,13 +416,15 @@
 </template>
 
 <script lang="ts" setup>
-import type { StorageDestination, StorageDestinationType, StorageSpaceInfo } from '@/types/api'
+import type { StorageDestination, StorageDestinationType, StorageSpaceInfo, SystemStatus } from '@/types/api'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useTheme } from 'vuetify'
 import { ApiError, healthCheck, storageDestinationsApi, systemApi } from '@/services/api'
 import { useDisplay } from 'vuetify'
 import { useDebouncedFn } from '@/composables/useDebouncedFn'
 import { useNotifier } from '@/composables/useNotifier'
+import SystemInfoCard from '@/components/system/SystemInfoCard.vue'
+import { formatBytes } from '@/utils/format'
 
 const theme = useTheme()
 const { mdAndUp } = useDisplay()
@@ -495,8 +434,7 @@ const DEFAULT_LOCAL_STORAGE_BASE_PATH = '/app_data/backups'
 const apiStatus = ref<'online' | 'offline'>('offline')
 const apiLatency = ref<number | null>(null)
 const checkingApi = ref(false)
-const jobsRuntimeStatus = ref<'ok' | 'down' | 'unknown'>('unknown')
-const jobsActiveCount = ref<number | null>(null)
+const systemStatus = ref<SystemStatus | null>(null)
 
 const storageDestinations = ref<StorageDestination[]>([])
 const loadingDestinations = ref(false)
@@ -622,45 +560,17 @@ async function checkApi() {
 
   try {
     await healthCheck()
+    const response = await systemApi.status()
     apiLatency.value = Date.now() - startTime
     apiStatus.value = 'online'
-    await checkJobsStatus()
-    notify('API está online', 'success')
+    systemStatus.value = response.data ?? null
   } catch {
     apiStatus.value = 'offline'
     apiLatency.value = null
-    jobsRuntimeStatus.value = 'down'
-    jobsActiveCount.value = null
-    notify('API está offline', 'error')
+    systemStatus.value = null
   } finally {
     checkingApi.value = false
   }
-}
-
-async function checkJobsStatus() {
-  const response = await systemApi.status()
-  const jobs = response.data?.jobs
-
-  if (!jobs) {
-    jobsRuntimeStatus.value = 'unknown'
-    jobsActiveCount.value = null
-    return
-  }
-
-  jobsRuntimeStatus.value = jobs.isRunning && jobs.status === 'ok' ? 'ok' : 'down'
-  jobsActiveCount.value = jobs.activeJobs
-}
-
-function getJobsStatusColor(): string {
-  if (jobsRuntimeStatus.value === 'ok') return 'success'
-  if (jobsRuntimeStatus.value === 'down') return 'error'
-  return 'grey'
-}
-
-function getJobsStatusLabel(): string {
-  if (jobsRuntimeStatus.value === 'ok') return 'Rodando e OK'
-  if (jobsRuntimeStatus.value === 'down') return 'Parado/Erro'
-  return 'Desconhecido'
 }
 
 function formatDestinationType(type: StorageDestinationType): string {
@@ -713,16 +623,6 @@ async function loadStorageSpaces() {
 
 function getStorageSpace(destinationId: number): StorageSpaceInfo | undefined {
   return storageSpaces.value.get(destinationId)
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return '0 B'
-
-  const k = 1024
-  const sizes = ['B', 'KB', 'MB', 'GB', 'TB', 'PB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`
 }
 
 function getProgressColor(usedPercent: number): string {

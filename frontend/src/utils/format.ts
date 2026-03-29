@@ -30,12 +30,30 @@ export function formatFileSize (bytes: number | null | undefined, emptyValue = '
   return `${size.toFixed(1)} ${units[unitIndex]}`
 }
 
+export function formatBytes (bytes: number | null | undefined, emptyValue = '-'): string {
+  if (bytes === null || bytes === undefined) return emptyValue
+
+  return formatFileSize(bytes, emptyValue)
+}
+
 export function formatDuration (seconds: number | null | undefined, emptyValue = '-'): string {
   if (seconds === null || seconds === undefined) return emptyValue
   if (seconds < 60) return `${seconds}s`
 
-  const minutes = Math.floor(seconds / 60)
+  const days = Math.floor(seconds / 86_400)
+  const hours = Math.floor((seconds % 86_400) / 3_600)
+  const minutes = Math.floor((seconds % 3_600) / 60)
   const secs = seconds % 60
-  return `${minutes}m ${secs}s`
+  const segments = [
+    days ? `${days}d` : null,
+    hours ? `${hours}h` : null,
+    minutes ? `${minutes}m` : null,
+    secs || segmentsAreEmpty(days, hours, minutes) ? `${secs}s` : null,
+  ].filter(Boolean)
+
+  return segments.join(' ')
 }
 
+function segmentsAreEmpty (...values: number[]): boolean {
+  return values.every(value => value === 0)
+}

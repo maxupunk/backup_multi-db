@@ -21,5 +21,7 @@ declare module 'vue' {
     RestoreProgressOverlay: typeof import('./components/RestoreProgressOverlay.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
+    SystemInfoCard: typeof import('./components/system/SystemInfoCard.vue')['default']
+    SystemResourceCharts: typeof import('./components/system/SystemResourceCharts.vue')['default']
   }
 }

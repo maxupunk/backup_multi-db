@@ -135,6 +135,8 @@
       </v-col>
     </v-row>
 
+    <SystemResourceCharts :system="stats?.system ?? null" />
+
     <!-- Storage Space Cards -->
     <v-row v-if="stats?.storageSpaces?.length" class="mb-6">
       <v-col cols="12">
@@ -270,12 +272,13 @@
 </template>
 
 <script lang="ts" setup>
-import type { BackupStatus, DashboardStats, JobsSystemStatus, StorageSpaceInfo } from '@/types/api'
+import type { BackupStatus, DashboardStats, JobsSystemStatus } from '@/types/api'
 import { computed, onMounted, ref } from 'vue'
 import { statsApi } from '@/services/api'
 import { useNotifier } from '@/composables/useNotifier'
+import SystemResourceCharts from '@/components/system/SystemResourceCharts.vue'
 import { getBackupStatusColor as getStatusColor, getBackupStatusLabel as getStatusLabel } from '@/ui/backup'
-import { formatDateTimePtBR, formatFileSize } from '@/utils/format'
+import { formatBytes, formatDateTimePtBR, formatFileSize } from '@/utils/format'
 
 const notify = useNotifier()
 
@@ -293,7 +296,7 @@ type SchedulerCardState = {
 }
 
 const schedulerCard = computed<SchedulerCardState>(() => {
-  const jobs = stats.value?.jobs
+  const jobs = stats.value?.system?.jobs
 
   if (!jobs) {
     return buildSchedulerCardState(null)
@@ -317,16 +320,6 @@ async function loadStats() {
 
 function formatDate(dateString: string): string {
   return formatDateTimePtBR(dateString, { withYear: false })
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return '0 B'
-
-  const k = 1024
-  const sizes = ['B', 'KB', 'MB', 'GB', 'TB', 'PB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`
 }
 
 function getStorageIcon(type: string): string {

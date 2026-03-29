@@ -343,9 +343,41 @@ export interface StorageSpaceInfo {
   lowSpaceThreshold: number
 }
 
-/**
- * Estatísticas do dashboard
- */
+export interface JobsSystemStatus {
+  isRunning: boolean
+  activeJobs: number
+  status: 'ok' | 'down'
+}
+
+export interface CpuResourceMetrics {
+  usagePercent: number
+  cores: number
+  model: string
+}
+
+export interface MemoryResourceMetrics {
+  totalBytes: number
+  usedBytes: number
+  freeBytes: number
+  usagePercent: number
+}
+
+export interface SystemResourceMetrics {
+  cpu: CpuResourceMetrics
+  memory: MemoryResourceMetrics
+}
+
+export interface SystemStatus {
+  version: string
+  hostname: string
+  platform: string
+  architecture: string
+  nodeVersion: string
+  uptimeSeconds: number
+  resources: SystemResourceMetrics
+  jobs: JobsSystemStatus
+}
+
 export interface DashboardStats {
   connections: {
     total: number
@@ -363,21 +395,7 @@ export interface DashboardStats {
     createdAt: string
   }[]
   storageSpaces: StorageSpaceInfo[]
-  jobs?: {
-    isRunning: boolean
-    activeJobs: number
-    status: 'ok' | 'down'
-  }
-}
-
-export interface JobsSystemStatus {
-  isRunning: boolean
-  activeJobs: number
-  status: 'ok' | 'down'
-}
-
-export interface SystemStatus {
-  jobs: JobsSystemStatus
+  system: SystemStatus
 }
 
 /**
