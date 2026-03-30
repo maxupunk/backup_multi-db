@@ -135,7 +135,7 @@
       </v-col>
     </v-row>
 
-    <SystemResourceCharts :system="stats?.system ?? null" />
+    <SystemResourceCharts :system="liveSystem" />
 
     <!-- Storage Space Cards -->
     <v-row v-if="stats?.storageSpaces?.length" class="mb-6">
@@ -272,10 +272,11 @@
 </template>
 
 <script lang="ts" setup>
-import type { BackupStatus, DashboardStats, JobsSystemStatus } from '@/types/api'
+import type { BackupStatus, DashboardStats, JobsSystemStatus, SystemStatus } from '@/types/api'
 import { computed, onMounted, ref } from 'vue'
 import { statsApi } from '@/services/api'
 import { useNotifier } from '@/composables/useNotifier'
+import { useSystemResources } from '@/composables/useSystemResources'
 import SystemResourceCharts from '@/components/system/SystemResourceCharts.vue'
 import { getBackupStatusColor as getStatusColor, getBackupStatusLabel as getStatusLabel } from '@/ui/backup'
 import { formatBytes, formatDateTimePtBR, formatFileSize } from '@/utils/format'
@@ -284,6 +285,30 @@ const notify = useNotifier()
 
 const loading = ref(false)
 const stats = ref<DashboardStats | null>(null)
+
+// Atualizações em tempo real de CPU e RAM via SSE (~1s)
+const { systemResources } = useSystemResources()
+
+/**
+ * Mescla os metadados do sistema (hostname, versão, jobs, etc.) com as
+ * métricas de recursos atualizadas em tempo real via SSE.
+ * Enquanto o SSE não entregou dados ainda, usa os dados do stats inicial.
+ */
+const liveSystem = computed<SystemStatus | null>(() => {
+  const base = stats.value?.system ?? null
+
+  if (!base) return null
+
+  if (!systemResources.value) return base
+
+  return {
+    ...base,
+    resources: {
+      cpu: systemResources.value.cpu,
+      memory: systemResources.value.memory,
+    },
+  }
+})
 
 type SchedulerCardState = {
   activeJobs: number

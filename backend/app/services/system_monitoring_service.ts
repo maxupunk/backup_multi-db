@@ -84,7 +84,7 @@ export class SystemMonitoringService {
     }
   }
 
-  private static async getResourceMetrics(): Promise<SystemResourceMetrics> {
+  static async getResourceMetrics(): Promise<SystemResourceMetrics> {
     const [cpu, memory] = await Promise.all([this.getCpuMetrics(), this.getMemoryMetrics()])
 
     return {

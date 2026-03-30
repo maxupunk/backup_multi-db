@@ -121,6 +121,12 @@ router
 | This allows Vue Router to handle client-side routing.
 |
 */
+import transmit from '@adonisjs/transmit/services/main'
+
+// Registra as rotas do Transmit (/__transmit/*) ANTES do fallback genérico (*)
+// para que a rota SPA não sobrescreva a stream de eventos SSE.
+transmit.registerRoutes()
+
 router.get('*', async ({ response }) => {
   const indexPath = join(app.publicPath(), 'index.html')
 

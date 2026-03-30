@@ -59,6 +59,8 @@ export const NOTIFICATION_CHANNELS = {
   RESTORE: 'notifications/restore',
   /** Canal de progresso de backup */
   BACKUP_PROGRESS: 'notifications/backup-progress',
+  /** Canal de métricas de recursos do sistema (CPU/RAM) em tempo real */
+  SYSTEM_RESOURCES: 'notifications/system-resources',
 } as const
 
 /**
