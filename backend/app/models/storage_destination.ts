@@ -9,6 +9,25 @@ export type StorageDestinationType = 'local' | 's3' | 'gcs' | 'azure_blob' | 'sf
 
 export type StorageDestinationStatus = 'active' | 'inactive'
 
+export type StorageProvider =
+  | 'aws_s3'
+  | 'minio'
+  | 'cloudflare_r2'
+  | 'google_gcs'
+  | 'azure_blob'
+  | 'sftp'
+  | 'local'
+
+const PROVIDER_LABELS: Record<StorageProvider, string> = {
+  aws_s3: 'Amazon S3',
+  minio: 'MinIO',
+  cloudflare_r2: 'Cloudflare R2',
+  google_gcs: 'Google Cloud Storage',
+  azure_blob: 'Azure Blob Storage',
+  sftp: 'SFTP',
+  local: 'Local',
+}
+
 export type StorageDestinationConfig =
   | {
       type: 'local'
@@ -60,6 +79,9 @@ export default class StorageDestination extends BaseModel {
 
   @column()
   declare status: StorageDestinationStatus
+
+  @column()
+  declare provider: StorageProvider | null
 
   @column()
   declare isDefault: boolean
@@ -139,5 +161,32 @@ export default class StorageDestination extends BaseModel {
     }
 
     return config
+  }
+
+  getProviderLabel(): string {
+    if (this.provider && this.provider in PROVIDER_LABELS) {
+      return PROVIDER_LABELS[this.provider]
+    }
+    // Fallback para type quando provider não estiver preenchido
+    const typeToProvider: Record<StorageDestinationType, StorageProvider> = {
+      local: 'local',
+      s3: 'aws_s3',
+      gcs: 'google_gcs',
+      azure_blob: 'azure_blob',
+      sftp: 'sftp',
+    }
+    return PROVIDER_LABELS[typeToProvider[this.type]] ?? this.type
+  }
+
+  getEffectiveProvider(): StorageProvider {
+    if (this.provider) return this.provider
+    const typeToProvider: Record<StorageDestinationType, StorageProvider> = {
+      local: 'local',
+      s3: 'aws_s3',
+      gcs: 'google_gcs',
+      azure_blob: 'azure_blob',
+      sftp: 'sftp',
+    }
+    return typeToProvider[this.type]
   }
 }

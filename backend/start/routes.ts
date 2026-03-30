@@ -11,6 +11,7 @@ const AuditLogsController = () => import('#controllers/audit_logs_controller')
 const AuthController = () => import('#controllers/auth_controller')
 const UsersController = () => import('#controllers/users_controller')
 const StorageDestinationsController = () => import('#controllers/storage_destinations_controller')
+const StoragesController = () => import('#controllers/storages_controller')
 const SystemController = () => import('#controllers/system_controller')
 import AutoSwagger from 'adonis-autoswagger'
 import swagger from '#config/swagger'
@@ -61,10 +62,35 @@ router
 
         router.resource('connections', ConnectionsController).apiOnly()
 
-        // ==================== Storage Destinations ====================
+        // ==================== Storage Destinations (legacy) ====================
         router.resource('storage-destinations', StorageDestinationsController).apiOnly()
         router.get('storage-destinations-space', [StorageDestinationsController, 'spaceAll'])
         router.get('storage-destinations/:id/space', [StorageDestinationsController, 'space'])
+
+        // ==================== Storages (novo) ====================
+        // Rotas sem :id devem vir antes das rotas com :id para evitar conflito
+        router.get('storages', [StoragesController, 'index'])
+        router.post('storages', [StoragesController, 'store'])
+        router.get('storages/copy-jobs/:jobId', [StoragesController, 'copyStatus'])
+        router.get('storages/archive-jobs/:jobId/download', [StoragesController, 'downloadArchive'])
+
+        router.get('storages/:id', [StoragesController, 'show'])
+        router.put('storages/:id', [StoragesController, 'update'])
+        router.delete('storages/:id', [StoragesController, 'destroy'])
+
+        router
+          .post('storages/:id/test', [StoragesController, 'test'])
+          .use(middleware.rateLimit({ limiter: 'strict' }))
+
+        router.get('storages/:id/browse', [StoragesController, 'browse'])
+
+        router
+          .post('storages/:id/copy', [StoragesController, 'startCopy'])
+          .use(middleware.rateLimit({ limiter: 'backup' }))
+
+        router
+          .post('storages/:id/archive', [StoragesController, 'startArchive'])
+          .use(middleware.rateLimit({ limiter: 'backup' }))
 
         // Test connection - rateLimit estrito (10 req/min)
         router

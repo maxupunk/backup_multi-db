@@ -26,6 +26,12 @@ declare module 'vue-router/auto-routes' {
     '/login': RouteRecordInfo<'/login', '/login', Record<never, never>, Record<never, never>>,
     '/register': RouteRecordInfo<'/register', '/register', Record<never, never>, Record<never, never>>,
     '/settings/': RouteRecordInfo<'/settings/', '/settings', Record<never, never>, Record<never, never>>,
+    '/storages/': RouteRecordInfo<'/storages/', '/storages', Record<never, never>, Record<never, never>>,
+    '/storages/[id]/': RouteRecordInfo<'/storages/[id]/', '/storages/:id', { id: ParamValue<true> }, { id: ParamValue<false> }>,
+    '/storages/[id]/copy': RouteRecordInfo<'/storages/[id]/copy', '/storages/:id/copy', { id: ParamValue<true> }, { id: ParamValue<false> }>,
+    '/storages/[id]/download': RouteRecordInfo<'/storages/[id]/download', '/storages/:id/download', { id: ParamValue<true> }, { id: ParamValue<false> }>,
+    '/storages/[id]/explore': RouteRecordInfo<'/storages/[id]/explore', '/storages/:id/explore', { id: ParamValue<true> }, { id: ParamValue<false> }>,
+    '/storages/new': RouteRecordInfo<'/storages/new', '/storages/new', Record<never, never>, Record<never, never>>,
     '/users/': RouteRecordInfo<'/users/', '/users', Record<never, never>, Record<never, never>>,
   }
 
@@ -70,6 +76,30 @@ declare module 'vue-router/auto-routes' {
     }
     'src/pages/settings/index.vue': {
       routes: '/settings/'
+      views: never
+    }
+    'src/pages/storages/index.vue': {
+      routes: '/storages/'
+      views: never
+    }
+    'src/pages/storages/[id]/index.vue': {
+      routes: '/storages/[id]/'
+      views: never
+    }
+    'src/pages/storages/[id]/copy.vue': {
+      routes: '/storages/[id]/copy'
+      views: never
+    }
+    'src/pages/storages/[id]/download.vue': {
+      routes: '/storages/[id]/download'
+      views: never
+    }
+    'src/pages/storages/[id]/explore.vue': {
+      routes: '/storages/[id]/explore'
+      views: never
+    }
+    'src/pages/storages/new.vue': {
+      routes: '/storages/new'
       views: never
     }
     'src/pages/users/index.vue': {

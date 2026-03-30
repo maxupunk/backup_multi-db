@@ -508,3 +508,88 @@ export interface AuditStats {
     count: number
   }[]
 }
+
+// ==================== Storages ====================
+
+export type StorageProvider =
+  | 'aws_s3'
+  | 'minio'
+  | 'cloudflare_r2'
+  | 'google_gcs'
+  | 'azure_blob'
+  | 'sftp'
+  | 'local'
+
+export interface Storage extends StorageDestination {
+  provider: StorageProvider
+}
+
+export interface BucketObject {
+  key: string
+  name: string
+  size: number | null
+  lastModified: string | null
+  isDirectory: boolean
+  etag?: string
+}
+
+export type CopyJobStatus = 'pending' | 'running' | 'completed' | 'failed'
+
+export interface CopyJob {
+  id: string
+  sourceStorageId: number
+  destinationStorageId: number
+  status: CopyJobStatus
+  filesTransferred: number
+  totalFiles: number | null
+  bytesTransferred: number
+  error?: string
+  startedAt: string
+  completedAt?: string
+}
+
+export type ArchiveJobStatus = 'pending' | 'building' | 'ready' | 'expired' | 'failed'
+
+export interface ArchiveJob {
+  id: string
+  storageId: number
+  path: string | null
+  status: ArchiveJobStatus
+  totalFiles: number | null
+  processedFiles: number
+  downloadUrl?: string
+  expiresAt?: string
+  error?: string
+}
+
+export interface CreateStoragePayload {
+  name: string
+  type: StorageDestinationType
+  provider: StorageProvider
+  status?: StorageDestinationStatus
+  isDefault?: boolean
+  config?: StorageDestinationConfigPayload
+}
+
+export interface UpdateStoragePayload {
+  name?: string
+  type?: StorageDestinationType
+  provider?: StorageProvider
+  status?: StorageDestinationStatus
+  isDefault?: boolean
+  config?: StorageDestinationConfigPayload
+}
+
+export interface CopyStoragePayload {
+  destinationId: number
+  sourcePath?: string
+  destinationPath?: string
+  dryRun?: boolean
+  deleteExtraneous?: boolean
+}
+
+export interface BrowseResult {
+  objects: BucketObject[]
+  cursor: string | null
+  path: string
+}

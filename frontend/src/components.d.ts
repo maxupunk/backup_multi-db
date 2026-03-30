@@ -11,6 +11,9 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
+    ArchiveProgress: typeof import('./components/storages/ArchiveProgress.vue')['default']
+    BucketExplorer: typeof import('./components/storages/BucketExplorer.vue')['default']
+    CopyJobProgress: typeof import('./components/storages/CopyJobProgress.vue')['default']
     CreateDatabaseDialog: typeof import('./components/common/CreateDatabaseDialog.vue')['default']
     FileDropZone: typeof import('./components/backups/FileDropZone.vue')['default']
     HostSelectorField: typeof import('./components/connections/HostSelectorField.vue')['default']
@@ -21,6 +24,9 @@ declare module 'vue' {
     RestoreProgressOverlay: typeof import('./components/RestoreProgressOverlay.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
+    StorageFormFields: typeof import('./components/storages/StorageFormFields.vue')['default']
+    StorageProviderIcon: typeof import('./components/storages/StorageProviderIcon.vue')['default']
+    StorageTestButton: typeof import('./components/storages/StorageTestButton.vue')['default']
     SystemInfoCard: typeof import('./components/system/SystemInfoCard.vue')['default']
     SystemResourceCharts: typeof import('./components/system/SystemResourceCharts.vue')['default']
   }

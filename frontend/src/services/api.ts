@@ -4,6 +4,7 @@
 
 import type {
   ApiResponse,
+  ArchiveJob,
   AuditAction,
   AuditEntityType,
   AuditLog,
@@ -11,10 +12,14 @@ import type {
   AuditStatus,
   Backup,
   BackupResult,
+  BrowseResult,
   Connection,
   ConnectionTestResult,
+  CopyJob,
+  CopyStoragePayload,
   CreateConnectionPayload,
   CreateStorageDestinationPayload,
+  CreateStoragePayload,
   DashboardStats,
   DockerHostsResponseData,
   ImportBackupResult,
@@ -23,11 +28,14 @@ import type {
   RegisterPayload,
   RestoreOptions,
   RestoreResult,
+  Storage,
   StorageDestination,
+  StorageProvider,
   StorageSpaceInfo,
   SystemStatus,
   UpdateConnectionPayload,
   UpdateStorageDestinationPayload,
+  UpdateStoragePayload,
 } from '@/types/api'
 import type { AuthResponse, User } from '@/types/auth'
 
@@ -634,6 +642,137 @@ export const authApi = {
    */
   async checkStatus (): Promise<ApiResponse<{ hasUsers: boolean }>> {
     return request<ApiResponse<{ hasUsers: boolean }>>('/auth/status')
+  },
+}
+
+/**
+ * Serviço de API para Armazenamentos
+ */
+export const storagesApi = {
+  async list (params?: {
+    page?: number
+    limit?: number
+    type?: string
+    provider?: StorageProvider
+    status?: string
+    search?: string
+  }): Promise<PaginatedResponse<Storage>> {
+    const searchParams = new URLSearchParams()
+
+    if (params?.page) searchParams.set('page', params.page.toString())
+    if (params?.limit) searchParams.set('limit', params.limit.toString())
+    if (params?.type) searchParams.set('type', params.type)
+    if (params?.provider) searchParams.set('provider', params.provider)
+    if (params?.status) searchParams.set('status', params.status)
+    if (params?.search) searchParams.set('search', params.search)
+
+    const query = searchParams.toString()
+    return request<PaginatedResponse<Storage>>(
+      `/storages${query ? `?${query}` : ''}`,
+    )
+  },
+
+  async get (id: number): Promise<ApiResponse<Storage>> {
+    return request<ApiResponse<Storage>>(`/storages/${id}`)
+  },
+
+  async create (payload: CreateStoragePayload): Promise<ApiResponse<Storage>> {
+    return request<ApiResponse<Storage>>('/storages', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    })
+  },
+
+  async update (id: number, payload: UpdateStoragePayload): Promise<ApiResponse<Storage>> {
+    return request<ApiResponse<Storage>>(`/storages/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    })
+  },
+
+  async delete (id: number): Promise<ApiResponse> {
+    return request<ApiResponse>(`/storages/${id}`, {
+      method: 'DELETE',
+    })
+  },
+
+  async test (id: number): Promise<ApiResponse<{ latencyMs: number }>> {
+    return request<ApiResponse<{ latencyMs: number }>>(`/storages/${id}/test`, {
+      method: 'POST',
+    })
+  },
+
+  async browse (id: number, path?: string, cursor?: string): Promise<ApiResponse<BrowseResult>> {
+    const searchParams = new URLSearchParams()
+    if (path) searchParams.set('path', path)
+    if (cursor) searchParams.set('cursor', cursor)
+    const query = searchParams.toString()
+    return request<ApiResponse<BrowseResult>>(
+      `/storages/${id}/browse${query ? `?${query}` : ''}`,
+    )
+  },
+
+  async startCopy (id: number, payload: CopyStoragePayload): Promise<ApiResponse<{ jobId: string }>> {
+    return request<ApiResponse<{ jobId: string }>>(`/storages/${id}/copy`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    })
+  },
+
+  async getCopyJob (jobId: string): Promise<ApiResponse<CopyJob>> {
+    return request<ApiResponse<CopyJob>>(`/storages/copy-jobs/${jobId}`)
+  },
+
+  async startArchive (id: number, path?: string): Promise<ApiResponse<{ jobId: string }>> {
+    return request<ApiResponse<{ jobId: string }>>(`/storages/${id}/archive`, {
+      method: 'POST',
+      body: JSON.stringify({ path: path || undefined }),
+    })
+  },
+
+  async downloadArchive (jobId: string): Promise<void> {
+    const url = `${API_BASE}/storages/archive-jobs/${jobId}/download`
+    const token = localStorage.getItem('token')
+
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    })
+
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}))
+      throw new ApiError(
+        extractErrorMessage(data),
+        response.status,
+        data,
+      )
+    }
+
+    const contentDisposition = response.headers.get('Content-Disposition')
+    let downloadFileName = 'archive.tar.gz'
+
+    if (contentDisposition) {
+      const match = contentDisposition.match(/filename="?([^"]+)"?/)
+      if (match?.[1]) {
+        downloadFileName = match[1]
+      }
+    }
+
+    const blob = await response.blob()
+    const blobUrl = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = blobUrl
+    link.download = downloadFileName
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(blobUrl)
+  },
+
+  async getArchiveJob (jobId: string): Promise<ApiResponse<ArchiveJob>> {
+    return request<ApiResponse<ArchiveJob>>(`/storages/archive-jobs/${jobId}`)
   },
 }
 
