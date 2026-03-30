@@ -98,17 +98,24 @@ export class BucketCopyService {
         throw new Error('Configuração de storage inválida')
       }
 
-      const args = this.buildRcloneArgs(
-        sourceConfig,
-        destConfig,
+      const sourceRemoteConfig = await this.buildRemoteConfig(
+        'src',
         source.getEffectiveProvider(),
+        sourceConfig,
+        options.sourcePath
+      )
+      const destRemoteConfig = await this.buildRemoteConfig(
+        'dst',
         destination.getEffectiveProvider(),
-        options
+        destConfig,
+        options.destinationPath
       )
 
+      const args = this.buildRcloneArgs(sourceRemoteConfig.path, destRemoteConfig.path, options)
+
       const env = {
-        ...this.buildRcloneEnv(sourceConfig, 'SRC', source.getEffectiveProvider()),
-        ...this.buildRcloneEnv(destConfig, 'DST', destination.getEffectiveProvider()),
+        ...sourceRemoteConfig.env,
+        ...destRemoteConfig.env,
       }
 
       const result = await this.spawnRclone(job, args, env)
@@ -135,111 +142,110 @@ export class BucketCopyService {
     }
   }
 
-  private static buildRcloneRemote(
+  /**
+   * Builds rclone named remote config via environment variables and returns
+   * the reference path. Credentials never appear in the command line.
+   *
+   * Format: RCLONE_CONFIG_{NAME}_{OPTION}=value → reference as `name:path`
+   */
+  private static async buildRemoteConfig(
+    remoteName: string,
     provider: StorageProvider,
     config: StorageDestinationConfig,
-    prefix: string
-  ): string {
-    const tag = prefix.toLowerCase()
+    subPath?: string
+  ): Promise<{ env: Record<string, string>; path: string }> {
+    const PREFIX = `RCLONE_CONFIG_${remoteName.toUpperCase()}`
+    const env: Record<string, string> = {}
+    const joinPath = (...parts: (string | undefined)[]): string =>
+      parts
+        .map((p) => p?.replace(/^\/+|\/+$/g, '') ?? '')
+        .filter(Boolean)
+        .join('/')
 
     switch (provider) {
       case 'aws_s3':
       case 'minio':
       case 'cloudflare_r2': {
-        const s3Config = config as Extract<StorageDestinationConfig, { type: 's3' }>
-        const bucket = s3Config.bucket
-        const path = s3Config.prefix?.replace(/^\/+|\/+$/g, '') ?? ''
-        return `:s3,env_auth=false,access_key_id={${tag}_access_key},secret_access_key={${tag}_secret_key},region=${s3Config.region}${s3Config.endpoint ? `,endpoint=${s3Config.endpoint}` : ''}${s3Config.forcePathStyle ? ',force_path_style=true' : ''}:${bucket}/${path}`
+        const s3 = config as Extract<StorageDestinationConfig, { type: 's3' }>
+        env[`${PREFIX}_TYPE`] = 's3'
+        env[`${PREFIX}_ENV_AUTH`] = 'false'
+        env[`${PREFIX}_ACCESS_KEY_ID`] = s3.accessKeyId
+        env[`${PREFIX}_SECRET_ACCESS_KEY`] = s3.secretAccessKey
+        env[`${PREFIX}_REGION`] = s3.region || 'us-east-1'
+        if (s3.endpoint) env[`${PREFIX}_ENDPOINT`] = s3.endpoint
+        if (s3.forcePathStyle) env[`${PREFIX}_FORCE_PATH_STYLE`] = 'true'
+
+        return { env, path: `${remoteName}:${joinPath(s3.bucket, s3.prefix, subPath)}` }
       }
+
       case 'google_gcs': {
-        const gcsConfig = config as Extract<StorageDestinationConfig, { type: 'gcs' }>
-        const bucket = gcsConfig.bucket
-        const path = gcsConfig.prefix?.replace(/^\/+|\/+$/g, '') ?? ''
-        return `:gcs,env_auth=false${gcsConfig.projectId ? `,project_number=${gcsConfig.projectId}` : ''}:${bucket}/${path}`
+        const gcs = config as Extract<StorageDestinationConfig, { type: 'gcs' }>
+        env[`${PREFIX}_TYPE`] = 'google cloud storage'
+        env[`${PREFIX}_ENV_AUTH`] = 'false'
+        if (gcs.projectId) env[`${PREFIX}_PROJECT_NUMBER`] = gcs.projectId
+        if (gcs.credentialsJson) env[`${PREFIX}_SERVICE_ACCOUNT_CREDENTIALS`] = gcs.credentialsJson
+
+        return { env, path: `${remoteName}:${joinPath(gcs.bucket, gcs.prefix, subPath)}` }
       }
+
       case 'azure_blob': {
-        const azureConfig = config as Extract<StorageDestinationConfig, { type: 'azure_blob' }>
-        const container = azureConfig.container
-        const path = azureConfig.prefix?.replace(/^\/+|\/+$/g, '') ?? ''
-        return `:azureblob,env_auth=false:${container}/${path}`
+        const azure = config as Extract<StorageDestinationConfig, { type: 'azure_blob' }>
+        const accountMatch = azure.connectionString.match(/AccountName=([^;]+)/)
+        const keyMatch = azure.connectionString.match(/AccountKey=([^;]+)/)
+        env[`${PREFIX}_TYPE`] = 'azureblob'
+        if (accountMatch) env[`${PREFIX}_ACCOUNT`] = accountMatch[1]
+        if (keyMatch) env[`${PREFIX}_KEY`] = keyMatch[1]
+
+        return { env, path: `${remoteName}:${joinPath(azure.container, azure.prefix, subPath)}` }
       }
+
       case 'sftp': {
-        const sftpConfig = config as Extract<StorageDestinationConfig, { type: 'sftp' }>
-        const basePath = sftpConfig.basePath?.replace(/^\/+|\/+$/g, '') ?? ''
-        return `:sftp,host=${sftpConfig.host},port=${sftpConfig.port ?? 22},user=${sftpConfig.username}:${basePath}`
+        const sftp = config as Extract<StorageDestinationConfig, { type: 'sftp' }>
+        env[`${PREFIX}_TYPE`] = 'sftp'
+        env[`${PREFIX}_HOST`] = sftp.host
+        env[`${PREFIX}_PORT`] = String(sftp.port ?? 22)
+        env[`${PREFIX}_USER`] = sftp.username
+        if (sftp.password) env[`${PREFIX}_PASS`] = await this.obscurePassword(sftp.password)
+        if (sftp.privateKey) env[`${PREFIX}_KEY_PEM`] = sftp.privateKey
+
+        return { env, path: `${remoteName}:${joinPath(sftp.basePath, subPath)}` }
       }
+
       case 'local': {
-        const localConfig = config as Extract<StorageDestinationConfig, { type: 'local' }>
-        return localConfig.basePath ?? '/app_data/backups'
+        const local = config as Extract<StorageDestinationConfig, { type: 'local' }>
+        env[`${PREFIX}_TYPE`] = 'local'
+        const basePath = local.basePath ?? '/app_data/backups'
+
+        return { env, path: `${remoteName}:${joinPath(basePath, subPath)}` }
       }
+
       default:
         throw new Error(`Provider rclone não suportado: ${provider}`)
     }
   }
 
+  private static obscurePassword(plain: string): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const proc = spawn('rclone', ['obscure', plain])
+      let output = ''
+      proc.stdout?.on('data', (d: Buffer) => { output += d.toString() })
+      proc.on('close', (code) => {
+        if (code === 0) resolve(output.trim())
+        else reject(new Error(`rclone obscure falhou com código ${code}`))
+      })
+      proc.on('error', reject)
+    })
+  }
+
   private static buildRcloneArgs(
-    sourceConfig: StorageDestinationConfig,
-    destConfig: StorageDestinationConfig,
-    sourceProvider: StorageProvider,
-    destProvider: StorageProvider,
+    sourcePath: string,
+    destPath: string,
     options: CopyOptions
   ): string[] {
     const cmd = options.deleteExtraneous ? 'sync' : 'copy'
-
-    const sourceRemote = this.buildRcloneRemote(sourceProvider, sourceConfig, 'SRC')
-    const destRemote = this.buildRcloneRemote(destProvider, destConfig, 'DST')
-
-    let sourcePath = sourceRemote
-    let destPath = destRemote
-
-    if (options.sourcePath) {
-      const clean = options.sourcePath.replace(/^\/+|\/+$/g, '')
-      if (clean) sourcePath = `${sourceRemote}${sourceRemote.endsWith('/') ? '' : '/'}${clean}`
-    }
-
-    if (options.destinationPath) {
-      const clean = options.destinationPath.replace(/^\/+|\/+$/g, '')
-      if (clean) destPath = `${destRemote}${destRemote.endsWith('/') ? '' : '/'}${clean}`
-    }
-
-    const args = [cmd, sourcePath, destPath, '--progress', '--stats', '2s', '--stats-one-line']
-
-    if (options.dryRun) {
-      args.push('--dry-run')
-    }
-
+    const args = [cmd, sourcePath, destPath, '--stats', '2s', '--log-level', 'INFO']
+    if (options.dryRun) args.push('--dry-run')
     return args
-  }
-
-  private static buildRcloneEnv(
-    config: StorageDestinationConfig,
-    prefix: string,
-    _provider: StorageProvider
-  ): Record<string, string> {
-    const env: Record<string, string> = {}
-
-    if (config.type === 's3') {
-      env[`RCLONE_${prefix}_ACCESS_KEY_ID`] = config.accessKeyId
-      env[`RCLONE_${prefix}_SECRET_ACCESS_KEY`] = config.secretAccessKey
-    }
-
-    if (config.type === 'azure_blob') {
-      // Extrair account e key da connection string
-      const accountMatch = config.connectionString.match(/AccountName=([^;]+)/)
-      const keyMatch = config.connectionString.match(/AccountKey=([^;]+)/)
-      if (accountMatch) env[`RCLONE_${prefix}_ACCOUNT`] = accountMatch[1]
-      if (keyMatch) env[`RCLONE_${prefix}_KEY`] = keyMatch[1]
-    }
-
-    if (config.type === 'sftp') {
-      if (config.password) env[`RCLONE_${prefix}_PASS`] = config.password
-    }
-
-    if (config.type === 'gcs' && config.credentialsJson) {
-      env[`RCLONE_${prefix}_SERVICE_ACCOUNT_CREDENTIALS`] = config.credentialsJson
-    }
-
-    return env
   }
 
   private static redactCredentials(text: string): string {
@@ -267,11 +273,11 @@ export class BucketCopyService {
 
       this.jobProcesses.set(job.id, proc)
 
-      proc.stdout?.on('data', (data: Buffer) => {
-        const line = data.toString()
-        const redacted = this.redactCredentials(line)
+      const parseRcloneOutput = (data: Buffer): string => {
+        const text = data.toString()
+        const redacted = this.redactCredentials(text)
 
-        // Parse rclone stats output para progresso
+        // Parse file count: "Transferred:   5 / 10 Files, 50%"
         const transferredMatch = redacted.match(/Transferred:\s+(\d+)\s+\/\s+(\d+)/)
         if (transferredMatch) {
           job.filesTransferred = Number.parseInt(transferredMatch[1], 10)
@@ -279,17 +285,24 @@ export class BucketCopyService {
           this.emitProgress(job)
         }
 
-        const bytesMatch = redacted.match(/Transferred:\s+([\d.]+)\s*(\w+)/)
+        // Parse bytes: "Transferred:   2.5 GiB / 5 GiB, 50%, ..."
+        const bytesMatch = redacted.match(/Transferred:\s+([\d.]+)\s*(B|KiB|MiB|GiB|TiB|KB|MB|GB|TB)/)
         if (bytesMatch) {
           job.bytesTransferred = this.parseBytes(bytesMatch[1], bytesMatch[2])
           this.emitProgress(job)
         }
 
-        logger.debug(`[BucketCopy:${job.id}] ${redacted.trim()}`)
-      })
+        for (const line of redacted.split('\n').filter(Boolean)) {
+          logger.debug(`[BucketCopy:${job.id}] ${line.trim()}`)
+        }
+        return text
+      }
+
+      proc.stdout?.on('data', parseRcloneOutput)
 
       proc.stderr?.on('data', (data: Buffer) => {
-        stderrBuffer += data.toString()
+        const text = parseRcloneOutput(data)
+        stderrBuffer += text
       })
 
       proc.on('close', (code) => {

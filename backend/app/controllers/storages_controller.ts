@@ -381,7 +381,7 @@ export default class StoragesController {
     return response.accepted({
       success: true,
       message: 'Job de cópia iniciado',
-      data: job,
+      data: { jobId: job.id },
     })
   }
 
