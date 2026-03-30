@@ -13,8 +13,6 @@ services:
     env_file:
       - path: ./.env
         required: false
-      - path: ./backend/.env
-        required: false
     expose:
       - '3333'
     networks:

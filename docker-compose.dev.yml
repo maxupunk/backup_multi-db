@@ -13,8 +13,8 @@
 #   docker compose -f docker-compose.dev.yml down -v
 #   docker compose -f docker-compose.dev.yml up --build
 #
-# Para usar a porta externa definida em backend/.env:
-#   cd backend && npm run docker:dev
+# Para usar a porta externa definida em .env:
+#   docker compose -f docker-compose.dev.yml up
 # =============================================================================
 
 services:
@@ -26,8 +26,6 @@ services:
     restart: unless-stopped
     env_file:
       - path: ./.env
-        required: false
-      - path: ./backend/.env
         required: false
     ports:
       - '${DOCKER_EXTERNAL_PORT:-3344}:3333'
