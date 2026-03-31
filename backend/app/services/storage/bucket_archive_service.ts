@@ -1,4 +1,8 @@
-import { Readable, PassThrough } from 'node:stream'
+import { Readable } from 'node:stream'
+import { createWriteStream, createReadStream } from 'node:fs'
+import { unlink } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import logger from '@adonisjs/core/services/logger'
 import transmit from '@adonisjs/transmit/services/main'
 import StorageDestination from '#models/storage_destination'
@@ -13,13 +17,16 @@ const JOB_CLEANUP_TTL_MS = 60 * 60 * 1000 // 1h
 /**
  * Serviço de geração de archives (tar.gz) de storages.
  *
- * Usa `archiver` para criar streams tar.gz sem buffer total em memória.
+ * Usa `archiver` para criar um arquivo .tar.gz temporário em disco.
+ * Gravar em disco evita o deadlock de backpressure que ocorre ao fazer pipe
+ * para um PassThrough sem consumidor ativo.
  * Objetos são listados recursivamente via BucketExplorerService, baixados via SDK nativo
  * e piped para o archiver.
  */
 export class BucketArchiveService {
   private static jobs = new Map<string, ArchiveJob>()
-  private static streams = new Map<string, PassThrough>()
+  /** Mapeia jobId → caminho do arquivo temporário em disco */
+  private static tmpFiles = new Map<string, string>()
 
   private static generateJobId(): string {
     return `archive-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
@@ -29,8 +36,11 @@ export class BucketArchiveService {
     return this.jobs.get(jobId) ?? null
   }
 
-  static getDownloadStream(jobId: string): PassThrough | null {
-    return this.streams.get(jobId) ?? null
+  /** Cria um ReadStream do arquivo temporário gerado. Cada chamada abre um novo stream. */
+  static getDownloadStream(jobId: string): Readable | null {
+    const filePath = this.tmpFiles.get(jobId)
+    if (!filePath) return null
+    return createReadStream(filePath)
   }
 
   static async startArchive(
@@ -74,31 +84,44 @@ export class BucketArchiveService {
       this.emitProgress(job)
 
       if (allFiles.length === 0) {
+        // Arquivo vazio: cria tar.gz vazio em disco
+        const tmpFile = join(tmpdir(), `${job.id}.tar.gz`)
+        const archiverEmpty = await import('archiver')
+        const emptyArchive = archiverEmpty.default('tar', { gzip: true })
+        const emptyWs = createWriteStream(tmpFile)
+        emptyArchive.pipe(emptyWs)
+        await new Promise<void>((resolve, reject) => {
+          emptyWs.on('finish', resolve)
+          emptyWs.on('error', reject)
+          emptyArchive.on('error', reject)
+          emptyArchive.finalize()
+        })
+        this.tmpFiles.set(job.id, tmpFile)
         job.status = 'ready'
         job.completedAt = new Date().toISOString()
+        job.expiresAt = new Date(Date.now() + ARCHIVE_TTL_MS).toISOString()
         this.emitProgress(job)
-        // Cria stream vazio
-        const emptyStream = new PassThrough()
-        this.streams.set(job.id, emptyStream)
-        emptyStream.end()
         this.scheduleExpiration(job.id)
         return
       }
 
-      // 2. Criar archive stream
+      // 2. Criar arquivo temporário em disco para evitar backpressure
+      const tmpFile = join(tmpdir(), `${job.id}.tar.gz`)
       const archiver = await import('archiver')
       const archive = archiver.default('tar', { gzip: true, gzipOptions: { level: 6 } })
-      const passThrough = new PassThrough()
+      const writeStream = createWriteStream(tmpFile)
+      this.tmpFiles.set(job.id, tmpFile)
 
-      archive.pipe(passThrough)
-      this.streams.set(job.id, passThrough)
-
+      // Registra erro do archiver antes de fazer pipe
       archive.on('error', (err: Error) => {
         logger.error(`[BucketArchive] Archiver error: ${err.message}`)
         job.status = 'failed'
         job.error = err.message
+        job.completedAt = new Date().toISOString()
         this.emitProgress(job)
       })
+
+      archive.pipe(writeStream)
 
       // 3. Para cada arquivo, baixar e adicionar ao archive
       const config = storage.getDecryptedConfig()
@@ -125,7 +148,15 @@ export class BucketArchiveService {
         }
       }
 
-      await archive.finalize()
+      // 4. Finalizar e aguardar o writeStream terminar de escrever em disco
+      // Usar o evento 'finish' do writeStream (não archive.finalize()) evita
+      // o deadlock de backpressure que ocorre com PassThrough sem consumidor.
+      await new Promise<void>((resolve, reject) => {
+        writeStream.on('finish', resolve)
+        writeStream.on('error', reject)
+        archive.on('error', reject)
+        archive.finalize()
+      })
 
       job.status = 'ready'
       job.completedAt = new Date().toISOString()
@@ -174,22 +205,32 @@ export class BucketArchiveService {
   }
 
   private static scheduleExpiration(jobId: string): void {
-    setTimeout(() => {
+    setTimeout(async () => {
       const job = this.jobs.get(jobId)
       if (job && job.status === 'ready') {
         job.status = 'expired'
         this.emitProgress(job)
       }
-      this.streams.delete(jobId)
+      await this.deleteTmpFile(jobId)
       this.scheduleJobCleanup(jobId)
     }, ARCHIVE_TTL_MS)
   }
 
   private static scheduleJobCleanup(jobId: string): void {
-    setTimeout(() => {
+    setTimeout(async () => {
+      await this.deleteTmpFile(jobId)
       this.jobs.delete(jobId)
-      this.streams.delete(jobId)
     }, JOB_CLEANUP_TTL_MS)
+  }
+
+  private static async deleteTmpFile(jobId: string): Promise<void> {
+    const filePath = this.tmpFiles.get(jobId)
+    if (filePath) {
+      this.tmpFiles.delete(jobId)
+      await unlink(filePath).catch((err) => {
+        logger.warn(`[BucketArchive] Falha ao remover arquivo temporário ${filePath}: ${err.message}`)
+      })
+    }
   }
 
   private static emitProgress(job: ArchiveJob): void {

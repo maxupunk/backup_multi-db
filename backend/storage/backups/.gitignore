@@ -1,8 +1,0 @@
-# Ignorar arquivos de backup
-*.sql
-*.sql.gz
-*.dump
-*.dump.gz
-
-# Manter a pasta mas ignorar conteúdo
-!.gitkeep

@@ -440,6 +440,22 @@ export default class StoragesController {
     })
   }
 
+  async archiveJobStatus({ params, response }: HttpContext) {
+    const job = BucketArchiveService.getJob(params.jobId)
+
+    if (!job) {
+      return response.notFound({
+        success: false,
+        message: 'Job de archive não encontrado',
+      })
+    }
+
+    return response.ok({
+      success: true,
+      data: job,
+    })
+  }
+
   async downloadArchive({ params, response }: HttpContext) {
     const job = BucketArchiveService.getJob(params.jobId)
 

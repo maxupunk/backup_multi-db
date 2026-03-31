@@ -43,6 +43,30 @@
         </div>
       </div>
 
+      <div v-else-if="fetchError" class="py-4">
+        <v-alert
+          density="compact"
+          type="warning"
+          variant="tonal"
+        >
+          <div class="d-flex align-center justify-space-between">
+            <span>
+              Não foi possível obter o status do job
+              <span v-if="consecutiveErrors >= MAX_CONSECUTIVE_ERRORS"> (tentativas esgotadas)</span>.
+            </span>
+            <v-btn
+              class="ml-3"
+              density="compact"
+              prepend-icon="mdi-refresh"
+              variant="tonal"
+              @click="retryFetch"
+            >
+              Tentar novamente
+            </v-btn>
+          </div>
+        </v-alert>
+      </div>
+
       <div v-else class="text-center text-medium-emphasis py-4">
         Carregando informações do archive...
       </div>
@@ -62,12 +86,19 @@ const props = defineProps<{
   jobId: string
 }>()
 
+const MAX_CONSECUTIVE_ERRORS = 5
+
 const notify = useNotifier()
 const job = ref<ArchiveJob | null>(null)
 const loading = ref(false)
 const downloading = ref(false)
+const fetchError = ref(false)
+const consecutiveErrors = ref(0)
+
+const TERMINAL_STATUSES = new Set(['ready', 'failed', 'expired'])
 
 let subscription: ReturnType<typeof transmit.subscription> | null = null
+let pollInterval: ReturnType<typeof setInterval> | null = null
 
 const progressPercent = computed(() => {
   if (!job.value || !job.value.totalFiles) return 0
@@ -102,9 +133,43 @@ async function fetchJob () {
   loading.value = true
   try {
     const response = await storagesApi.getArchiveJob(props.jobId)
-    if (response.data) job.value = response.data
+    if (response.data) {
+      job.value = response.data
+      fetchError.value = false
+      consecutiveErrors.value = 0
+    }
+    if (job.value && TERMINAL_STATUSES.has(job.value.status)) {
+      stopPolling()
+    }
+  } catch {
+    consecutiveErrors.value++
+    fetchError.value = true
+    if (consecutiveErrors.value >= MAX_CONSECUTIVE_ERRORS) {
+      stopPolling()
+    }
   } finally {
     loading.value = false
+  }
+}
+
+function retryFetch () {
+  fetchError.value = false
+  consecutiveErrors.value = 0
+  fetchJob()
+  startPolling()
+}
+
+function startPolling () {
+  if (pollInterval) return
+  pollInterval = setInterval(() => {
+    fetchJob()
+  }, 3000)
+}
+
+function stopPolling () {
+  if (pollInterval) {
+    clearInterval(pollInterval)
+    pollInterval = null
   }
 }
 
@@ -123,20 +188,29 @@ async function downloadArchive () {
 onMounted(async () => {
   await fetchJob()
 
+  // Start polling as fallback — stopped when SSE or terminal status confirmed
+  startPolling()
+
   try {
     subscription = transmit.subscription(`notifications/storage-archive/${props.jobId}`)
     await subscription.create()
     subscription.onMessage<Partial<ArchiveJob>>((data) => {
       if (job.value) {
         Object.assign(job.value, data)
+        fetchError.value = false
+        if (TERMINAL_STATUSES.has(job.value.status)) {
+          stopPolling()
+        }
       }
     })
   } catch (error) {
     console.error('[ArchiveProgress] Erro SSE:', error)
+    // Polling remains active as fallback
   }
 })
 
 onUnmounted(async () => {
+  stopPolling()
   if (subscription) {
     try { await subscription.delete() } catch { /* ignore */ }
     subscription = null

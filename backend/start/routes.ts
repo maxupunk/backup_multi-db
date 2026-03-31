@@ -72,6 +72,7 @@ router
         router.get('storages', [StoragesController, 'index'])
         router.post('storages', [StoragesController, 'store'])
         router.get('storages/copy-jobs/:jobId', [StoragesController, 'copyStatus'])
+        router.get('storages/archive-jobs/:jobId', [StoragesController, 'archiveJobStatus'])
         router.get('storages/archive-jobs/:jobId/download', [StoragesController, 'downloadArchive'])
 
         router.get('storages/:id', [StoragesController, 'show'])
