@@ -79,6 +79,7 @@
                 <v-divider class="my-4" />
 
                 <StorageFormFields
+                  v-if="storage.provider"
                   :config="configForm"
                   :provider="storage.provider"
                   @update:config="configForm = $event"
@@ -123,6 +124,37 @@
             </v-card-text>
           </v-card>
 
+          <v-card class="mb-4" color="warning" variant="tonal">
+            <v-card-title class="d-flex align-center">
+              <v-icon class="mr-2" icon="mdi-power" />
+              Status
+            </v-card-title>
+            <v-card-text>
+              <v-btn
+                v-if="storage.status === 'active'"
+                block
+                color="warning"
+                :loading="deactivating"
+                prepend-icon="mdi-power-off"
+                variant="flat"
+                @click="confirmDeactivate"
+              >
+                Desativar Armazenamento
+              </v-btn>
+              <v-btn
+                v-else
+                block
+                color="success"
+                :loading="activating"
+                prepend-icon="mdi-power"
+                variant="flat"
+                @click="activateStorage"
+              >
+                Ativar Armazenamento
+              </v-btn>
+            </v-card-text>
+          </v-card>
+
           <v-card color="error" variant="tonal">
             <v-card-title class="d-flex align-center">
               <v-icon class="mr-2" icon="mdi-alert" />
@@ -142,6 +174,48 @@
     <v-alert v-else type="error" variant="tonal">
       Armazenamento não encontrado.
     </v-alert>
+
+    <!-- Deactivate dialog -->
+    <v-dialog v-model="deactivateDialog" max-width="480">
+      <v-card>
+        <v-card-title class="d-flex align-center">
+          <v-icon class="mr-2" color="warning" icon="mdi-power-off" />
+          Desativar Armazenamento
+        </v-card-title>
+        <v-card-text>
+          <template v-if="storage?.isDefault">
+            <v-alert class="mb-4" type="warning" variant="tonal">
+              Este é o armazenamento padrão. Selecione outro armazenamento ativo para assumir o papel de padrão.
+            </v-alert>
+            <v-select
+              v-model="replacementDefaultId"
+              :items="otherActiveStorages"
+              item-title="name"
+              item-value="id"
+              label="Novo armazenamento padrão *"
+              :loading="loadingReplacements"
+              prepend-inner-icon="mdi-star"
+            />
+          </template>
+          <template v-else>
+            Tem certeza que deseja desativar <strong>{{ storage?.name }}</strong>? Conexões configuradas com este armazenamento não conseguirão criar novos backups.
+          </template>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="deactivateDialog = false">Cancelar</v-btn>
+          <v-btn
+            color="warning"
+            :disabled="deactivateDisabled"
+            :loading="deactivating"
+            variant="flat"
+            @click="executeDeactivate"
+          >
+            Desativar
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
 
     <!-- Delete dialog -->
     <v-dialog v-model="deleteDialog" max-width="420">
@@ -165,7 +239,7 @@
 
 <script lang="ts" setup>
 import type { Storage } from '@/types/api'
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useDisplay } from 'vuetify'
 import { ApiError, storagesApi } from '@/services/api'
@@ -190,7 +264,17 @@ const loadingStorage = ref(false)
 const saving = ref(false)
 const deleteDialog = ref(false)
 const deleting = ref(false)
+const deactivateDialog = ref(false)
+const deactivating = ref(false)
+const activating = ref(false)
+const loadingReplacements = ref(false)
+const replacementDefaultId = ref<number | null>(null)
+const otherActiveStorages = ref<Storage[]>([])
 const formRef = ref()
+
+const deactivateDisabled = computed<boolean>(
+  () => !!storage.value?.isDefault && replacementDefaultId.value === null,
+)
 
 const form = ref({
   name: '',
@@ -289,6 +373,62 @@ async function save () {
     notify(msg, 'error')
   } finally {
     saving.value = false
+  }
+}
+
+async function confirmDeactivate () {
+  if (!storage.value) return
+
+  if (storage.value.isDefault) {
+    loadingReplacements.value = true
+    try {
+      const response = await storagesApi.list({ status: 'active', limit: 100 })
+      otherActiveStorages.value = (response.data?.data ?? []).filter((s) => s.id !== id)
+    } catch {
+      notify('Erro ao carregar armazenamentos disponíveis', 'error')
+      return
+    } finally {
+      loadingReplacements.value = false
+    }
+  }
+
+  replacementDefaultId.value = null
+  deactivateDialog.value = true
+}
+
+async function executeDeactivate () {
+  if (!storage.value) return
+  deactivating.value = true
+
+  try {
+    if (storage.value.isDefault && replacementDefaultId.value) {
+      await storagesStore.update(replacementDefaultId.value, { isDefault: true })
+    }
+    await storagesStore.update(id, { status: 'inactive', isDefault: false })
+    notify('Armazenamento desativado com sucesso', 'success')
+    deactivateDialog.value = false
+    loadStorage()
+  } catch (error) {
+    const msg = error instanceof ApiError ? error.message : 'Erro ao desativar armazenamento'
+    notify(msg, 'error')
+  } finally {
+    deactivating.value = false
+  }
+}
+
+async function activateStorage () {
+  if (!storage.value) return
+  activating.value = true
+
+  try {
+    await storagesStore.update(id, { status: 'active' })
+    notify('Armazenamento ativado com sucesso', 'success')
+    loadStorage()
+  } catch (error) {
+    const msg = error instanceof ApiError ? error.message : 'Erro ao ativar armazenamento'
+    notify(msg, 'error')
+  } finally {
+    activating.value = false
   }
 }
 
