@@ -23,8 +23,8 @@ import Connection from '#models/connection'
 export type ImportedFileFormat = 'sql' | 'sql.gz' | 'dump' | 'zip' | 'tar'
 
 export interface ImportOptions {
-  connectionId: number
-  databaseName: string
+  connectionId: number | null
+  databaseName: string | null
   verifyIntegrity: boolean
 }
 
@@ -95,7 +95,7 @@ export class BackupImportService {
 
   async import(
     file: MultipartFile,
-    connection: Connection,
+    connection: Connection | null,
     options: ImportOptions
   ): Promise<ImportResult> {
     this.validateFilePresence(file)
@@ -106,7 +106,7 @@ export class BackupImportService {
 
     logger.info(
       `[Import] Importando arquivo "${originalName}" (${format}) ` +
-        `para conexão "${connection.name}" (ID: ${connection.id}), database: "${options.databaseName}"`
+        `para conexão "${connection ? `${connection.name} (ID: ${connection.id})` : 'sem conexão'}", database: "${options.databaseName ?? this.inferDatabaseName(originalName)}"`
     )
 
     // Checksum antes de mover o arquivo
@@ -129,17 +129,18 @@ export class BackupImportService {
     // Mover para o diretório de armazenamento
     const { destPath, finalFileName, relPath } = await this.moveToStorage(
       tmpPath,
-      connection.id,
+      connection?.id ?? null,
       originalName
     )
 
     logger.info(`[Import] Arquivo movido para: ${destPath}`)
 
     // Criar registro de backup
+    const resolvedDatabaseName = options.databaseName ?? this.inferDatabaseName(originalName)
     const backup = await Backup.create({
-      connectionId: connection.id,
+      connectionId: connection?.id ?? null,
       connectionDatabaseId: null,
-      databaseName: options.databaseName,
+      databaseName: resolvedDatabaseName,
       storageDestinationId: null,
       status: 'completed',
       filePath: relPath,
@@ -443,19 +444,32 @@ export class BackupImportService {
    * onde /tmp e o volume de dados são filesystems distintos), faz cópia via
    * stream e remove o original — comportamento equivalente ao `mv` do shell.
    */
+  private inferDatabaseName(fileName: string): string {
+    return (
+      fileName
+        .replace(/\.(sql\.gz|tar\.gz|tgz|sql|gz|dump|pgdump|pg_dump|zip|tar)$/i, '')
+        .replace(/[_-]?\d{8,}[_-]?/g, '')
+        .replace(/[_-]+(backup|dump|import)$/i, '')
+        .replace(/[^a-zA-Z0-9_]/g, '_')
+        .replace(/^_+|_+$/g, '')
+        .substring(0, 64) || 'imported'
+    )
+  }
+
   private async moveToStorage(
     tmpPath: string,
-    connectionId: number,
+    connectionId: number | null,
     originalName: string
   ): Promise<{ destPath: string; finalFileName: string; relPath: string }> {
-    const destDir = join(this.storagePath, String(connectionId))
+    const folder = connectionId !== null ? String(connectionId) : 'imported'
+    const destDir = join(this.storagePath, folder)
     await mkdir(destDir, { recursive: true })
 
     const finalFileName = `import_${Date.now()}_${originalName}`
     const destPath = join(destDir, finalFileName)
 
     // Caminho relativo separado por / (portável para banco e storage remoto)
-    const relPath = `${connectionId}/${finalFileName}`
+    const relPath = `${folder}/${finalFileName}`
 
     try {
       await rename(tmpPath, destPath)

@@ -45,13 +45,13 @@
         <v-select
           v-model="form.connectionId"
           class="mb-3"
+          clearable
           density="comfortable"
           hide-details="auto"
           :items="connections"
           item-title="name"
           item-value="id"
-          label="Conexão de banco de dados *"
-          :rules="[requiredRule]"
+          label="Conexão de banco de dados"
           variant="outlined"
         >
           <template #item="{ props: itemProps, item: connItem }">
@@ -79,10 +79,9 @@
           class="mb-4"
           density="comfortable"
           hide-details="auto"
-          hint="Nome do banco de dados que este arquivo representa"
-          label="Nome do database *"
+          hint="Deixe em branco para inferir automaticamente pelo nome do arquivo"
+          label="Nome do database"
           persistent-hint
-          :rules="[requiredRule]"
           variant="outlined"
         />
 
@@ -280,15 +279,8 @@ const form = reactive({
 // ─── Computed ─────────────────────────────────────────────────────────────────
 
 const canSubmit = computed(
-  () =>
-    selectedFile.value !== null &&
-    form.connectionId !== null &&
-    form.databaseName.trim().length > 0
+  () => selectedFile.value !== null
 )
-
-// ─── Validação ────────────────────────────────────────────────────────────────
-
-const requiredRule = (v: unknown) => !!v || 'Campo obrigatório'
 
 // ─── API: ciclo de vida do dialog ─────────────────────────────────────────────
 
@@ -361,8 +353,12 @@ async function submit() {
   try {
     const formData = new FormData()
     formData.append('file', selectedFile.value)
-    formData.append('connectionId', String(form.connectionId))
-    formData.append('databaseName', form.databaseName.trim())
+    if (form.connectionId !== null) {
+      formData.append('connectionId', String(form.connectionId))
+    }
+    if (form.databaseName.trim()) {
+      formData.append('databaseName', form.databaseName.trim())
+    }
     formData.append('verifyIntegrity', String(form.verifyIntegrity))
 
     const response = await backupsApi.import(formData)

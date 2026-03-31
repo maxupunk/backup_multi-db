@@ -370,27 +370,29 @@ export default class BackupsController {
       })
     }
 
-    // Verificar conexão
-    const connection = await Connection.find(payload.connectionId)
-
-    if (!connection) {
-      return response.notFound({
-        success: false,
-        message: 'Conexão não encontrada',
-      })
+    // Verificar conexão (opcional na importação)
+    let connection: Connection | null = null
+    if (payload.connectionId) {
+      connection = await Connection.find(payload.connectionId)
+      if (!connection) {
+        return response.notFound({
+          success: false,
+          message: 'Conexão não encontrada',
+        })
+      }
     }
 
     try {
       const importService = new BackupImportService()
 
       const result = await importService.import(file, connection, {
-        connectionId: payload.connectionId,
-        databaseName: payload.databaseName,
+        connectionId: payload.connectionId ?? null,
+        databaseName: payload.databaseName ?? null,
         verifyIntegrity: payload.verifyIntegrity ?? false,
       })
 
       // Auditoria
-      await AuditService.logBackupImported(result.backup.id, connection.name, ctx)
+      await AuditService.logBackupImported(result.backup.id, connection?.name ?? 'sem conexão', ctx)
 
       return response.created({
         success: true,

@@ -39,7 +39,7 @@ export default class Backup extends BaseModel {
   declare id: number
 
   @column()
-  declare connectionId: number
+  declare connectionId: number | null
 
   @column()
   declare connectionDatabaseId: number | null
