@@ -104,7 +104,7 @@ RUN sed -i 's/\r$//' /docker-entrypoint.sh \
 RUN npm ci --omit=dev && npm cache clean --force
 
 # Diretórios de dados e logs
-RUN mkdir -p /app/storage/backups /app/storage/database /app/logs /app_data/backups /app_data/database
+RUN mkdir -p /app/storage/backups /app/storage/database /app/logs /storage/backups /storage/database
 
 EXPOSE 3333
 
@@ -141,7 +141,7 @@ COPY backend/docker-entrypoint.sh /docker-entrypoint.sh
 RUN sed -i 's/\r$//' /docker-entrypoint.sh \
     && chmod +x /docker-entrypoint.sh
 
-RUN mkdir -p /app/storage/backups /app/storage/database /app_data/backups /app_data/database
+RUN mkdir -p /app/storage/backups /app/storage/database /storage/backups /storage/database
 
 EXPOSE 3333
 

@@ -214,7 +214,7 @@ export class BucketCopyService {
       case 'local': {
         const local = config as Extract<StorageDestinationConfig, { type: 'local' }>
         env[`${PREFIX}_TYPE`] = 'local'
-        const basePath = local.basePath ?? '/app_data/backups'
+        const basePath = local.basePath ?? '/storage/backups'
 
         return { env, path: `${remoteName}:${joinPath(basePath, subPath)}` }
       }

@@ -258,7 +258,7 @@
 import { computed } from 'vue'
 import type { StorageProvider } from '@/types/api'
 
-const DEFAULT_LOCAL_PATH = '/app_data/backups'
+const DEFAULT_LOCAL_PATH = '/storage/backups'
 
 const props = defineProps<{
   provider: StorageProvider

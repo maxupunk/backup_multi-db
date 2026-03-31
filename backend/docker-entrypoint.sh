@@ -25,14 +25,14 @@ else
 fi
 
 # Verificar diretório de backups
-BACKUP_DIR="${BACKUP_STORAGE_PATH:-/app_data/backups}"
+BACKUP_DIR="${BACKUP_STORAGE_PATH:-/storage/backups}"
 if [ ! -d "$BACKUP_DIR" ]; then
     echo -e "${YELLOW}📁 Criando diretório de backups: $BACKUP_DIR${NC}"
     mkdir -p "$BACKUP_DIR"
 fi
 
 # Verificar diretório do SQLite
-SQLITE_DB_PATH="${SQLITE_DATABASE_PATH:-/app_data/database/app.sqlite3}"
+SQLITE_DB_PATH="${SQLITE_DATABASE_PATH:-/storage/database/app.sqlite3}"
 SQLITE_DIR="$(dirname "$SQLITE_DB_PATH")"
 if [ ! -d "$SQLITE_DIR" ]; then
     echo -e "${YELLOW}📁 Criando diretório do SQLite: $SQLITE_DIR${NC}"

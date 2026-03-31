@@ -429,7 +429,7 @@ import { formatBytes } from '@/utils/format'
 const theme = useTheme()
 const { mdAndUp } = useDisplay()
 const notify = useNotifier()
-const DEFAULT_LOCAL_STORAGE_BASE_PATH = '/app_data/backups'
+const DEFAULT_LOCAL_STORAGE_BASE_PATH = '/storage/backups'
 
 const apiStatus = ref<'online' | 'offline'>('offline')
 const apiLatency = ref<number | null>(null)

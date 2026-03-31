@@ -1,7 +1,7 @@
 import env from '#start/env'
 
-export const DEFAULT_BACKUP_STORAGE_PATH = '/app_data/backups'
-export const DEFAULT_SQLITE_DATABASE_PATH = '/app_data/database/app.sqlite3'
+export const DEFAULT_BACKUP_STORAGE_PATH = '/storage/backups'
+export const DEFAULT_SQLITE_DATABASE_PATH = '/storage/database/app.sqlite3'
 export const DEFAULT_LOCAL_STORAGE_NAME = 'Local'
 
 export function getBackupStoragePath(): string {

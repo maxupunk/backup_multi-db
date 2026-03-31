@@ -231,7 +231,7 @@ const testStatusLabel = computed(() => {
 
 function selectProvider (provider: StorageProvider) {
   form.value.provider = provider
-  configForm.value = provider === 'local' ? { basePath: '/app_data/backups' } : {}
+  configForm.value = provider === 'local' ? { basePath: '/storage/backups' } : {}
   testStatus.value = 'idle'
 }
 

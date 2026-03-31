@@ -190,6 +190,7 @@
 import type { Storage, StorageProvider } from '@/types/api'
 import { onMounted, reactive, ref } from 'vue'
 import { useDisplay } from 'vuetify'
+import { ApiError } from '@/services/api'
 import { useStoragesStore } from '@/stores/storages'
 import { useDebouncedFn } from '@/composables/useDebouncedFn'
 import { useNotifier } from '@/composables/useNotifier'
@@ -262,8 +263,9 @@ async function deleteStorage () {
     deleteDialog.value = false
     storageToDelete.value = null
     loadStorages()
-  } catch {
-    notify('Erro ao remover armazenamento', 'error')
+  } catch (error) {
+    const msg = error instanceof ApiError ? error.message : 'Erro ao remover armazenamento'
+    notify(msg, 'error')
   } finally {
     deleting.value = false
   }

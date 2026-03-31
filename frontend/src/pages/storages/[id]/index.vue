@@ -302,8 +302,9 @@ async function deleteStorage () {
     await storagesStore.remove(id)
     notify('Armazenamento removido com sucesso', 'success')
     router.push('/storages')
-  } catch {
-    notify('Erro ao remover armazenamento', 'error')
+  } catch (error) {
+    const msg = error instanceof ApiError ? error.message : 'Erro ao remover armazenamento'
+    notify(msg, 'error')
   } finally {
     deleting.value = false
   }
