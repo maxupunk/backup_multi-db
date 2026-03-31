@@ -8,9 +8,9 @@ import type { StorageProvider } from '@/types/api'
 import { getProviderColor, getProviderIcon } from '@/ui/storage'
 
 const props = defineProps<{
-  provider: StorageProvider
+  provider: StorageProvider | null | undefined
 }>()
 
-const icon = computed(() => getProviderIcon(props.provider))
-const color = computed(() => getProviderColor(props.provider))
+const icon = computed(() => getProviderIcon((props.provider ?? 'local') as StorageProvider))
+const color = computed(() => getProviderColor((props.provider ?? 'local') as StorageProvider))
 </script>
