@@ -3,10 +3,6 @@
 .env.*
 !.env.example
 
-# Dados da aplicação (backups, banco de dados)
-/app_data/*
-!/app_data/.gitkeep
-
 # Logs
 *.log
 npm-debug.log*

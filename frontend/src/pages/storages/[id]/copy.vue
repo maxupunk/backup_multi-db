@@ -43,19 +43,28 @@
 
           <v-row>
             <v-col cols="12" sm="6">
-              <v-text-field
+              <v-combobox
                 v-model="form.sourcePath"
+                :items="sourceFolders"
+                :loading="sourceFoldersLoading"
+                clearable
                 hint="Deixe vazio para copiar tudo"
                 label="Path de Origem"
+                no-data-text="Nenhuma pasta encontrada"
                 persistent-hint
                 prepend-inner-icon="mdi-folder-outline"
               />
             </v-col>
             <v-col cols="12" sm="6">
-              <v-text-field
+              <v-combobox
                 v-model="form.destinationPath"
+                :disabled="!form.destinationId"
+                :items="destinationFolders"
+                :loading="destinationFoldersLoading"
+                clearable
                 hint="Deixe vazio para raiz do destino"
                 label="Path de Destino"
+                no-data-text="Nenhuma pasta encontrada"
                 persistent-hint
                 prepend-inner-icon="mdi-folder"
               />
@@ -108,12 +117,13 @@
 
 <script lang="ts" setup>
 import type { Storage } from '@/types/api'
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useDisplay } from 'vuetify'
 import { ApiError, storagesApi } from '@/services/api'
 import { useStoragesStore } from '@/stores/storages'
 import { useNotifier } from '@/composables/useNotifier'
+import { useStorageFolders } from '@/composables/useStorageFolders'
 import CopyJobProgress from '@/components/storages/CopyJobProgress.vue'
 
 const route = useRoute()
@@ -126,6 +136,19 @@ const storageName = ref('')
 const formRef = ref()
 const starting = ref(false)
 const activeJobIds = ref<string[]>([])
+
+const {
+  folders: sourceFolders,
+  loading: sourceFoldersLoading,
+  loadFolders: loadSourceFolders,
+} = useStorageFolders()
+
+const {
+  folders: destinationFolders,
+  loading: destinationFoldersLoading,
+  loadFolders: loadDestinationFolders,
+  reset: resetDestinationFolders,
+} = useStorageFolders()
 
 const form = ref({
   destinationId: null as number | null,
@@ -140,6 +163,15 @@ const destinationOptions = computed(() =>
     .filter((s) => s.id !== id)
     .map((s) => ({ title: s.name, value: s.id })),
 )
+
+watch(() => form.value.destinationId, (destinationId) => {
+  form.value.destinationPath = ''
+  if (destinationId) {
+    loadDestinationFolders(destinationId)
+  } else {
+    resetDestinationFolders()
+  }
+})
 
 const rules = {
   required: (v: unknown) => !!v || 'Campo obrigatório',
@@ -179,6 +211,8 @@ onMounted(async () => {
     const data = response.data as Storage | undefined
     storageName.value = data?.name ?? `#${id}`
   } catch { /* ignore */ }
+
+  loadSourceFolders(id)
 
   try {
     await storagesStore.fetchAll({ limit: 100 })
