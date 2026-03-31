@@ -134,33 +134,33 @@
           </v-alert>
 
           <!-- Detalhes do backup importado -->
-          <v-card color="surface-variant" variant="tonal">
+          <v-card variant="outlined">
             <v-card-text class="pa-3">
               <v-row dense>
                 <v-col cols="6">
-                  <div class="text-caption text-medium-emphasis">Arquivo</div>
+                  <div class="text-caption text-disabled">Arquivo</div>
                   <div class="text-body-2 font-weight-medium" style="word-break: break-all">
                     {{ importResult.backup.fileName ?? selectedFile?.name }}
                   </div>
                 </v-col>
 
                 <v-col cols="6">
-                  <div class="text-caption text-medium-emphasis">Formato</div>
+                  <div class="text-caption text-disabled">Formato</div>
                   <v-chip color="primary" label size="x-small">{{ importResult.format.toUpperCase() }}</v-chip>
                 </v-col>
 
                 <v-col cols="6" class="mt-2">
-                  <div class="text-caption text-medium-emphasis">Tamanho</div>
+                  <div class="text-caption text-disabled">Tamanho</div>
                   <div class="text-body-2">{{ formatFileSize(importResult.fileSize) }}</div>
                 </v-col>
 
                 <v-col cols="6" class="mt-2">
-                  <div class="text-caption text-medium-emphasis">Database</div>
+                  <div class="text-caption text-disabled">Database</div>
                   <div class="text-body-2">{{ importResult.backup.databaseName }}</div>
                 </v-col>
 
                 <v-col v-if="importResult.integrity" cols="12" class="mt-2">
-                  <div class="text-caption text-medium-emphasis">Integridade</div>
+                  <div class="text-caption text-disabled">Integridade</div>
                   <div class="d-flex align-center gap-1">
                     <v-icon
                       :color="importResult.integrity.valid ? 'success' : 'error'"
@@ -172,8 +172,8 @@
                 </v-col>
 
                 <v-col cols="12" class="mt-2">
-                  <div class="text-caption text-medium-emphasis">Checksum (SHA-256)</div>
-                  <div class="font-mono text-caption" style="word-break: break-all">
+                  <div class="text-caption text-disabled">Checksum (SHA-256)</div>
+                  <div class="font-mono text-caption" style="word-break: break-all; opacity: 0.85">
                     {{ importResult.checksum }}
                   </div>
                 </v-col>
