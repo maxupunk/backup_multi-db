@@ -8,6 +8,9 @@
 #   backend_node_modules:/app/node_modules — named volume inicializado a partir
 #     da imagem Docker (binários Linux, compilados no stage "dependencies").
 #     Completamente isolado do host — nunca usa node_modules do Windows/Mac.
+#   frontend_dist:/app/public:ro           — build do frontend injetado no backend.
+#     O serviço frontend-builder compila o Vue/Vite antes do backend subir e
+#     grava o resultado neste volume, que sobrepõe ./backend/public do bind mount.
 #
 # Para forçar rebuild dos node_modules (ex: após instalar novo pacote):
 #   docker compose -f docker-compose.dev.yml down -v
@@ -18,12 +21,24 @@
 # =============================================================================
 
 services:
+  frontend-builder:
+    image: node:25.8.1-trixie
+    working_dir: /app
+    volumes:
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules
+      - frontend_dist:/dist
+    command: sh -c "npm ci && npm run build-only -- --outDir /dist"
+
   backend:
     build:
       context: .
       dockerfile: Dockerfile
       target: development
     restart: unless-stopped
+    depends_on:
+      frontend-builder:
+        condition: service_completed_successfully
     env_file:
       - path: ./.env
         required: false
@@ -44,6 +59,7 @@ services:
     volumes:
       - ./backend:/app
       - backend_node_modules:/app/node_modules
+      - frontend_dist:/app/public:ro
       - ./backend/storage/backups:/storage/backups
       - ./backend/storage/database:/storage/database
       - /var/run/docker.sock:/var/run/docker.sock
@@ -62,3 +78,5 @@ services:
 
 volumes:
   backend_node_modules:
+  frontend_node_modules:
+  frontend_dist:
