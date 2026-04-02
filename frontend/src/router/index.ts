@@ -31,6 +31,10 @@ router.beforeEach(async (to, from, next) => {
     return next('/login')
   }
 
+  if (to.path.startsWith('/users') && !authStore.user?.isAdmin) {
+    return next('/')
+  }
+
   if (to.path === '/login' && isAuthenticated) {
     // Login e já logado -> Home
     return next('/')

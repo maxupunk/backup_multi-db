@@ -222,7 +222,17 @@ node ace generate:key
 
 # Gere a chave de criptografia e copie para DB_ENCRYPTION_KEY no .env
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+
+# Defina um token forte para o primeiro administrador em producao
+# Exemplo: node -e "console.log(require('crypto').randomBytes(24).toString('hex'))"
+# Copie para INITIAL_ADMIN_BOOTSTRAP_TOKEN no .env
 ```
+
+## Autenticacao inicial
+
+- Em producao, o primeiro cadastro administrativo exige `INITIAL_ADMIN_BOOTSTRAP_TOKEN`.
+- O token deve ser informado na tela de cadastro quando o sistema ainda nao possui usuarios.
+- Os bearer tokens expiram conforme `AUTH_ACCESS_TOKEN_EXPIRES_IN` (padrao: `7d`).
 
 ## 📖 API Endpoints
 

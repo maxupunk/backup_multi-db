@@ -42,8 +42,12 @@ router
 
     // ==================== Autenticação (Público) ====================
     router.get('/auth/status', [AuthController, 'checkStatus'])
-    router.post('/auth/register', [AuthController, 'register'])
-    router.post('/auth/login', [AuthController, 'login'])
+    router
+      .post('/auth/register', [AuthController, 'register'])
+      .use(middleware.rateLimit({ limiter: 'auth', keyBy: 'ip-email' }))
+    router
+      .post('/auth/login', [AuthController, 'login'])
+      .use(middleware.rateLimit({ limiter: 'auth', keyBy: 'ip-email' }))
 
     // ==================== Rotas Protegidas ====================
     router

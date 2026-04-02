@@ -640,8 +640,8 @@ export const authApi = {
   /**
    * Verifica se existem usuários cadastrados no sistema
    */
-  async checkStatus (): Promise<ApiResponse<{ hasUsers: boolean }>> {
-    return request<ApiResponse<{ hasUsers: boolean }>>('/auth/status')
+  async checkStatus (): Promise<ApiResponse<{ hasUsers: boolean, requiresBootstrapToken: boolean }>> {
+    return request<ApiResponse<{ hasUsers: boolean, requiresBootstrapToken: boolean }>>('/auth/status')
   },
 }
 

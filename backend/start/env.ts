@@ -28,6 +28,14 @@ export default await Env.create(new URL('../../', import.meta.url), {
 
   /*
   |--------------------------------------------------------------------------
+  | Configuracoes de autenticacao
+  |--------------------------------------------------------------------------
+  */
+  AUTH_ACCESS_TOKEN_EXPIRES_IN: Env.schema.string.optional(),
+  INITIAL_ADMIN_BOOTSTRAP_TOKEN: Env.schema.string.optional(),
+
+  /*
+  |--------------------------------------------------------------------------
   | Configurações de backup
   |--------------------------------------------------------------------------
   */

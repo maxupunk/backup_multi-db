@@ -6,6 +6,7 @@ export interface User {
   email: string
   fullName: string | null
   isActive?: boolean
+  isAdmin?: boolean
   createdAt?: string
   updatedAt?: string
 }

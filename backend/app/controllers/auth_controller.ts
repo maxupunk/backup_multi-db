@@ -1,22 +1,60 @@
+import app from '@adonisjs/core/services/app'
 import type { HttpContext } from '@adonisjs/core/http'
+import env from '#start/env'
+import { timingSafeEqual } from 'node:crypto'
 import User from '#models/user'
 import { registerValidator, loginValidator } from '#validators/auth'
 
 export default class AuthController {
+  private hasValidBootstrapToken(candidate: string | undefined) {
+    const configuredToken = env.get('INITIAL_ADMIN_BOOTSTRAP_TOKEN')
+
+    if (!configuredToken) {
+      return !app.inProduction
+    }
+
+    if (!candidate) {
+      return false
+    }
+
+    const expected = Buffer.from(configuredToken)
+    const received = Buffer.from(candidate)
+
+    if (expected.length !== received.length) {
+      return false
+    }
+
+    return timingSafeEqual(expected, received)
+  }
+
   /**
    * Registro de novo usuário
    */
   async register({ request, response }: HttpContext) {
     const payload = await request.validateUsing(registerValidator)
+    const { bootstrapToken, ...userPayload } = payload
 
     // Verifica se existem usuários cadastrados
     const usersCount = await User.query().count('* as total').first()
     const totalUsers = usersCount ? Number(usersCount.$extras.total) : 0
-    const isActive = totalUsers === 0
+    const isFirstUser = totalUsers === 0
+
+    if (isFirstUser && !this.hasValidBootstrapToken(bootstrapToken)) {
+      return response.forbidden({
+        success: false,
+        message: app.inProduction
+          ? 'Token de bootstrap invalido ou ausente para criar o administrador inicial.'
+          : 'Nao foi possivel validar o bootstrap inicial.',
+      })
+    }
+
+    const isActive = isFirstUser
+    const isAdmin = isFirstUser
 
     const user = await User.create({
-      ...payload,
+      ...userPayload,
       isActive,
+      isAdmin,
     })
 
     if (!isActive) {
@@ -37,6 +75,8 @@ export default class AuthController {
           id: user.id,
           email: user.email,
           fullName: user.fullName,
+          isActive: user.isActive,
+          isAdmin: user.isAdmin,
         },
       },
     })
@@ -68,6 +108,8 @@ export default class AuthController {
           id: user.id,
           email: user.email,
           fullName: user.fullName,
+          isActive: user.isActive,
+          isAdmin: user.isAdmin,
         },
       },
     })
@@ -98,6 +140,8 @@ export default class AuthController {
         id: user.id,
         email: user.email,
         fullName: user.fullName,
+        isActive: user.isActive,
+        isAdmin: user.isAdmin,
         createdAt: user.createdAt,
       },
     })
@@ -114,6 +158,7 @@ export default class AuthController {
       success: true,
       data: {
         hasUsers: totalUsers > 0,
+        requiresBootstrapToken: totalUsers === 0 && app.inProduction,
       },
     })
   }

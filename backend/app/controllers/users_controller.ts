@@ -2,10 +2,30 @@ import type { HttpContext } from '@adonisjs/core/http'
 import User from '#models/user'
 
 export default class UsersController {
+  private ensureAdmin({ auth, response }: HttpContext) {
+    const currentUser = auth.user!
+
+    if (currentUser.isAdmin) {
+      return currentUser
+    }
+
+    response.forbidden({
+      success: false,
+      message: 'Apenas administradores podem gerenciar usuarios.',
+    })
+
+    return null
+  }
+
   /**
    * Listar usuários com paginação e filtros
    */
-  async index({ request, response }: HttpContext) {
+  async index(ctx: HttpContext) {
+    if (!this.ensureAdmin(ctx)) {
+      return
+    }
+
+    const { request, response } = ctx
     const page = request.input('page', 1)
     const limit = request.input('limit', 10)
     // Optional filter by status if needed: ?active=false
@@ -27,9 +47,14 @@ export default class UsersController {
   /**
    * Alternar status ativo/inativo
    */
-  async toggleStatus({ params, response, auth }: HttpContext) {
+  async toggleStatus(ctx: HttpContext) {
+    const currentUser = this.ensureAdmin(ctx)
+    if (!currentUser) {
+      return
+    }
+
+    const { params, response } = ctx
     const userToUpdate = await User.findOrFail(params.id)
-    const currentUser = auth.user!
 
     // Prevent user from changing their own status (optional safety)
     if (userToUpdate.id === currentUser.id) {

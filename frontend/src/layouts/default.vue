@@ -107,15 +107,15 @@ const notificationStore = useNotificationStore()
 const router = useRouter()
 const route = useRoute()
 
-const navItems = [
+const navItems = computed(() => [
   { title: 'Dashboard', icon: 'mdi-view-dashboard', to: '/' },
   { title: 'Conexões', icon: 'mdi-database', to: '/connections' },
   { title: 'Backups', icon: 'mdi-backup-restore', to: '/backups' },
   { title: 'Armazenamentos', icon: 'mdi-bucket', to: '/storages' },
   { title: 'Auditoria', icon: 'mdi-history', to: '/audit' },
-  { title: 'Usuários', icon: 'mdi-account-group', to: '/users' },
   { title: 'Configurações', icon: 'mdi-cog', to: '/settings' },
-]
+  ...(authStore.user?.isAdmin ? [{ title: 'Usuários', icon: 'mdi-account-group', to: '/users' }] : []),
+])
 
 const drawer = ref(mdAndUp.value)
 const rail = ref(false)
@@ -123,7 +123,7 @@ const rail = ref(false)
 const isDark = computed(() => theme.global.current.value.dark)
 
 const pageTitle = computed(() => {
-  const sortedItems = [...navItems].sort((a, b) => b.to.length - a.to.length)
+  const sortedItems = [...navItems.value].sort((a, b) => b.to.length - a.to.length)
   const item = sortedItems.find(i =>
     i.to === '/' ? route.path === '/' : route.path.startsWith(i.to)
   )

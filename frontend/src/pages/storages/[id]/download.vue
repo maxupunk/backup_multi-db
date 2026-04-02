@@ -174,7 +174,7 @@ async function loadAvailablePaths () {
 async function startArchive () {
   starting.value = true
   try {
-    const response = await storagesApi.startArchive(id, resolvedPath())
+    const response:any = await storagesApi.startArchive(id, resolvedPath())
     const jobId = response.data?.id
     if (jobId) {
       activeArchiveIds.value.push(jobId)

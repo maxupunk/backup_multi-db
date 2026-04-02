@@ -39,6 +39,18 @@
         variant="outlined"
       />
 
+      <v-text-field
+        v-if="showBootstrapToken"
+        v-model="form.bootstrapToken"
+        class="mb-4"
+        :error-messages="errors.bootstrapToken"
+        hint="Obrigatório para criar o administrador inicial em produção"
+        label="Token de Bootstrap"
+        prepend-inner-icon="mdi-shield-key"
+        type="password"
+        variant="outlined"
+      />
+
       <v-alert
         v-if="successMessage"
         class="mb-4"
@@ -80,7 +92,7 @@
 </template>
 
 <script lang="ts" setup>
-  import { reactive, ref } from 'vue'
+  import { onMounted, reactive, ref } from 'vue'
   import { useRouter } from 'vue-router'
   import { ApiError, authApi } from '@/services/api'
   import { useAuthStore } from '@/stores/auth'
@@ -99,15 +111,18 @@
   const loading = ref(false)
   const errorMessage = ref('')
   const successMessage = ref('')
+  const showBootstrapToken = ref(false)
   const form = reactive({
     fullName: '',
     email: '',
     password: '',
+    bootstrapToken: '',
   })
   const errors = reactive({
     fullName: '',
     email: '',
     password: '',
+    bootstrapToken: '',
   })
 
   async function handleRegister () {
@@ -116,6 +131,7 @@
     errors.fullName = ''
     errors.email = ''
     errors.password = ''
+    errors.bootstrapToken = ''
 
     try {
       const response = await authApi.register(form)
@@ -131,6 +147,7 @@
           form.fullName = ''
           form.email = ''
           form.password = ''
+          form.bootstrapToken = ''
           errorMessage.value = ''
 
           // Exibir mensagem de sucesso (usando errorMessage como alerta verde ou criando um novo estado)
@@ -152,6 +169,7 @@
               if (err.field === 'fullName') errors.fullName = err.message
               if (err.field === 'email') errors.email = err.message
               if (err.field === 'password') errors.password = err.message
+              if (err.field === 'bootstrapToken') errors.bootstrapToken = err.message
             }
           }
         } else {
@@ -164,4 +182,13 @@
       loading.value = false
     }
   }
+
+  onMounted(async () => {
+    try {
+      const response = await authApi.checkStatus()
+      showBootstrapToken.value = !!response.data && !response.data.hasUsers
+    } catch (error) {
+      console.error('Falha ao verificar status do bootstrap:', error)
+    }
+  })
 </script>

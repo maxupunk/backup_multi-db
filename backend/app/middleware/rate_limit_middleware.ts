@@ -17,22 +17,38 @@ import limiter from '@adonisjs/limiter/services/main'
  */
 const LIMITS = {
   global: { requests: 600, duration: 60 }, // 600 req/min (10 req/s)
+  auth: { requests: 5, duration: 60 }, // 5 req/min por IP + email
   strict: { requests: 60, duration: 60 }, // 60 req/min
   backup: { requests: 60, duration: 60 }, // 60 req/min (permite múltiplos backups manuais sem bloqueio)
 } as const
 
 export type LimiterType = keyof typeof LIMITS
+type KeyStrategy = 'ip' | 'ip-email'
 
 /**
  * Rate limiting middleware
  * Protects API endpoints from abuse by limiting the number of requests per IP
  */
 export default class RateLimitMiddleware {
-  async handle(ctx: HttpContext, next: NextFn, options?: { limiter?: LimiterType }) {
+  private buildKey(ctx: HttpContext, limiterType: LimiterType, strategy: KeyStrategy) {
+    if (strategy !== 'ip-email') {
+      return `${limiterType}_${ctx.request.ip()}`
+    }
+
+    const email = String(ctx.request.input('email', '')).trim().toLowerCase()
+    return email
+      ? `${limiterType}_${ctx.request.ip()}_${email}`
+      : `${limiterType}_${ctx.request.ip()}`
+  }
+
+  async handle(
+    ctx: HttpContext,
+    next: NextFn,
+    options?: { limiter?: LimiterType; keyBy?: KeyStrategy }
+  ) {
     const limiterType = options?.limiter ?? 'global'
     const config = LIMITS[limiterType]
-
-    const key = `${limiterType}_${ctx.request.ip()}`
+    const key = this.buildKey(ctx, limiterType, options?.keyBy ?? 'ip')
 
     /**
      * Create a limiter instance with the configuration

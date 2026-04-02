@@ -15,6 +15,7 @@ export const registerValidator = vine.compile(
         return !match
       }),
     password: vine.string().minLength(8).maxLength(32),
+    bootstrapToken: vine.string().maxLength(255).optional(),
   })
 )
 
