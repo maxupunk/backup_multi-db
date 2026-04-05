@@ -8,9 +8,16 @@ export default class extends BaseSchema {
     const hasIsActive = await this.schema.hasColumn(this.tableName, 'is_active')
 
     if (!hasIsAdmin) {
-      await this.schema.alterTable(this.tableName, (table) => {
-        table.boolean('is_admin').defaultTo(false).notNullable()
-      })
+      try {
+        await this.schema.alterTable(this.tableName, (table) => {
+          table.boolean('is_admin').defaultTo(false).notNullable()
+        })
+      } catch (error) {
+        const columnExistsNow = await this.schema.hasColumn(this.tableName, 'is_admin')
+        if (!columnExistsNow || !this.isDuplicateIsAdminError(error)) {
+          throw error
+        }
+      }
     }
 
     const firstActiveUser = hasIsActive
@@ -52,5 +59,9 @@ export default class extends BaseSchema {
     await this.schema.alterTable(this.tableName, (table) => {
       table.dropColumn('is_admin')
     })
+  }
+
+  private isDuplicateIsAdminError(error: unknown): boolean {
+    return error instanceof Error && /duplicate column name:\s*is_admin/i.test(error.message)
   }
 }
