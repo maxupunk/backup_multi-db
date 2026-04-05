@@ -182,6 +182,9 @@ export class RetentionService {
     // Agrupar por connectionId e manter apenas o mais recente de cada
     const lastByConnection = new Map<number, Backup>()
     for (const backup of backups) {
+      if (backup.connectionId === null) {
+        continue
+      }
       if (!lastByConnection.has(backup.connectionId)) {
         lastByConnection.set(backup.connectionId, backup)
       }

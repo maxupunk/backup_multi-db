@@ -135,7 +135,7 @@ export class S3ExplorerAdapter implements StorageExplorerAdapter {
     this.assertS3Config(config)
     const { GetObjectCommand } = await import('@aws-sdk/client-s3')
     const { getSignedUrl } = await import('@aws-sdk/s3-request-presigner')
-    const client = await this.getClient(config)
+    const client: any = await this.getClient(config)
 
     return getSignedUrl(client, new GetObjectCommand({ Bucket: config.bucket, Key: key }), {
       expiresIn: expiresInSeconds,
