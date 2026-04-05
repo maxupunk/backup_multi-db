@@ -4,31 +4,52 @@ export default class extends BaseSchema {
   protected tableName = 'users'
 
   async up() {
-    this.schema.alterTable(this.tableName, (table) => {
-      table.boolean('is_admin').defaultTo(false).notNullable()
-    })
+    const hasIsAdmin = await this.schema.hasColumn(this.tableName, 'is_admin')
+    const hasIsActive = await this.schema.hasColumn(this.tableName, 'is_active')
 
-    const firstActiveUser = await this.db
-      .from(this.tableName)
-      .select('id')
-      .where('is_active', true)
-      .orderBy('id', 'asc')
-      .first()
+    if (!hasIsAdmin) {
+      await this.schema.alterTable(this.tableName, (table) => {
+        table.boolean('is_admin').defaultTo(false).notNullable()
+      })
+    }
+
+    const firstActiveUser = hasIsActive
+      ? await this.db
+          .from(this.tableName)
+          .select('id')
+          .where('is_active', true)
+          .orderBy('id', 'asc')
+          .first()
+      : null
 
     const firstUser =
       firstActiveUser ||
       (await this.db.from(this.tableName).select('id').orderBy('id', 'asc').first())
 
     if (firstUser?.id) {
-      await this.db.from(this.tableName).where('id', firstUser.id).update({
-        is_admin: true,
-        is_active: true,
-      })
+      const updatePayload: Record<string, boolean> = { is_admin: true }
+
+      if (hasIsActive) {
+        updatePayload.is_active = true
+      }
+
+      await this.db
+        .from(this.tableName)
+        .where('id', firstUser.id)
+        .update({
+          ...updatePayload,
+        })
     }
   }
 
   async down() {
-    this.schema.alterTable(this.tableName, (table) => {
+    const hasIsAdmin = await this.schema.hasColumn(this.tableName, 'is_admin')
+
+    if (!hasIsAdmin) {
+      return
+    }
+
+    await this.schema.alterTable(this.tableName, (table) => {
       table.dropColumn('is_admin')
     })
   }

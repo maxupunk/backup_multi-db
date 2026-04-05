@@ -8,7 +8,6 @@
  * que o processo termine normalmente após a execução do comando.
  */
 
-
 import logger from '@adonisjs/core/services/logger'
 import app from '@adonisjs/core/services/app'
 import { NotificationService } from '#services/notification_service'
