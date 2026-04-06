@@ -2,6 +2,7 @@ import transmit from '@adonisjs/transmit/services/main'
 import logger from '@adonisjs/core/services/logger'
 import { NOTIFICATION_CHANNELS } from '#services/notification_service'
 import { DockerContainerMonitoringService } from '#services/docker_container_monitoring_service'
+import { ResourceMetricsHistoryService } from '#services/resource_metrics_history_service'
 
 type BroadcastableValue =
   | { [key: string]: BroadcastableValue }
@@ -76,6 +77,8 @@ export class DockerContainerResourceEmitter {
           pids: container.pids,
         })),
       }
+
+      await ResourceMetricsHistoryService.recordContainerSnapshot(overview)
 
       transmit.broadcast(NOTIFICATION_CHANNELS.DOCKER_CONTAINER_RESOURCES, payload)
     } catch (error) {

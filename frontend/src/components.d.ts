@@ -30,5 +30,6 @@ declare module 'vue' {
     StorageTestButton: typeof import('./components/storages/StorageTestButton.vue')['default']
     SystemInfoCard: typeof import('./components/system/SystemInfoCard.vue')['default']
     SystemResourceCharts: typeof import('./components/system/SystemResourceCharts.vue')['default']
+    UsageLineChart: typeof import('./components/system/UsageLineChart.vue')['default']
   }
 }

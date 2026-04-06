@@ -1,6 +1,7 @@
 import transmit from '@adonisjs/transmit/services/main'
 import logger from '@adonisjs/core/services/logger'
 import { NOTIFICATION_CHANNELS } from '#services/notification_service'
+import { ResourceMetricsHistoryService } from '#services/resource_metrics_history_service'
 import { SystemMonitoringService } from '#services/system_monitoring_service'
 
 /**
@@ -79,6 +80,8 @@ export class SystemResourceEmitter {
         },
         timestamp: new Date().toISOString(),
       }
+
+      await ResourceMetricsHistoryService.recordSystemSnapshot(resources, String(payload.timestamp))
 
       transmit.broadcast(NOTIFICATION_CHANNELS.SYSTEM_RESOURCES, payload)
     } catch (error) {

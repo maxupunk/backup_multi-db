@@ -55,12 +55,10 @@
               <span class="text-caption text-medium-emphasis">CPU</span>
               <strong>{{ container.cpu.usagePercent.toFixed(1) }}%</strong>
             </div>
-            <v-progress-linear
-              :color="resolveUsageColor(container.cpu.usagePercent)"
-              :model-value="container.cpu.usagePercent"
-              bg-color="grey-lighten-3"
-              height="10"
-              rounded
+            <UsageLineChart
+              :values="resolveContainerHistory(container.containerId, 'cpu', container.cpu.usagePercent)"
+              :color="resolveChartColor(resolveUsageColor(container.cpu.usagePercent))"
+              :height="84"
             />
           </div>
 
@@ -69,12 +67,10 @@
               <span class="text-caption text-medium-emphasis">Memória</span>
               <strong>{{ container.memory.usagePercent.toFixed(1) }}%</strong>
             </div>
-            <v-progress-linear
-              :color="resolveUsageColor(container.memory.usagePercent)"
-              :model-value="container.memory.usagePercent"
-              bg-color="grey-lighten-3"
-              height="10"
-              rounded
+            <UsageLineChart
+              :values="resolveContainerHistory(container.containerId, 'memory', container.memory.usagePercent)"
+              :color="resolveChartColor(resolveUsageColor(container.memory.usagePercent))"
+              :height="84"
             />
             <p class="text-caption text-medium-emphasis mt-2 mb-0">
               {{ formatBytes(container.memory.usageBytes) }} / {{ formatBytes(container.memory.limitBytes) }}
@@ -106,12 +102,14 @@
 </template>
 
 <script lang="ts" setup>
-import type { DockerContainerResourceOverview } from '@/types/api'
+import type { ContainerResourceHistory, DockerContainerResourceOverview } from '@/types/api'
 import { computed } from 'vue'
 import { formatBytes } from '@/utils/format'
+import UsageLineChart from './UsageLineChart.vue'
 
 const props = defineProps<{
   overview: DockerContainerResourceOverview | null
+  historyByContainerId: Record<string, ContainerResourceHistory>
   loading: boolean
   error: string | null
 }>()
@@ -130,6 +128,30 @@ function resolveStatusColor(status: string): string {
   if (normalized.includes('paused')) return 'warning'
   if (normalized.includes('exited') || normalized.includes('dead')) return 'error'
   return 'primary'
+}
+
+function resolveContainerHistory(
+  containerId: string,
+  metric: 'cpu' | 'memory',
+  fallbackValue: number
+): number[] {
+  const history = props.historyByContainerId[containerId]?.points ?? []
+  const values = history.map((point) =>
+    metric === 'cpu' ? point.cpuUsagePercent : point.memoryUsagePercent
+  )
+
+  if (values.length >= 2) {
+    return values
+  }
+
+  return [0, fallbackValue]
+}
+
+function resolveChartColor(color: string): string {
+  if (color === 'error') return 'rgb(var(--v-theme-error))'
+  if (color === 'warning') return 'rgb(var(--v-theme-warning))'
+  if (color === 'success') return 'rgb(var(--v-theme-success))'
+  return 'rgb(var(--v-theme-primary))'
 }
 </script>
 

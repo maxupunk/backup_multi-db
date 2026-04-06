@@ -410,6 +410,26 @@ export interface DockerContainerResourceOverview {
   containers: DockerContainerResourceMetrics[]
 }
 
+export interface ResourceHistoryPoint {
+  timestamp: string
+  cpuUsagePercent: number
+  memoryUsagePercent: number
+  memoryUsedBytes: number
+  memoryTotalBytes: number
+}
+
+export interface ContainerResourceHistory {
+  containerId: string
+  containerName: string
+  points: ResourceHistoryPoint[]
+}
+
+export interface ResourceMetricsHistoryResponse {
+  retentionDays: number
+  system: ResourceHistoryPoint[]
+  containers: ContainerResourceHistory[]
+}
+
 export interface DashboardStats {
   connections: {
     total: number

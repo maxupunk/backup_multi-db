@@ -27,6 +27,7 @@ import type {
   LoginPayload,
   PaginatedResponse,
   RegisterPayload,
+  ResourceMetricsHistoryResponse,
   RestoreOptions,
   RestoreResult,
   Storage,
@@ -499,6 +500,12 @@ export const systemApi = {
 
   async containerResources (): Promise<ApiResponse<DockerContainerResourceOverview>> {
     return request<ApiResponse<DockerContainerResourceOverview>>('/system/containers/resources')
+  },
+
+  async resourcesHistory (rangeHours = 24): Promise<ApiResponse<ResourceMetricsHistoryResponse>> {
+    return request<ApiResponse<ResourceMetricsHistoryResponse>>(
+      `/system/resources/history?rangeHours=${encodeURIComponent(String(rangeHours))}`,
+    )
   },
 }
 

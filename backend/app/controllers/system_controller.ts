@@ -3,6 +3,7 @@ import { DateTime } from 'luxon'
 import Backup from '#models/backup'
 import Connection from '#models/connection'
 import { DockerContainerMonitoringService } from '#services/docker_container_monitoring_service'
+import { ResourceMetricsHistoryService } from '#services/resource_metrics_history_service'
 import { SystemMonitoringService } from '#services/system_monitoring_service'
 import { StorageSpaceService } from '#services/storage_space_service'
 
@@ -66,6 +67,17 @@ export default class SystemController {
     return response.ok({
       success: true,
       data: overview,
+    })
+  }
+
+  async resourcesHistory({ request, response }: HttpContext) {
+    const rangeHoursParam = Number(request.input('rangeHours', 24))
+    const rangeHours = Number.isFinite(rangeHoursParam) ? rangeHoursParam : 24
+    const history = await ResourceMetricsHistoryService.getHistory(rangeHours)
+
+    return response.ok({
+      success: true,
+      data: history,
     })
   }
 }

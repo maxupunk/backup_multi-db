@@ -135,9 +135,58 @@
       </v-col>
     </v-row>
 
-    <SystemResourceCharts :system="liveSystem" />
+    <v-row class="mb-2">
+      <v-col cols="12">
+        <v-card class="history-filter-card">
+          <v-card-text class="px-4 py-3">
+            <div class="d-flex flex-column flex-md-row align-md-center justify-space-between ga-3">
+              <div>
+                <div class="d-flex align-center ga-2">
+                  <v-icon color="primary" icon="mdi-chart-timeline-variant" size="20" />
+                  <strong>Período dos gráficos</strong>
+                </div>
+                <p class="text-caption text-medium-emphasis mb-0 mt-1">
+                  Dados persistidos por até {{ resourceHistory.retentionDays.value }} dias.
+                </p>
+              </div>
+
+              <div class="d-flex align-center ga-2">
+                <v-progress-circular
+                  v-if="resourceHistory.loading.value"
+                  color="primary"
+                  indeterminate
+                  size="18"
+                  width="2"
+                />
+
+                <v-btn-toggle
+                  v-model="selectedHistoryRangeHours"
+                  color="primary"
+                  density="comfortable"
+                  divided
+                  mandatory
+                >
+                  <v-btn
+                    v-for="option in historyRangeOptions"
+                    :key="option.hours"
+                    :value="option.hours"
+                    :disabled="resourceHistory.loading.value"
+                    variant="text"
+                  >
+                    {{ option.label }}
+                  </v-btn>
+                </v-btn-toggle>
+              </div>
+            </div>
+          </v-card-text>
+        </v-card>
+      </v-col>
+    </v-row>
+
+    <SystemResourceCharts :system="liveSystem" :history="resourceHistory.systemHistory.value" />
     <DockerContainerResourceCharts
       :overview="dockerOverview"
+      :history-by-container-id="resourceHistory.containerHistoryById.value"
       :loading="dockerLoading"
       :error="dockerError"
     />
@@ -278,10 +327,11 @@
 
 <script lang="ts" setup>
 import type { BackupStatus, DashboardStats, JobsSystemStatus, SystemStatus } from '@/types/api'
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { statsApi } from '@/services/api'
 import { useNotifier } from '@/composables/useNotifier'
 import { useDockerContainerResources } from '@/composables/useDockerContainerResources'
+import { useResourceHistory } from '@/composables/useResourceHistory'
 import { useSystemResources } from '@/composables/useSystemResources'
 import DockerContainerResourceCharts from '@/components/system/DockerContainerResourceCharts.vue'
 import SystemResourceCharts from '@/components/system/SystemResourceCharts.vue'
@@ -297,6 +347,13 @@ const stats = ref<DashboardStats | null>(null)
 const { systemResources } = useSystemResources()
 const { overview: dockerOverview, loading: dockerLoading, error: dockerError } =
   useDockerContainerResources()
+const resourceHistory = useResourceHistory()
+const selectedHistoryRangeHours = ref(24)
+const historyRangeOptions = [
+  { label: '24h', hours: 24 },
+  { label: '7d', hours: 24 * 7 },
+  { label: '15d', hours: 24 * 15 },
+]
 
 /**
  * Mescla os metadados do sistema (hostname, versão, jobs, etc.) com as
@@ -434,7 +491,30 @@ function buildSchedulerCardState(jobs: JobsSystemStatus | null): SchedulerCardSt
 
 onMounted(() => {
   loadStats()
+  void loadResourceHistory()
 })
+
+watch(systemResources, (event) => {
+  if (!event) return
+  resourceHistory.appendSystemEvent(event)
+})
+
+watch(dockerOverview, (overview) => {
+  if (!overview) return
+  resourceHistory.appendContainerOverview(overview)
+})
+
+watch(selectedHistoryRangeHours, () => {
+  void loadResourceHistory()
+})
+
+async function loadResourceHistory(): Promise<void> {
+  await resourceHistory.load(selectedHistoryRangeHours.value)
+
+  if (resourceHistory.error.value) {
+    notify(resourceHistory.error.value, 'error')
+  }
+}
 </script>
 
 <style scoped>
@@ -482,6 +562,10 @@ onMounted(() => {
   min-width: 160px;
   padding: 16px;
   background: rgba(var(--v-theme-surface-variant), 0.35);
+  border: 1px solid rgba(var(--v-border-color), 0.08);
+}
+
+.history-filter-card {
   border: 1px solid rgba(var(--v-border-color), 0.08);
 }
 </style>

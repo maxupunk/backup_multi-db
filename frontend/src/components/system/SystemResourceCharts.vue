@@ -17,23 +17,6 @@
         <v-card-text class="pa-5">
           <div class="d-flex align-center justify-space-between ga-4 flex-wrap">
             <div class="d-flex align-center ga-4">
-              <v-progress-circular
-                :color="metric.color"
-                :model-value="metric.percentage"
-                :rotate="360"
-                :size="92"
-                :width="10"
-              >
-                <div class="text-center">
-                  <div class="text-subtitle-1 font-weight-bold">
-                    {{ metric.percentage.toFixed(1) }}%
-                  </div>
-                  <div class="text-caption text-medium-emphasis">
-                    uso
-                  </div>
-                </div>
-              </v-progress-circular>
-
               <div>
                 <div class="d-flex align-center ga-2 mb-1">
                   <v-icon :color="metric.color" :icon="metric.icon" size="20" />
@@ -48,6 +31,18 @@
             <v-chip :color="metric.color" label size="small" variant="tonal">
               {{ metric.badge }}
             </v-chip>
+          </div>
+
+          <div class="mt-4">
+            <div class="d-flex align-center justify-space-between mb-2">
+              <span class="text-caption text-medium-emphasis">Histórico</span>
+              <strong>{{ metric.percentage.toFixed(1) }}%</strong>
+            </div>
+            <UsageLineChart
+              :values="metric.historyValues"
+              :color="resolveChartColor(metric.color)"
+              :height="96"
+            />
           </div>
 
           <v-divider class="my-4" />
@@ -75,9 +70,10 @@
 </template>
 
 <script lang="ts" setup>
-import type { SystemStatus } from '@/types/api'
+import type { ResourceHistoryPoint, SystemStatus } from '@/types/api'
 import { computed } from 'vue'
 import { formatBytes } from '@/utils/format'
+import UsageLineChart from './UsageLineChart.vue'
 
 type MetricCard = {
   key: 'cpu' | 'memory'
@@ -87,6 +83,7 @@ type MetricCard = {
   color: string
   percentage: number
   badge: string
+  historyValues: number[]
   primaryValue: string
   secondaryLabel: string
   secondaryValue: string
@@ -96,6 +93,7 @@ type MetricCard = {
 
 const props = defineProps<{
   system: SystemStatus | null
+  history: ResourceHistoryPoint[]
 }>()
 
 const metricCards = computed<MetricCard[]>(() => {
@@ -110,6 +108,7 @@ const metricCards = computed<MetricCard[]>(() => {
       color: resolveUsageColor(props.system.resources.cpu.usagePercent),
       percentage: props.system.resources.cpu.usagePercent,
       badge: `${props.system.resources.cpu.cores} núcleo(s)`,
+      historyValues: resolveHistoryValues('cpu'),
       primaryValue: `${props.system.resources.cpu.usagePercent.toFixed(1)}%`,
       secondaryLabel: 'Capacidade',
       secondaryValue: '100%',
@@ -124,6 +123,7 @@ const metricCards = computed<MetricCard[]>(() => {
       color: resolveUsageColor(props.system.resources.memory.usagePercent),
       percentage: props.system.resources.memory.usagePercent,
       badge: `${formatBytes(props.system.resources.memory.freeBytes)} livre`,
+      historyValues: resolveHistoryValues('memory'),
       primaryValue: formatBytes(props.system.resources.memory.usedBytes),
       secondaryLabel: 'Total',
       secondaryValue: formatBytes(props.system.resources.memory.totalBytes),
@@ -137,6 +137,25 @@ function resolveUsageColor(percentage: number): string {
   if (percentage >= 85) return 'error'
   if (percentage >= 65) return 'warning'
   return 'success'
+}
+
+function resolveHistoryValues(metric: 'cpu' | 'memory'): number[] {
+  const values = props.history.map((point) =>
+    metric === 'cpu' ? point.cpuUsagePercent : point.memoryUsagePercent
+  )
+
+  if (values.length >= 2) {
+    return values
+  }
+
+  return [0, metric === 'cpu' ? props.system?.resources.cpu.usagePercent ?? 0 : props.system?.resources.memory.usagePercent ?? 0]
+}
+
+function resolveChartColor(color: string): string {
+  if (color === 'error') return 'rgb(var(--v-theme-error))'
+  if (color === 'warning') return 'rgb(var(--v-theme-warning))'
+  if (color === 'success') return 'rgb(var(--v-theme-success))'
+  return 'rgb(var(--v-theme-primary))'
 }
 </script>
 
