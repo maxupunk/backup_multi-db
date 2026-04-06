@@ -136,6 +136,11 @@
     </v-row>
 
     <SystemResourceCharts :system="liveSystem" />
+    <DockerContainerResourceCharts
+      :overview="dockerOverview"
+      :loading="dockerLoading"
+      :error="dockerError"
+    />
 
     <!-- Storage Space Cards -->
     <v-row v-if="stats?.storageSpaces?.length" class="mb-6">
@@ -276,7 +281,9 @@ import type { BackupStatus, DashboardStats, JobsSystemStatus, SystemStatus } fro
 import { computed, onMounted, ref } from 'vue'
 import { statsApi } from '@/services/api'
 import { useNotifier } from '@/composables/useNotifier'
+import { useDockerContainerResources } from '@/composables/useDockerContainerResources'
 import { useSystemResources } from '@/composables/useSystemResources'
+import DockerContainerResourceCharts from '@/components/system/DockerContainerResourceCharts.vue'
 import SystemResourceCharts from '@/components/system/SystemResourceCharts.vue'
 import { getBackupStatusColor as getStatusColor, getBackupStatusLabel as getStatusLabel } from '@/ui/backup'
 import { formatBytes, formatDateTimePtBR, formatFileSize } from '@/utils/format'
@@ -288,6 +295,8 @@ const stats = ref<DashboardStats | null>(null)
 
 // Atualizações em tempo real de CPU e RAM via SSE (~1s)
 const { systemResources } = useSystemResources()
+const { overview: dockerOverview, loading: dockerLoading, error: dockerError } =
+  useDockerContainerResources()
 
 /**
  * Mescla os metadados do sistema (hostname, versão, jobs, etc.) com as

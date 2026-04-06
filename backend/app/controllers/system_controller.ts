@@ -2,10 +2,13 @@ import type { HttpContext } from '@adonisjs/core/http'
 import { DateTime } from 'luxon'
 import Backup from '#models/backup'
 import Connection from '#models/connection'
+import { DockerContainerMonitoringService } from '#services/docker_container_monitoring_service'
 import { SystemMonitoringService } from '#services/system_monitoring_service'
 import { StorageSpaceService } from '#services/storage_space_service'
 
 export default class SystemController {
+  private readonly dockerContainerMonitoringService = new DockerContainerMonitoringService()
+
   async stats({ response }: HttpContext) {
     const today = DateTime.now().startOf('day')
     const [
@@ -54,6 +57,15 @@ export default class SystemController {
     return response.ok({
       success: true,
       data: await SystemMonitoringService.getOverview(),
+    })
+  }
+
+  async containerResources({ response }: HttpContext) {
+    const overview = await this.dockerContainerMonitoringService.getOverview()
+
+    return response.ok({
+      success: true,
+      data: overview,
     })
   }
 }

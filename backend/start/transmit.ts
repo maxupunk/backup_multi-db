@@ -11,6 +11,7 @@
 import logger from '@adonisjs/core/services/logger'
 import app from '@adonisjs/core/services/app'
 import { NotificationService } from '#services/notification_service'
+import { DockerContainerResourceEmitter } from '#services/docker_container_resource_emitter'
 import { SystemResourceEmitter } from '#services/system_resource_emitter'
 
 // Apenas exibe o log (as rotas foram registradas em start/routes.ts)
@@ -28,6 +29,7 @@ app.ready(() => {
   setTimeout(() => {
     NotificationService.systemStarted()
     SystemResourceEmitter.start()
+    DockerContainerResourceEmitter.start()
   }, 1000)
 })
 
@@ -38,5 +40,6 @@ app.terminating(() => {
   }
 
   SystemResourceEmitter.stop()
+  DockerContainerResourceEmitter.stop()
   NotificationService.systemShutdown()
 })

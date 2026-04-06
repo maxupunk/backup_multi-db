@@ -61,6 +61,8 @@ export const NOTIFICATION_CHANNELS = {
   BACKUP_PROGRESS: 'notifications/backup-progress',
   /** Canal de métricas de recursos do sistema (CPU/RAM) em tempo real */
   SYSTEM_RESOURCES: 'notifications/system-resources',
+  /** Canal de métricas de recursos dos containers Docker em tempo real */
+  DOCKER_CONTAINER_RESOURCES: 'notifications/docker-container-resources',
   /** Canal de progresso de cópia entre storages (prefixo — usar com /:jobId) */
   STORAGE_COPY: 'notifications/storage-copy',
   /** Canal de progresso de archive de storage (prefixo — usar com /:jobId) */

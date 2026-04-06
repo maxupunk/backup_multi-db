@@ -129,6 +129,7 @@ router
 
         router.get('/stats', [SystemController, 'stats'])
         router.get('/system/status', [SystemController, 'status'])
+        router.get('/system/containers/resources', [SystemController, 'containerResources'])
 
         // ==================== Audit Logs ====================
         router.get('audit-logs', [AuditLogsController, 'index'])

@@ -15,6 +15,7 @@ declare module 'vue' {
     BucketExplorer: typeof import('./components/storages/BucketExplorer.vue')['default']
     CopyJobProgress: typeof import('./components/storages/CopyJobProgress.vue')['default']
     CreateDatabaseDialog: typeof import('./components/common/CreateDatabaseDialog.vue')['default']
+    DockerContainerResourceCharts: typeof import('./components/system/DockerContainerResourceCharts.vue')['default']
     FileDropZone: typeof import('./components/backups/FileDropZone.vue')['default']
     HostSelectorField: typeof import('./components/connections/HostSelectorField.vue')['default']
     ImportBackupDialog: typeof import('./components/backups/ImportBackupDialog.vue')['default']

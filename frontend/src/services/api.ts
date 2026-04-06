@@ -21,6 +21,7 @@ import type {
   CreateStorageDestinationPayload,
   CreateStoragePayload,
   DashboardStats,
+  DockerContainerResourceOverview,
   DockerHostsResponseData,
   ImportBackupResult,
   LoginPayload,
@@ -494,6 +495,10 @@ export const statsApi = {
 export const systemApi = {
   async status (): Promise<ApiResponse<SystemStatus>> {
     return request<ApiResponse<SystemStatus>>('/system/status')
+  },
+
+  async containerResources (): Promise<ApiResponse<DockerContainerResourceOverview>> {
+    return request<ApiResponse<DockerContainerResourceOverview>>('/system/containers/resources')
   },
 }
 

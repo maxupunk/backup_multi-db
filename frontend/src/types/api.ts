@@ -379,6 +379,37 @@ export interface SystemStatus {
   jobs: JobsSystemStatus
 }
 
+export interface DockerContainerResourceMetrics {
+  containerId: string
+  containerName: string
+  imageName: string
+  status: string
+  cpu: {
+    usagePercent: number
+  }
+  memory: {
+    usageBytes: number
+    limitBytes: number
+    usagePercent: number
+  }
+  network: {
+    rxBytes: number
+    txBytes: number
+  }
+  blockIo: {
+    readBytes: number
+    writeBytes: number
+  }
+  pids: number | null
+}
+
+export interface DockerContainerResourceOverview {
+  dockerAvailable: boolean
+  unavailableReason: string | null
+  collectedAt: string
+  containers: DockerContainerResourceMetrics[]
+}
+
 export interface DashboardStats {
   connections: {
     total: number
