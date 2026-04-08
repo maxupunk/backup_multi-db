@@ -353,8 +353,9 @@ const { systemResources } = useSystemResources()
 const { overview: dockerOverview, loading: dockerLoading, error: dockerError } =
   useDockerContainerResources()
 const resourceHistory = useResourceHistory()
-const selectedHistoryRangeHours = ref(24)
+const selectedHistoryRangeHours = ref(1)
 const historyRangeOptions = [
+  { label: '1h', hours: 1 },
   { label: '24h', hours: 24 },
   { label: '7d', hours: 24 * 7 },
   { label: '15d', hours: 24 * 15 },
