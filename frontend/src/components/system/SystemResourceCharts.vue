@@ -40,6 +40,8 @@
             </div>
             <UsageLineChart
               :values="metric.historyValues"
+              :timestamps="historyTimestamps"
+              :range-hours="rangeHours"
               :color="resolveChartColor(metric.color)"
               :height="96"
             />
@@ -94,6 +96,7 @@ type MetricCard = {
 const props = defineProps<{
   system: SystemStatus | null
   history: ResourceHistoryPoint[]
+  rangeHours?: number
 }>()
 
 const metricCards = computed<MetricCard[]>(() => {
@@ -139,6 +142,8 @@ function resolveUsageColor(percentage: number): string {
   return 'success'
 }
 
+const historyTimestamps = computed(() => props.history.map((p) => p.timestamp))
+
 function resolveHistoryValues(metric: 'cpu' | 'memory'): number[] {
   const values = props.history.map((point) =>
     metric === 'cpu' ? point.cpuUsagePercent : point.memoryUsagePercent
@@ -177,11 +182,5 @@ function resolveChartColor(color: string): string {
   display: flex;
   flex-direction: column;
   gap: 4px;
-}
-
-@media (width <= 960px) {
-  .resource-grid {
-    grid-template-columns: 1fr;
-  }
 }
 </style>

@@ -183,10 +183,15 @@
       </v-col>
     </v-row>
 
-    <SystemResourceCharts :system="liveSystem" :history="resourceHistory.systemHistory.value" />
+    <SystemResourceCharts
+      :system="liveSystem"
+      :history="resourceHistory.systemHistory.value"
+      :range-hours="selectedHistoryRangeHours"
+    />
     <DockerContainerResourceCharts
       :overview="dockerOverview"
       :history-by-container-id="resourceHistory.containerHistoryById.value"
+      :range-hours="selectedHistoryRangeHours"
       :loading="dockerLoading"
       :error="dockerError"
     />

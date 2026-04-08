@@ -57,6 +57,8 @@
             </div>
             <UsageLineChart
               :values="resolveContainerHistory(container.containerId, 'cpu', container.cpu.usagePercent)"
+              :timestamps="resolveContainerTimestamps(container.containerId)"
+              :range-hours="rangeHours"
               :color="resolveChartColor(resolveUsageColor(container.cpu.usagePercent))"
               :height="84"
             />
@@ -69,6 +71,8 @@
             </div>
             <UsageLineChart
               :values="resolveContainerHistory(container.containerId, 'memory', container.memory.usagePercent)"
+              :timestamps="resolveContainerTimestamps(container.containerId)"
+              :range-hours="rangeHours"
               :color="resolveChartColor(resolveUsageColor(container.memory.usagePercent))"
               :height="84"
             />
@@ -112,6 +116,7 @@ const props = defineProps<{
   historyByContainerId: Record<string, ContainerResourceHistory>
   loading: boolean
   error: string | null
+  rangeHours?: number
 }>()
 
 const containers = computed(() => props.overview?.containers ?? [])
@@ -147,6 +152,10 @@ function resolveContainerHistory(
   return [0, fallbackValue]
 }
 
+function resolveContainerTimestamps(containerId: string): string[] {
+  return props.historyByContainerId[containerId]?.points.map((p) => p.timestamp) ?? []
+}
+
 function resolveChartColor(color: string): string {
   if (color === 'error') return 'rgb(var(--v-theme-error))'
   if (color === 'warning') return 'rgb(var(--v-theme-warning))'
@@ -173,11 +182,5 @@ function resolveChartColor(color: string): string {
   display: flex;
   flex-direction: column;
   gap: 4px;
-}
-
-@media (width <= 960px) {
-  .resource-grid {
-    grid-template-columns: 1fr;
-  }
 }
 </style>
