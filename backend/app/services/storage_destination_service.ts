@@ -1,18 +1,46 @@
-import { existsSync, mkdirSync } from 'node:fs'
+import { createReadStream, existsSync, mkdirSync, statSync } from 'node:fs'
 import { unlink } from 'node:fs/promises'
 import { dirname, join, posix } from 'node:path'
 import type { Readable } from 'node:stream'
+
 import { DEFAULT_LOCAL_STORAGE_NAME, getBackupStoragePath } from '#config/storage_paths'
-import StorageDestination from '#models/storage_destination'
 import type Backup from '#models/backup'
 import type Connection from '#models/connection'
+import StorageDestination from '#models/storage_destination'
+import { S3ConfigService } from '#services/storage/s3_config_service'
 
 type DownloadResult = {
   stream: Readable
   contentLength?: number
 }
 
+type S3NormalizedConfig = {
+  region: string
+  endpoint?: string
+  forcePathStyle?: boolean
+  accessKeyId: string
+  secretAccessKey: string
+}
+
+type GcsConfig = {
+  projectId?: string
+  credentialsJson?: string
+}
+
+type SftpConfig = {
+  host: string
+  port?: number
+  username: string
+  password?: string
+  privateKey?: string
+  passphrase?: string
+}
+
 export class StorageDestinationService {
+  // ---------------------------------------------------------------------------
+  // Path helpers
+  // ---------------------------------------------------------------------------
+
   private static normalizePrefix(prefix?: string): string {
     const value = (prefix ?? '').trim()
     if (!value) return ''
@@ -25,6 +53,55 @@ export class StorageDestinationService {
     return normalizedPrefix ? posix.join(normalizedPrefix, cleanedRelative) : cleanedRelative
   }
 
+  private static buildSftpRemotePath(basePath: string | undefined, relativePath: string): string {
+    const base = this.normalizePrefix(basePath ?? '')
+    const key = this.buildRemoteKey('', relativePath)
+    return base ? posix.join(base, key) : key
+  }
+
+  // ---------------------------------------------------------------------------
+  // Provider client factories
+  // ---------------------------------------------------------------------------
+
+  private static async createS3Client(config: S3NormalizedConfig) {
+    const { S3Client } = await import('@aws-sdk/client-s3')
+    return new S3Client({
+      region: config.region,
+      endpoint: config.endpoint,
+      forcePathStyle: config.forcePathStyle,
+      credentials: {
+        accessKeyId: config.accessKeyId,
+        secretAccessKey: config.secretAccessKey,
+      },
+    })
+  }
+
+  private static async createGcsStorage(config: GcsConfig) {
+    const { Storage } = await import('@google-cloud/storage')
+    const options: Record<string, unknown> = {}
+    if (config.projectId) options.projectId = config.projectId
+    if (config.credentialsJson) options.credentials = JSON.parse(config.credentialsJson)
+    return new Storage(options as any)
+  }
+
+  private static async createSftpClient(config: SftpConfig) {
+    const { default: SftpClient } = await import('ssh2-sftp-client')
+    const client = new SftpClient()
+    await client.connect({
+      host: config.host,
+      port: config.port ?? 22,
+      username: config.username,
+      password: config.password,
+      privateKey: config.privateKey,
+      passphrase: config.passphrase,
+    } as any)
+    return client
+  }
+
+  // ---------------------------------------------------------------------------
+  // Destination resolution
+  // ---------------------------------------------------------------------------
+
   static async resolveDestinationForConnection(
     connection: Connection
   ): Promise<StorageDestination | null> {
@@ -33,18 +110,22 @@ export class StorageDestinationService {
       if (destination && destination.status === 'active') return destination
     }
 
-    const defaultDestination = await StorageDestination.query()
+    const fallback = await StorageDestination.query()
       .where('isDefault', true)
       .where('status', 'active')
       .first()
 
-    return defaultDestination ?? null
+    return fallback ?? null
   }
 
   static async resolveDestinationForBackup(backup: Backup): Promise<StorageDestination | null> {
     if (!backup.storageDestinationId) return null
     return StorageDestination.find(backup.storageDestinationId)
   }
+
+  // ---------------------------------------------------------------------------
+  // Local storage helpers
+  // ---------------------------------------------------------------------------
 
   static async ensureDefaultLocalDestination(): Promise<StorageDestination> {
     const fallbackPath = getBackupStoragePath()
@@ -102,11 +183,7 @@ export class StorageDestinationService {
     if (!destination) return fallback
 
     const config = destination.getDecryptedConfig()
-    if (!config) return fallback
-
-    if (config.type === 'local' && config.basePath) {
-      return config.basePath
-    }
+    if (config?.type === 'local' && config.basePath) return config.basePath
 
     return fallback
   }
@@ -120,35 +197,25 @@ export class StorageDestinationService {
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
   }
 
+  // ---------------------------------------------------------------------------
+  // File operations
+  // ---------------------------------------------------------------------------
+
   static async uploadBackupFile(
     destination: StorageDestination,
     relativePath: string,
     localFullPath: string
   ): Promise<void> {
     const config = destination.getDecryptedConfig()
-    if (!config) {
-      throw new Error('Configuração do destino de armazenamento inválida')
-    }
+    if (!config) throw new Error('Configuração do destino de armazenamento inválida')
 
-    if (config.type === 'local') {
-      return
-    }
+    if (config.type === 'local') return
 
     if (config.type === 's3') {
-      const { S3Client, PutObjectCommand } = await import('@aws-sdk/client-s3')
-      const { createReadStream } = await import('node:fs')
-
-      const key = this.buildRemoteKey(config.prefix ?? '', relativePath)
-      const client = new S3Client({
-        region: config.region,
-        endpoint: config.endpoint,
-        forcePathStyle: config.forcePathStyle,
-        credentials: {
-          accessKeyId: config.accessKeyId,
-          secretAccessKey: config.secretAccessKey,
-        },
-      })
-
+      const { PutObjectCommand } = await import('@aws-sdk/client-s3')
+      const normalized = S3ConfigService.normalize(config)
+      const key = this.buildRemoteKey(normalized.prefix ?? '', relativePath)
+      const client = await this.createS3Client(normalized)
       await client.send(
         new PutObjectCommand({
           Bucket: config.bucket,
@@ -165,51 +232,26 @@ export class StorageDestinationService {
       const blobService = BlobServiceClient.fromConnectionString(config.connectionString)
       const container = blobService.getContainerClient(config.container)
       await container.createIfNotExists()
-      const blob = container.getBlockBlobClient(key)
-      await blob.uploadFile(localFullPath)
+      await container.getBlockBlobClient(key).uploadFile(localFullPath)
       return
     }
 
     if (config.type === 'gcs') {
-      const { Storage } = await import('@google-cloud/storage')
       const key = this.buildRemoteKey(config.prefix ?? '', relativePath)
-
-      const options: Record<string, unknown> = {}
-      if (config.projectId) options.projectId = config.projectId
-      if (config.credentialsJson) {
-        options.credentials = JSON.parse(config.credentialsJson)
-      }
-
-      const storage = new Storage(options as any)
+      const storage = await this.createGcsStorage(config)
       await storage.bucket(config.bucket).upload(localFullPath, { destination: key })
       return
     }
 
     if (config.type === 'sftp') {
-      const sftpModule = await import('ssh2-sftp-client')
-      const SftpClient = sftpModule.default
-      const key = this.buildRemoteKey('', relativePath)
-      const remoteBase = this.normalizePrefix(config.basePath ?? '')
-      const remotePath = remoteBase ? posix.join(remoteBase, key) : key
-      const remoteDir = posix.dirname(remotePath)
-
-      const client = new SftpClient()
-      await client.connect({
-        host: config.host,
-        port: config.port ?? 22,
-        username: config.username,
-        password: config.password,
-        privateKey: config.privateKey,
-        passphrase: config.passphrase,
-      } as any)
-
+      const remotePath = this.buildSftpRemotePath(config.basePath, relativePath)
+      const client = await this.createSftpClient(config)
       try {
-        await client.mkdir(remoteDir, true)
+        await client.mkdir(posix.dirname(remotePath), true)
         await client.put(localFullPath, remotePath)
       } finally {
         await client.end()
       }
-      return
     }
   }
 
@@ -218,55 +260,33 @@ export class StorageDestinationService {
     relativePath: string
   ): Promise<DownloadResult> {
     const config = destination.getDecryptedConfig()
-    if (!config) {
-      throw new Error('Configuração do destino de armazenamento inválida')
-    }
+    if (!config) throw new Error('Configuração do destino de armazenamento inválida')
 
     if (config.type === 'local') {
-      const { createReadStream, statSync } = await import('node:fs')
       const fullPath = this.getLocalFullPath(destination, relativePath)
       const stats = statSync(fullPath)
       return { stream: createReadStream(fullPath), contentLength: stats.size }
     }
 
     if (config.type === 's3') {
-      const { S3Client, GetObjectCommand } = await import('@aws-sdk/client-s3')
-      const key = this.buildRemoteKey(config.prefix ?? '', relativePath)
-      const client = new S3Client({
-        region: config.region,
-        endpoint: config.endpoint,
-        forcePathStyle: config.forcePathStyle,
-        credentials: {
-          accessKeyId: config.accessKeyId,
-          secretAccessKey: config.secretAccessKey,
-        },
-      })
-
-      const res = await client.send(
-        new GetObjectCommand({
-          Bucket: config.bucket,
-          Key: key,
-        })
-      )
-
-      const body = res.Body
-      if (!body) {
-        throw new Error('Arquivo não encontrado no S3')
-      }
-
-      return { stream: body as Readable, contentLength: res.ContentLength }
+      const { GetObjectCommand } = await import('@aws-sdk/client-s3')
+      const normalized = S3ConfigService.normalize(config)
+      const key = this.buildRemoteKey(normalized.prefix ?? '', relativePath)
+      const client = await this.createS3Client(normalized)
+      const res = await client.send(new GetObjectCommand({ Bucket: config.bucket, Key: key }))
+      if (!res.Body) throw new Error('Arquivo não encontrado no S3')
+      return { stream: res.Body as Readable, contentLength: res.ContentLength }
     }
 
     if (config.type === 'azure_blob') {
       const { BlobServiceClient } = await import('@azure/storage-blob')
       const key = this.buildRemoteKey(config.prefix ?? '', relativePath)
       const blobService = BlobServiceClient.fromConnectionString(config.connectionString)
-      const container = blobService.getContainerClient(config.container)
-      const blob = container.getBlobClient(key)
-      const download = await blob.download()
-      if (!download.readableStreamBody) {
-        throw new Error('Arquivo não encontrado no Azure Blob')
-      }
+      const download = await blobService
+        .getContainerClient(config.container)
+        .getBlobClient(key)
+        .download()
+      if (!download.readableStreamBody) throw new Error('Arquivo não encontrado no Azure Blob')
       return {
         stream: download.readableStreamBody as Readable,
         contentLength: download.contentLength,
@@ -274,16 +294,8 @@ export class StorageDestinationService {
     }
 
     if (config.type === 'gcs') {
-      const { Storage } = await import('@google-cloud/storage')
       const key = this.buildRemoteKey(config.prefix ?? '', relativePath)
-
-      const options: Record<string, unknown> = {}
-      if (config.projectId) options.projectId = config.projectId
-      if (config.credentialsJson) {
-        options.credentials = JSON.parse(config.credentialsJson)
-      }
-
-      const storage = new Storage(options as any)
+      const storage = await this.createGcsStorage(config)
       const file = storage.bucket(config.bucket).file(key)
       const [metadata] = await file.getMetadata()
       return { stream: file.createReadStream(), contentLength: Number(metadata.size) }
@@ -297,9 +309,7 @@ export class StorageDestinationService {
     relativePath: string
   ): Promise<void> {
     const localPath = this.getLocalFullPath(destination, relativePath)
-    if (existsSync(localPath)) {
-      await unlink(localPath)
-    }
+    if (existsSync(localPath)) await unlink(localPath)
 
     if (!destination) return
 
@@ -307,17 +317,10 @@ export class StorageDestinationService {
     if (!config || config.type === 'local') return
 
     if (config.type === 's3') {
-      const { S3Client, DeleteObjectCommand } = await import('@aws-sdk/client-s3')
-      const key = this.buildRemoteKey(config.prefix ?? '', relativePath)
-      const client = new S3Client({
-        region: config.region,
-        endpoint: config.endpoint,
-        forcePathStyle: config.forcePathStyle,
-        credentials: {
-          accessKeyId: config.accessKeyId,
-          secretAccessKey: config.secretAccessKey,
-        },
-      })
+      const { DeleteObjectCommand } = await import('@aws-sdk/client-s3')
+      const normalized = S3ConfigService.normalize(config)
+      const key = this.buildRemoteKey(normalized.prefix ?? '', relativePath)
+      const client = await this.createS3Client(normalized)
       await client.send(new DeleteObjectCommand({ Bucket: config.bucket, Key: key }))
       return
     }
@@ -326,49 +329,25 @@ export class StorageDestinationService {
       const { BlobServiceClient } = await import('@azure/storage-blob')
       const key = this.buildRemoteKey(config.prefix ?? '', relativePath)
       const blobService = BlobServiceClient.fromConnectionString(config.connectionString)
-      const container = blobService.getContainerClient(config.container)
-      await container.getBlobClient(key).deleteIfExists()
+      await blobService.getContainerClient(config.container).getBlobClient(key).deleteIfExists()
       return
     }
 
     if (config.type === 'gcs') {
-      const { Storage } = await import('@google-cloud/storage')
       const key = this.buildRemoteKey(config.prefix ?? '', relativePath)
-
-      const options: Record<string, unknown> = {}
-      if (config.projectId) options.projectId = config.projectId
-      if (config.credentialsJson) {
-        options.credentials = JSON.parse(config.credentialsJson)
-      }
-
-      const storage = new Storage(options as any)
+      const storage = await this.createGcsStorage(config)
       await storage.bucket(config.bucket).file(key).delete({ ignoreNotFound: true })
       return
     }
 
     if (config.type === 'sftp') {
-      const sftpModule = await import('ssh2-sftp-client')
-      const SftpClient = sftpModule.default
-      const key = this.buildRemoteKey('', relativePath)
-      const remoteBase = this.normalizePrefix(config.basePath ?? '')
-      const remotePath = remoteBase ? posix.join(remoteBase, key) : key
-
-      const client = new SftpClient()
-      await client.connect({
-        host: config.host,
-        port: config.port ?? 22,
-        username: config.username,
-        password: config.password,
-        privateKey: config.privateKey,
-        passphrase: config.passphrase,
-      } as any)
-
+      const remotePath = this.buildSftpRemotePath(config.basePath, relativePath)
+      const client = await this.createSftpClient(config)
       try {
         await client.delete(remotePath)
       } finally {
         await client.end()
       }
-      return
     }
   }
 }

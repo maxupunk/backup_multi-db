@@ -228,7 +228,9 @@ export class BucketArchiveService {
     if (filePath) {
       this.tmpFiles.delete(jobId)
       await unlink(filePath).catch((err) => {
-        logger.warn(`[BucketArchive] Falha ao remover arquivo temporário ${filePath}: ${err.message}`)
+        logger.warn(
+          `[BucketArchive] Falha ao remover arquivo temporário ${filePath}: ${err.message}`
+        )
       })
     }
   }

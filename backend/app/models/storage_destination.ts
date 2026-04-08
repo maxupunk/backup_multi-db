@@ -35,7 +35,7 @@ export type StorageDestinationConfig =
     }
   | {
       type: 's3'
-      region: string
+      region?: string
       bucket: string
       endpoint?: string
       accessKeyId: string
@@ -83,7 +83,10 @@ export default class StorageDestination extends BaseModel {
   @column()
   declare provider: StorageProvider | null
 
-  @column()
+  @column({
+    consume: (value: unknown) => Boolean(value),
+    prepare: (value: unknown) => (value ? 1 : 0),
+  })
   declare isDefault: boolean
 
   @column({ serializeAs: null })

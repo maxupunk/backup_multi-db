@@ -134,7 +134,7 @@ export type StorageDestinationConfigPayload =
       basePath?: string
     }
   | {
-      region: string
+      region?: string
       bucket: string
       endpoint?: string
       accessKeyId: string

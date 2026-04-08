@@ -15,7 +15,7 @@ const createConfigGroup = vine.group([
   vine.group.if((data) => data.type === 's3', {
     type: vine.literal('s3'),
     config: vine.object({
-      region: vine.string().trim().minLength(1),
+      region: vine.string().trim().optional(),
       bucket: vine.string().trim().minLength(1),
       endpoint: vine.string().trim().optional(),
       accessKeyId: vine.string().trim().minLength(1),
@@ -80,7 +80,7 @@ const updateConfigGroup = vine
     vine.group.if((data) => data.type === 's3', {
       type: vine.literal('s3'),
       config: vine.object({
-        region: vine.string().trim().minLength(1),
+        region: vine.string().trim().optional(),
         bucket: vine.string().trim().minLength(1),
         endpoint: vine.string().trim().optional(),
         accessKeyId: vine.string().trim().minLength(1),

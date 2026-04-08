@@ -228,7 +228,9 @@ export class BucketCopyService {
     return new Promise((resolve, reject) => {
       const proc = spawn('rclone', ['obscure', plain])
       let output = ''
-      proc.stdout?.on('data', (d: Buffer) => { output += d.toString() })
+      proc.stdout?.on('data', (d: Buffer) => {
+        output += d.toString()
+      })
       proc.on('close', (code) => {
         if (code === 0) resolve(output.trim())
         else reject(new Error(`rclone obscure falhou com código ${code}`))
@@ -286,7 +288,9 @@ export class BucketCopyService {
         }
 
         // Parse bytes: "Transferred:   2.5 GiB / 5 GiB, 50%, ..."
-        const bytesMatch = redacted.match(/Transferred:\s+([\d.]+)\s*(B|KiB|MiB|GiB|TiB|KB|MB|GB|TB)/)
+        const bytesMatch = redacted.match(
+          /Transferred:\s+([\d.]+)\s*(B|KiB|MiB|GiB|TiB|KB|MB|GB|TB)/
+        )
         if (bytesMatch) {
           job.bytesTransferred = this.parseBytes(bytesMatch[1], bytesMatch[2])
           this.emitProgress(job)

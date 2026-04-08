@@ -21,10 +21,16 @@ export default class User extends compose(BaseModel, AuthFinder) {
   @column()
   declare email: string
 
-  @column()
+  @column({
+    consume: (value: unknown) => Boolean(value),
+    prepare: (value: unknown) => (value ? 1 : 0),
+  })
   declare isActive: boolean
 
-  @column()
+  @column({
+    consume: (value: unknown) => Boolean(value),
+    prepare: (value: unknown) => (value ? 1 : 0),
+  })
   declare isAdmin: boolean
 
   @column({ serializeAs: null })

@@ -4,6 +4,7 @@ import type { StorageDestinationType, StorageProvider } from '#models/storage_de
 import { BucketExplorerService } from '#services/storage/bucket_explorer_service'
 import { BucketCopyService } from '#services/storage/bucket_copy_service'
 import { BucketArchiveService } from '#services/storage/bucket_archive_service'
+import { S3ConfigService } from '#services/storage/s3_config_service'
 import { AuditService } from '#services/audit_service'
 import {
   createStorageValidator,
@@ -25,6 +26,47 @@ const PROVIDER_TO_TYPE: Record<StorageProvider, StorageDestinationType> = {
   azure_blob: 'azure_blob',
   sftp: 'sftp',
   local: 'local',
+}
+
+function normalizeStorageConfig(
+  provider: StorageProvider,
+  config: Record<string, unknown> | undefined
+): Record<string, unknown> {
+  const payload = { ...(config ?? {}) }
+  if (PROVIDER_TO_TYPE[provider] !== 's3') return payload
+  return S3ConfigService.normalize(payload, { provider })
+}
+
+/**
+ * Preserves existing encrypted secrets when the client sends an empty string
+ * (masked fields cleared by the frontend that the user did not re-enter).
+ */
+function mergeExistingSecrets(
+  existingConfig: Record<string, unknown> | null,
+  incomingConfig: Record<string, unknown>
+): Record<string, unknown> {
+  if (!existingConfig) return incomingConfig
+
+  const maskedFields: Record<string, string[]> = {
+    s3: ['secretAccessKey'],
+    azure_blob: ['connectionString'],
+    gcs: ['credentialsJson'],
+    sftp: ['password', 'privateKey', 'passphrase'],
+  }
+
+  const type = String(existingConfig.type ?? '')
+  const fields = maskedFields[type] ?? []
+  const merged = { ...incomingConfig }
+
+  for (const field of fields) {
+    const incoming = merged[field]
+    const existing = existingConfig[field]
+    if ((!incoming || (typeof incoming === 'string' && incoming.trim() === '')) && existing) {
+      merged[field] = existing
+    }
+  }
+
+  return merged
 }
 
 export default class StoragesController {
@@ -84,7 +126,10 @@ export default class StoragesController {
     storage.provider = provider
     storage.status = payload.status ?? 'active'
     storage.isDefault = payload.isDefault ?? false
-    storage.setConfig({ type, ...(payload.config ?? {}) } as any)
+    storage.setConfig({
+      type,
+      ...normalizeStorageConfig(provider, payload.config),
+    } as any)
 
     await storage.save()
 
@@ -179,8 +224,17 @@ export default class StoragesController {
     }
 
     if (payload.config !== undefined) {
+      const existingConfig = storage.getDecryptedConfig() as Record<string, unknown> | null
+      const providerToUse = storage.provider
       const type = storage.type
-      storage.setConfig({ type, ...(payload.config ?? {}) } as any)
+      const mergedConfig = mergeExistingSecrets(
+        existingConfig,
+        payload.config as Record<string, unknown>
+      )
+      storage.setConfig({
+        type,
+        ...(providerToUse ? normalizeStorageConfig(providerToUse, mergedConfig) : mergedConfig),
+      } as any)
     }
 
     await storage.save()

@@ -1,11 +1,17 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import StorageDestination from '#models/storage_destination'
 import { StorageSpaceService } from '#services/storage_space_service'
+import { S3ConfigService } from '#services/storage/s3_config_service'
 import {
   createStorageDestinationValidator,
   listStorageDestinationsValidator,
   updateStorageDestinationValidator,
 } from '#validators/storage_destination_validator'
+
+function normalizeDestinationConfig(type: string, config: Record<string, unknown> | undefined) {
+  if (type !== 's3') return config ?? {}
+  return S3ConfigService.normalize(config ?? {})
+}
 
 export default class StorageDestinationsController {
   async index({ request, response }: HttpContext) {
@@ -49,7 +55,10 @@ export default class StorageDestinationsController {
     destination.type = payload.type
     destination.status = payload.status ?? 'active'
     destination.isDefault = payload.isDefault ?? false
-    destination.setConfig({ type: payload.type, ...(payload.config ?? {}) } as any)
+    destination.setConfig({
+      type: payload.type,
+      ...normalizeDestinationConfig(payload.type, payload.config),
+    } as any)
 
     await destination.save()
 
@@ -112,7 +121,10 @@ export default class StorageDestinationsController {
 
     if (payload.config !== undefined) {
       const typeToUse = payload.type ?? destination.type
-      destination.setConfig({ type: typeToUse, ...(payload.config ?? {}) } as any)
+      destination.setConfig({
+        type: typeToUse,
+        ...normalizeDestinationConfig(typeToUse, payload.config),
+      } as any)
     }
 
     await destination.save()

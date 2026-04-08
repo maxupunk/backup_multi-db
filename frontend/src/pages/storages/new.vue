@@ -169,7 +169,7 @@
 
 <script lang="ts" setup>
 import type { StorageProvider } from '@/types/api'
-import { computed, ref } from 'vue'
+import { computed, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useDisplay } from 'vuetify'
 import { ApiError, storagesApi } from '@/services/api'
@@ -190,6 +190,7 @@ const testing = ref(false)
 const testStatus = ref<'idle' | 'success' | 'error'>('idle')
 const testError = ref('')
 const tempStorageId = ref<number | null>(null)
+const keepDraftStorage = ref(false)
 
 const form = ref({
   name: '',
@@ -232,7 +233,51 @@ const testStatusLabel = computed(() => {
 function selectProvider (provider: StorageProvider) {
   form.value.provider = provider
   configForm.value = provider === 'local' ? { basePath: '/storage/backups' } : {}
+  resetTestFeedback()
+}
+
+function resetTestFeedback () {
   testStatus.value = 'idle'
+  testError.value = ''
+}
+
+function buildStoragePayload () {
+  if (!form.value.provider) return null
+
+  return {
+    name: form.value.name.trim(),
+    type: getTypeForProvider(form.value.provider),
+    provider: form.value.provider,
+    status: form.value.status,
+    isDefault: form.value.isDefault,
+    config: configForm.value,
+  }
+}
+
+async function ensureDraftStorageId () {
+  const payload = buildStoragePayload()
+  if (!payload) return null
+
+  if (tempStorageId.value) {
+    await storagesStore.update(tempStorageId.value, payload)
+    return tempStorageId.value
+  }
+
+  const created = await storagesStore.create(payload)
+  tempStorageId.value = created.id
+  return created.id
+}
+
+async function cleanupDraftStorage () {
+  if (!tempStorageId.value || keepDraftStorage.value) return
+
+  try {
+    await storagesStore.remove(tempStorageId.value)
+  } catch {
+    // ignore cleanup failures
+  } finally {
+    tempStorageId.value = null
+  }
 }
 
 async function goToReview () {
@@ -244,32 +289,17 @@ async function goToReview () {
 async function testBeforeSave () {
   if (!form.value.provider) return
   testing.value = true
-  testStatus.value = 'idle'
-  testError.value = ''
+  resetTestFeedback()
 
   try {
-    // Create temporarily to test, then we'll use that ID to save
-    const created = await storagesStore.create({
-      name: form.value.name.trim(),
-      type: getTypeForProvider(form.value.provider),
-      provider: form.value.provider,
-      status: form.value.status,
-      isDefault: form.value.isDefault,
-      config: configForm.value,
-    })
-    tempStorageId.value = created.id
+    const storageId = await ensureDraftStorageId()
+    if (!storageId) return
 
-    await storagesApi.test(created.id)
+    await storagesApi.test(storageId)
     testStatus.value = 'success'
   } catch (error) {
     testStatus.value = 'error'
     testError.value = error instanceof ApiError ? error.message : 'Erro ao testar conexão'
-
-    // Clean up the temporary storage if test failed
-    if (tempStorageId.value) {
-      try { await storagesStore.remove(tempStorageId.value) } catch { /* ignore */ }
-      tempStorageId.value = null
-    }
   } finally {
     testing.value = false
   }
@@ -277,6 +307,7 @@ async function testBeforeSave () {
 
 async function save () {
   if (tempStorageId.value) {
+    keepDraftStorage.value = true
     notify('Armazenamento criado com sucesso', 'success')
     router.push(`/storages/${tempStorageId.value}`)
     return
@@ -286,14 +317,10 @@ async function save () {
 
   saving.value = true
   try {
-    const created = await storagesStore.create({
-      name: form.value.name.trim(),
-      type: getTypeForProvider(form.value.provider),
-      provider: form.value.provider,
-      status: form.value.status,
-      isDefault: form.value.isDefault,
-      config: configForm.value,
-    })
+    const payload = buildStoragePayload()
+    if (!payload) return
+
+    const created = await storagesStore.create(payload)
 
     notify('Armazenamento criado com sucesso', 'success')
     router.push(`/storages/${created.id}`)
@@ -304,4 +331,21 @@ async function save () {
     saving.value = false
   }
 }
+
+watch(
+  () => [
+    form.value.name,
+    form.value.provider,
+    form.value.status,
+    form.value.isDefault,
+    JSON.stringify(configForm.value),
+  ],
+  () => {
+    resetTestFeedback()
+  },
+)
+
+onUnmounted(() => {
+  void cleanupDraftStorage()
+})
 </script>

@@ -5,16 +5,19 @@
       <v-col cols="12" sm="6">
         <v-text-field
           :model-value="config.region"
-          label="Região *"
+          :label="regionRequired ? 'Região *' : 'Região (opcional)'"
+          :placeholder="props.provider === 'cloudflare_r2' ? 'auto' : undefined"
+          hint="R2 usa auto por padrão; em MinIO o padrão é us-east-1 quando vazio"
           prepend-inner-icon="mdi-earth"
-          :rules="[rules.required]"
+          :persistent-hint="!regionRequired"
+          :rules="regionRequired ? [rules.required] : []"
           @update:model-value="emit('update:config', { ...config, region: $event })"
         />
       </v-col>
       <v-col cols="12" sm="6">
         <v-text-field
           :model-value="config.bucket"
-          label="Bucket *"
+          :label="props.provider === 'cloudflare_r2' ? 'Bucket R2 *' : 'Bucket *'"
           prepend-inner-icon="mdi-bucket"
           :rules="[rules.required]"
           @update:model-value="emit('update:config', { ...config, bucket: $event })"
@@ -32,9 +35,11 @@
       <v-col cols="12" sm="6">
         <v-text-field
           :model-value="config.secretAccessKey"
-          label="Secret Access Key *"
+          :hint="isEditMode ? 'Deixe em branco para manter a chave atual' : undefined"
+          :label="isEditMode ? 'Secret Access Key (opcional)' : 'Secret Access Key *'"
+          :persistent-hint="isEditMode"
           prepend-inner-icon="mdi-lock"
-          :rules="[rules.required]"
+          :rules="isEditMode ? [] : [rules.required]"
           type="password"
           @update:model-value="emit('update:config', { ...config, secretAccessKey: $event })"
         />
@@ -45,7 +50,7 @@
           :label="props.provider === 'cloudflare_r2' ? 'Endpoint R2 *' : 'Endpoint *'"
           :placeholder="props.provider === 'cloudflare_r2' ? 'https://<account-id>.r2.cloudflarestorage.com' : 'https://minio.example.com:9000'"
           prepend-inner-icon="mdi-link-variant"
-          :rules="[rules.required]"
+          :rules="endpointRequired ? [rules.required] : []"
           @update:model-value="emit('update:config', { ...config, endpoint: $event })"
         />
       </v-col>
@@ -64,6 +69,16 @@
           prepend-inner-icon="mdi-folder-outline"
           @update:model-value="emit('update:config', { ...config, prefix: $event })"
         />
+      </v-col>
+      <v-col v-if="props.provider === 'cloudflare_r2'" cols="12">
+        <v-alert
+          density="compact"
+          icon="mdi-information"
+          type="info"
+          variant="tonal"
+        >
+          Para API S3 do R2, informe Access Key ID e Secret Access Key. O "token value" do painel não é usado neste fluxo.
+        </v-alert>
       </v-col>
       <v-col v-if="props.provider !== 'cloudflare_r2'" cols="12">
         <v-switch
@@ -151,9 +166,11 @@
         <v-textarea
           :model-value="config.connectionString"
           auto-grow
-          label="Connection String *"
+          :hint="isEditMode ? 'Deixe em branco para manter a connection string atual' : undefined"
+          :label="isEditMode ? 'Connection String (opcional)' : 'Connection String *'"
+          :persistent-hint="isEditMode"
           prepend-inner-icon="mdi-lock"
-          :rules="[rules.required]"
+          :rules="isEditMode ? [] : [rules.required]"
           rows="3"
           @update:model-value="emit('update:config', { ...config, connectionString: $event })"
         />
@@ -263,6 +280,7 @@ const DEFAULT_LOCAL_PATH = '/storage/backups'
 const props = defineProps<{
   provider: StorageProvider
   config: Record<string, unknown>
+  isEditMode?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -271,6 +289,14 @@ const emit = defineEmits<{
 
 const isS3Based = computed(() =>
   ['aws_s3', 'minio', 'cloudflare_r2'].includes(props.provider),
+)
+
+const endpointRequired = computed(() =>
+  props.provider === 'minio' || props.provider === 'cloudflare_r2',
+)
+
+const regionRequired = computed(() =>
+  props.provider === 'aws_s3',
 )
 
 const rules = {

@@ -13,6 +13,20 @@ const storageProviders = [
 const storageTypes = ['local', 's3', 'gcs', 'azure_blob', 'sftp'] as const
 const storageStatuses = ['active', 'inactive'] as const
 
+const s3CommonConfig = {
+  bucket: vine.string().trim().minLength(1),
+  accessKeyId: vine.string().trim().minLength(1),
+  secretAccessKey: vine.string().trim().minLength(1),
+  forcePathStyle: vine.boolean().optional(),
+  prefix: vine.string().trim().optional(),
+}
+
+// On update, secrets are optional — empty means "keep existing value"
+const s3CommonConfigUpdate = {
+  ...s3CommonConfig,
+  secretAccessKey: vine.string().trim().optional(),
+}
+
 // ==================== Create Storage ====================
 
 const createConfigGroup = vine.group([
@@ -24,22 +38,30 @@ const createConfigGroup = vine.group([
       })
       .optional(),
   }),
-  vine.group.if(
-    (data) =>
-      data.provider === 'aws_s3' || data.provider === 'minio' || data.provider === 'cloudflare_r2',
-    {
-      provider: vine.enum(['aws_s3', 'minio', 'cloudflare_r2'] as const),
-      config: vine.object({
-        region: vine.string().trim().minLength(1),
-        bucket: vine.string().trim().minLength(1),
-        endpoint: vine.string().trim().optional(),
-        accessKeyId: vine.string().trim().minLength(1),
-        secretAccessKey: vine.string().trim().minLength(1),
-        forcePathStyle: vine.boolean().optional(),
-        prefix: vine.string().trim().optional(),
-      }),
-    }
-  ),
+  vine.group.if((data) => data.provider === 'aws_s3', {
+    provider: vine.literal('aws_s3'),
+    config: vine.object({
+      ...s3CommonConfig,
+      region: vine.string().trim().minLength(1),
+      endpoint: vine.string().trim().optional(),
+    }),
+  }),
+  vine.group.if((data) => data.provider === 'minio', {
+    provider: vine.literal('minio'),
+    config: vine.object({
+      ...s3CommonConfig,
+      endpoint: vine.string().trim().minLength(1),
+      region: vine.string().trim().optional(),
+    }),
+  }),
+  vine.group.if((data) => data.provider === 'cloudflare_r2', {
+    provider: vine.literal('cloudflare_r2'),
+    config: vine.object({
+      ...s3CommonConfig,
+      endpoint: vine.string().trim().minLength(1),
+      region: vine.string().trim().optional(),
+    }),
+  }),
   vine.group.if((data) => data.provider === 'google_gcs', {
     provider: vine.literal('google_gcs'),
     config: vine.object({
@@ -94,24 +116,30 @@ const updateConfigGroup = vine
         })
         .optional(),
     }),
-    vine.group.if(
-      (data) =>
-        data.provider === 'aws_s3' ||
-        data.provider === 'minio' ||
-        data.provider === 'cloudflare_r2',
-      {
-        provider: vine.enum(['aws_s3', 'minio', 'cloudflare_r2'] as const),
-        config: vine.object({
-          region: vine.string().trim().minLength(1),
-          bucket: vine.string().trim().minLength(1),
-          endpoint: vine.string().trim().optional(),
-          accessKeyId: vine.string().trim().minLength(1),
-          secretAccessKey: vine.string().trim().minLength(1),
-          forcePathStyle: vine.boolean().optional(),
-          prefix: vine.string().trim().optional(),
-        }),
-      }
-    ),
+    vine.group.if((data) => data.provider === 'aws_s3', {
+      provider: vine.literal('aws_s3'),
+      config: vine.object({
+        ...s3CommonConfigUpdate,
+        region: vine.string().trim().minLength(1),
+        endpoint: vine.string().trim().optional(),
+      }),
+    }),
+    vine.group.if((data) => data.provider === 'minio', {
+      provider: vine.literal('minio'),
+      config: vine.object({
+        ...s3CommonConfigUpdate,
+        endpoint: vine.string().trim().minLength(1),
+        region: vine.string().trim().optional(),
+      }),
+    }),
+    vine.group.if((data) => data.provider === 'cloudflare_r2', {
+      provider: vine.literal('cloudflare_r2'),
+      config: vine.object({
+        ...s3CommonConfigUpdate,
+        endpoint: vine.string().trim().minLength(1),
+        region: vine.string().trim().optional(),
+      }),
+    }),
     vine.group.if((data) => data.provider === 'google_gcs', {
       provider: vine.literal('google_gcs'),
       config: vine.object({
@@ -124,7 +152,8 @@ const updateConfigGroup = vine
     vine.group.if((data) => data.provider === 'azure_blob', {
       provider: vine.literal('azure_blob'),
       config: vine.object({
-        connectionString: vine.string().trim().minLength(1),
+        // Optional on update: empty means "keep existing connection string"
+        connectionString: vine.string().trim().optional(),
         container: vine.string().trim().minLength(1),
         prefix: vine.string().trim().optional(),
       }),

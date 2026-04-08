@@ -10,6 +10,7 @@ test.group('Users', (group) => {
       email: `admin_${Date.now()}@example.com`,
       password: 'Password123!',
       isActive: true,
+      isAdmin: true,
     })
   })
 

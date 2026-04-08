@@ -81,6 +81,7 @@
                 <StorageFormFields
                   v-if="storage.provider"
                   :config="configForm"
+                  is-edit-mode
                   :provider="storage.provider"
                   @update:config="configForm = $event"
                 />
@@ -218,14 +219,20 @@
     </v-dialog>
 
     <!-- Delete dialog -->
-    <v-dialog v-model="deleteDialog" max-width="420">
+    <v-dialog v-model="deleteDialog" max-width="480">
       <v-card>
         <v-card-title class="d-flex align-center">
           <v-icon class="mr-2" color="error" icon="mdi-alert" />
           Confirmar Exclusão
         </v-card-title>
         <v-card-text>
-          Tem certeza que deseja excluir <strong>{{ storage?.name }}</strong>?
+          <p class="mb-3">
+            Tem certeza que deseja excluir <strong>{{ storage?.name }}</strong> do sistema?
+          </p>
+          <v-alert density="compact" icon="mdi-information" type="info" variant="tonal">
+            Esta ação remove apenas o acesso configurado neste sistema. Os arquivos e dados
+            armazenados no destino <strong>não serão excluídos</strong>.
+          </v-alert>
         </v-card-text>
         <v-card-actions>
           <v-spacer />
