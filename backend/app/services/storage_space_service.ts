@@ -10,6 +10,8 @@ export interface StorageSpaceInfo {
   destinationId: number | null
   destinationName: string
   type: string
+  /** false for remote storages (S3, GCS, Azure, SFTP) that do not expose a usage API */
+  spaceAvailable: boolean
   totalBytes: number
   usedBytes: number
   freeBytes: number
@@ -88,6 +90,7 @@ export class StorageSpaceService {
       destinationId: destination?.id ?? null,
       destinationName: destination?.name ?? 'Local (padrão)',
       type: destination?.type ?? 'local',
+      spaceAvailable: true,
       totalBytes: spaceInfo.total,
       usedBytes,
       freeBytes: spaceInfo.free,
@@ -123,6 +126,20 @@ export class StorageSpaceService {
       const spaceInfo = await this.getDestinationSpaceInfo(destination)
       if (spaceInfo) {
         results.push(spaceInfo)
+      } else {
+        results.push({
+          destinationId: destination.id,
+          destinationName: destination.name,
+          type: destination.type,
+          spaceAvailable: false,
+          totalBytes: 0,
+          usedBytes: 0,
+          freeBytes: 0,
+          usedPercent: 0,
+          freePercent: 0,
+          isLowSpace: false,
+          lowSpaceThreshold: this.LOW_SPACE_THRESHOLD_PERCENT,
+        })
       }
     }
 

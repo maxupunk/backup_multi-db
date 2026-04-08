@@ -335,6 +335,7 @@ export interface StorageSpaceInfo {
   destinationId: number | null
   destinationName: string
   type: string
+  spaceAvailable: boolean
   totalBytes: number
   usedBytes: number
   freeBytes: number

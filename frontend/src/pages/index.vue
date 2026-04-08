@@ -228,23 +228,29 @@
               </v-chip>
             </div>
 
-            <v-progress-linear :model-value="storage.usedPercent" :color="getProgressColor(storage.usedPercent)"
-              bg-color="grey-lighten-3" height="12" rounded class="mb-3">
-              <template #default>
-                <span class="text-caption font-weight-medium">
-                  {{ storage.usedPercent.toFixed(1) }}%
-                </span>
-              </template>
-            </v-progress-linear>
+            <template v-if="storage.spaceAvailable">
+              <v-progress-linear :model-value="storage.usedPercent" :color="getProgressColor(storage.usedPercent)"
+                bg-color="grey-lighten-3" height="12" rounded class="mb-3">
+                <template #default>
+                  <span class="text-caption font-weight-medium">
+                    {{ storage.usedPercent.toFixed(1) }}%
+                  </span>
+                </template>
+              </v-progress-linear>
 
-            <div class="d-flex justify-space-between text-caption text-medium-emphasis">
-              <span>
-                <v-icon icon="mdi-check-circle" size="14" class="mr-1" color="success" />
-                {{ formatBytes(storage.freeBytes) }} livre
-              </span>
-              <span>
-                {{ formatBytes(storage.usedBytes) }} / {{ formatBytes(storage.totalBytes) }}
-              </span>
+              <div class="d-flex justify-space-between text-caption text-medium-emphasis">
+                <span>
+                  <v-icon icon="mdi-check-circle" size="14" class="mr-1" color="success" />
+                  {{ formatBytes(storage.freeBytes) }} livre
+                </span>
+                <span>
+                  {{ formatBytes(storage.usedBytes) }} / {{ formatBytes(storage.totalBytes) }}
+                </span>
+              </div>
+            </template>
+            <div v-else class="text-caption text-medium-emphasis text-center py-1">
+              <v-icon icon="mdi-information-outline" size="14" class="mr-1" />
+              Espaço não disponível para este tipo de armazenamento
             </div>
           </v-card-text>
         </v-card>
