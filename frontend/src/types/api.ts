@@ -383,6 +383,7 @@ export interface SystemStatus {
 export interface DockerContainerResourceMetrics {
   containerId: string
   containerName: string
+  projectName: string | null
   imageName: string
   status: string
   cpu: {

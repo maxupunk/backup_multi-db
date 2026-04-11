@@ -56,6 +56,7 @@ export class DockerContainerResourceEmitter {
         containers: overview.containers.map((container) => ({
           containerId: container.containerId,
           containerName: container.containerName,
+          projectName: container.projectName,
           imageName: container.imageName,
           status: container.status,
           cpu: {

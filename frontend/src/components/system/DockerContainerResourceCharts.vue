@@ -26,90 +26,50 @@
       <v-skeleton-loader type="card@2" />
     </v-col>
 
-    <v-col v-else-if="!containers.length" cols="12">
+    <v-col v-else-if="!groupedContainers.length" cols="12">
       <v-alert type="info" variant="tonal">
         Nenhum contêiner em execução no momento.
       </v-alert>
     </v-col>
 
-    <v-col v-for="container in containers" :key="container.containerId" cols="12" md="6">
-      <v-card class="resource-card">
-        <v-card-text class="pa-5">
-          <div class="d-flex align-center justify-space-between ga-3 mb-4">
-            <div>
-              <h3 class="text-subtitle-1 font-weight-bold mb-1">
-                {{ container.containerName }}
+    <v-col v-for="group in groupedContainers" :key="group.key" cols="12">
+      <section class="project-group">
+        <div class="d-flex flex-column flex-md-row align-md-center justify-space-between ga-3 mb-4">
+          <div>
+            <div class="d-flex align-center flex-wrap ga-2 mb-1">
+              <v-icon color="primary" icon="mdi-folder-multiple-outline" size="20" />
+              <h3 class="text-subtitle-1 font-weight-bold mb-0">
+                {{ group.label }}
               </h3>
-              <p class="text-caption text-medium-emphasis mb-0">
-                {{ container.imageName }}
-              </p>
+              <v-chip color="primary" label size="small" variant="tonal">
+                {{ group.containers.length }}
+              </v-chip>
             </div>
 
-            <v-chip :color="resolveStatusColor(container.status)" label size="small" variant="tonal">
-              {{ container.status }}
-            </v-chip>
-          </div>
-
-          <div class="mb-4">
-            <div class="d-flex align-center justify-space-between mb-2">
-              <span class="text-caption text-medium-emphasis">CPU</span>
-              <strong>{{ container.cpu.usagePercent.toFixed(1) }}%</strong>
-            </div>
-            <UsageLineChart
-              :values="resolveContainerHistory(container.containerId, 'cpu', container.cpu.usagePercent)"
-              :timestamps="resolveContainerTimestamps(container.containerId)"
-              :range-hours="rangeHours"
-              :color="resolveChartColor(resolveUsageColor(container.cpu.usagePercent))"
-              :height="84"
-            />
-          </div>
-
-          <div class="mb-4">
-            <div class="d-flex align-center justify-space-between mb-2">
-              <span class="text-caption text-medium-emphasis">Memória</span>
-              <strong>{{ container.memory.usagePercent.toFixed(1) }}%</strong>
-            </div>
-            <UsageLineChart
-              :values="resolveContainerHistory(container.containerId, 'memory', container.memory.usagePercent)"
-              :timestamps="resolveContainerTimestamps(container.containerId)"
-              :range-hours="rangeHours"
-              :color="resolveChartColor(resolveUsageColor(container.memory.usagePercent))"
-              :height="84"
-            />
-            <p class="text-caption text-medium-emphasis mt-2 mb-0">
-              {{ formatBytes(container.memory.usageBytes) }} / {{ formatBytes(container.memory.limitBytes) }}
+            <p class="text-caption text-medium-emphasis mb-0">
+              {{ group.description }}
             </p>
           </div>
+        </div>
 
-          <v-divider class="my-3" />
-
-          <div class="resource-grid">
-            <div class="resource-metric">
-              <span class="text-caption text-medium-emphasis">Rede RX/TX</span>
-              <strong>{{ formatBytes(container.network.rxBytes) }} / {{ formatBytes(container.network.txBytes) }}</strong>
-            </div>
-
-            <div class="resource-metric">
-              <span class="text-caption text-medium-emphasis">Disco R/W</span>
-              <strong>{{ formatBytes(container.blockIo.readBytes) }} / {{ formatBytes(container.blockIo.writeBytes) }}</strong>
-            </div>
-
-            <div class="resource-metric">
-              <span class="text-caption text-medium-emphasis">PIDs</span>
-              <strong>{{ container.pids ?? 'N/A' }}</strong>
-            </div>
-          </div>
-        </v-card-text>
-      </v-card>
+        <v-row>
+          <v-col v-for="container in group.containers" :key="container.containerId" cols="12" md="6">
+            <DockerContainerResourceCard
+              :container="container"
+              :history-points="resolveContainerHistoryPoints(container.containerId)"
+              :range-hours="rangeHours"
+            />
+          </v-col>
+        </v-row>
+      </section>
     </v-col>
   </v-row>
 </template>
 
 <script lang="ts" setup>
-import type { ContainerResourceHistory, DockerContainerResourceOverview } from '@/types/api'
+import type { ContainerResourceHistory, DockerContainerResourceMetrics, DockerContainerResourceOverview, ResourceHistoryPoint } from '@/types/api'
 import { computed } from 'vue'
-import { formatBytes } from '@/utils/format'
-import UsageLineChart from './UsageLineChart.vue'
+import DockerContainerResourceCard from './DockerContainerResourceCard.vue'
 
 const props = defineProps<{
   overview: DockerContainerResourceOverview | null
@@ -121,66 +81,59 @@ const props = defineProps<{
 
 const containers = computed(() => props.overview?.containers ?? [])
 
-function resolveUsageColor(percentage: number): string {
-  if (percentage >= 85) return 'error'
-  if (percentage >= 65) return 'warning'
-  return 'success'
+type ContainerGroup = {
+  key: string
+  label: string
+  description: string
+  containers: DockerContainerResourceMetrics[]
+  unnamed: boolean
 }
 
-function resolveStatusColor(status: string): string {
-  const normalized = status.toLowerCase()
-  if (normalized.includes('running') || normalized === 'up') return 'success'
-  if (normalized.includes('paused')) return 'warning'
-  if (normalized.includes('exited') || normalized.includes('dead')) return 'error'
-  return 'primary'
-}
+const groupedContainers = computed<ContainerGroup[]>(() => {
+  const groups = new Map<string, ContainerGroup>()
 
-function resolveContainerHistory(
-  containerId: string,
-  metric: 'cpu' | 'memory',
-  fallbackValue: number
-): number[] {
-  const history = props.historyByContainerId[containerId]?.points ?? []
-  const values = history.map((point) =>
-    metric === 'cpu' ? point.cpuUsagePercent : point.memoryUsagePercent
-  )
+  for (const container of containers.value) {
+    const projectName = container.projectName?.trim() || null
+    const key = projectName?.toLocaleLowerCase() || '__sem-projeto__'
+    const existing = groups.get(key)
 
-  if (values.length >= 2) {
-    return values
+    if (existing) {
+      existing.containers.push(container)
+      continue
+    }
+
+    groups.set(key, {
+      key,
+      label: projectName || 'Sem projeto identificado',
+      description: projectName
+        ? 'Contêineres agrupados pelo mesmo projeto Docker.'
+        : 'Contêineres sem label ou convenção clara de projeto.',
+      containers: [container],
+      unnamed: !projectName,
+    })
   }
 
-  return [0, fallbackValue]
-}
+  return Array.from(groups.values())
+    .map((group) => ({
+      ...group,
+      containers: [...group.containers].sort((a, b) => a.containerName.localeCompare(b.containerName)),
+    }))
+    .sort((a, b) => {
+      if (a.unnamed !== b.unnamed) {
+        return a.unnamed ? 1 : -1
+      }
 
-function resolveContainerTimestamps(containerId: string): string[] {
-  return props.historyByContainerId[containerId]?.points.map((p) => p.timestamp) ?? []
-}
+      return a.label.localeCompare(b.label)
+    })
+})
 
-function resolveChartColor(color: string): string {
-  if (color === 'error') return 'rgb(var(--v-theme-error))'
-  if (color === 'warning') return 'rgb(var(--v-theme-warning))'
-  if (color === 'success') return 'rgb(var(--v-theme-success))'
-  return 'rgb(var(--v-theme-primary))'
+function resolveContainerHistoryPoints(containerId: string): ResourceHistoryPoint[] {
+  return props.historyByContainerId[containerId]?.points ?? []
 }
 </script>
 
 <style scoped>
-.resource-card {
-  background: linear-gradient(135deg,
-      rgb(var(--v-theme-surface)) 0%,
-      rgb(var(--v-theme-surface-bright)) 100%);
-  border: 1px solid rgba(var(--v-border-color), 0.08);
-}
-
-.resource-grid {
-  display: grid;
-  gap: 12px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.resource-metric {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+.project-group {
+  padding-top: 4px;
 }
 </style>

@@ -13,6 +13,15 @@ type DockerContainerListItem = {
   Image?: string
   State?: string
   Status?: string
+  Labels?: Record<string, string>
+}
+
+type DockerInspectContainerItem = {
+  Id?: string
+  Name?: string
+  Config?: {
+    Labels?: Record<string, string>
+  }
 }
 
 type DockerContainerStatsItem = {
@@ -65,6 +74,7 @@ type DockerCliStatsEntry = {
 export type DockerContainerResourceMetrics = {
   containerId: string
   containerName: string
+  projectName: string | null
   imageName: string
   status: string
   cpu: {
@@ -167,6 +177,7 @@ export class DockerContainerMonitoringService {
     return {
       containerId,
       containerName: this.resolveContainerName(base?.Names, containerId),
+      projectName: this.resolveProjectName(base?.Labels, base?.Names, containerId),
       imageName: base?.Image?.trim() || 'N/A',
       status: base?.State?.trim() || base?.Status?.trim() || 'unknown',
       cpu: {
@@ -186,6 +197,42 @@ export class DockerContainerMonitoringService {
   private resolveContainerName(names: string[] | undefined, containerId: string): string {
     const preferred = names?.[0]?.replace(/^\//, '').trim()
     return preferred || containerId.slice(0, 12)
+  }
+
+  private resolveProjectName(
+    labels: Record<string, string> | undefined,
+    names: string[] | undefined,
+    containerId: string
+  ): string | null {
+    const labelProjectName =
+      labels?.['com.docker.compose.project'] ||
+      labels?.['io.podman.compose.project'] ||
+      labels?.['project.name']
+
+    if (labelProjectName?.trim()) {
+      return labelProjectName.trim()
+    }
+
+    const containerName = this.resolveContainerName(names, containerId)
+    const inferredProjectName = this.inferProjectNameFromContainerName(containerName)
+
+    return inferredProjectName
+  }
+
+  private inferProjectNameFromContainerName(containerName: string): string | null {
+    const normalized = containerName.trim()
+    if (!normalized) {
+      return null
+    }
+
+    const composeLikeMatch = normalized.match(/^(.*?)(?:[-_][^-_]+){1,2}$/)
+    const candidate = composeLikeMatch?.[1]?.trim()
+
+    if (!candidate || candidate === normalized) {
+      return null
+    }
+
+    return candidate
   }
 
   private parseCpuUsageFromSocket(stats: DockerContainerStatsItem): number {
@@ -262,6 +309,9 @@ export class DockerContainerMonitoringService {
 
     const psEntries = this.parseJsonLines<DockerCliPsEntry>(psResult.stdout)
     const statsEntries = this.parseJsonLines<DockerCliStatsEntry>(statsResult.stdout)
+    const inspectById = await this.inspectContainersUsingCli(
+      psEntries.map((entry) => entry.ID?.trim()).filter((id): id is string => Boolean(id))
+    )
     const statsById = new Map(
       statsEntries
         .map((entry) => [entry.ID?.trim() || '', entry] as const)
@@ -276,13 +326,22 @@ export class DockerContainerMonitoringService {
         }
 
         const stats = statsById.get(containerId)
+        const inspect = inspectById.get(containerId)
         const memUsage = this.parseUsagePair(stats?.MemUsage)
         const netUsage = this.parseUsagePair(stats?.NetIO)
         const blockUsage = this.parseUsagePair(stats?.BlockIO)
 
         return {
           containerId,
-          containerName: entry.Names?.trim() || containerId.slice(0, 12),
+          containerName:
+            inspect?.Name?.replace(/^\//, '').trim() ||
+            entry.Names?.trim() ||
+            containerId.slice(0, 12),
+          projectName: this.resolveProjectName(
+            inspect?.Config?.Labels,
+            inspect?.Name ? [inspect.Name] : entry.Names ? [entry.Names] : undefined,
+            containerId
+          ),
           imageName: entry.Image?.trim() || 'N/A',
           status: entry.State?.trim() || entry.Status?.trim() || 'unknown',
           cpu: {
@@ -305,6 +364,32 @@ export class DockerContainerMonitoringService {
         } satisfies DockerContainerResourceMetrics
       })
       .filter((container): container is DockerContainerResourceMetrics => container !== null)
+  }
+
+  private async inspectContainersUsingCli(
+    containerIds: string[]
+  ): Promise<Map<string, DockerInspectContainerItem>> {
+    if (!containerIds.length) {
+      return new Map()
+    }
+
+    const inspectResult = await this.runDockerCommand(['inspect', ...containerIds])
+
+    if (!inspectResult.success) {
+      return new Map()
+    }
+
+    try {
+      const entries = JSON.parse(inspectResult.stdout) as DockerInspectContainerItem[]
+
+      return new Map(
+        entries
+          .map((entry) => [entry.Id?.trim() || '', entry] as const)
+          .filter(([id]) => Boolean(id))
+      )
+    } catch {
+      return new Map()
+    }
   }
 
   private parseJsonLines<T>(value: string): T[] {
