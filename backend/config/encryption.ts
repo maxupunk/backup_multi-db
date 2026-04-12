@@ -2,9 +2,10 @@ import env from '#start/env'
 import { defineConfig, drivers } from '@adonisjs/core/encryption'
 
 export default defineConfig({
-  default: 'legacy',
+  default: 'chacha',
   list: {
-    legacy: drivers.legacy({
+    chacha: drivers.chacha20({
+      id: 'chacha',
       keys: [env.get('APP_KEY')],
     }),
   },
