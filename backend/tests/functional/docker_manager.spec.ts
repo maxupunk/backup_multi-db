@@ -1,6 +1,7 @@
 import { test } from '@japa/runner'
 import { existsSync } from 'node:fs'
 import User from '#models/user'
+import { DockerManagerService, VolumeInUseError } from '#services/docker_manager_service'
 
 const DOCKER_SOCKET = '/var/run/docker.sock'
 const dockerAvailable = existsSync(DOCKER_SOCKET)
@@ -216,5 +217,182 @@ test.group('Docker Manager — Socket disponível', (group) => {
       .header('Authorization', `Bearer ${token2.value!.release()}`)
 
     response.assertStatus(200)
+  })
+})
+
+// ================================================================
+// Volume em uso — testes de serviço com cliente simulado
+// ================================================================
+
+test.group('Docker Manager — Volume em Uso', (group) => {
+  let user: User
+
+  group.each.setup(async () => {
+    user = await User.create({
+      fullName: 'Volume InUse Test User',
+      email: `vol_inuse_${Date.now()}@example.com`,
+      password: 'Password123!',
+      isActive: true,
+    })
+  })
+
+  test('VolumeInUseError é lançado com nomes e projeto resolvidos', async ({ assert }) => {
+    const containerId = 'a'.repeat(64)
+
+    const mockClient = {
+      isSocketAvailable: () => true,
+      deleteJson: async (_path: string): Promise<null> => {
+        throw new Error(
+          `Docker Engine respondeu 409: {"message":"remove my-vol: volume is in use - [${containerId}]"}`
+        )
+      },
+      getJson: async (_path: string) => [
+        {
+          Id: containerId,
+          Names: ['/meu-container'],
+          Labels: { 'com.docker.compose.project': 'meu-projeto' },
+        },
+      ],
+    }
+
+    const service = new DockerManagerService(mockClient as never)
+
+    let caughtError: unknown
+    try {
+      await service.removeVolume('my-vol')
+    } catch (err) {
+      caughtError = err
+    }
+
+    assert.instanceOf(caughtError, VolumeInUseError)
+    const err = caughtError as VolumeInUseError
+    assert.isTrue(err.message.includes('meu-container'))
+    assert.isTrue(err.message.includes('meu-projeto'))
+    assert.deepEqual(err.containerNames, ['meu-container (meu-projeto)'])
+  })
+
+  test('VolumeInUseError usa ID curto como fallback quando container não é encontrado', async ({
+    assert,
+  }) => {
+    const containerId = 'b'.repeat(64)
+
+    const mockClient = {
+      isSocketAvailable: () => true,
+      deleteJson: async (_path: string): Promise<null> => {
+        throw new Error(
+          `Docker Engine respondeu 409: {"message":"remove my-vol: volume is in use - [${containerId}]"}`
+        )
+      },
+      getJson: async (_path: string) => [],
+    }
+
+    const service = new DockerManagerService(mockClient as never)
+
+    let caughtError: unknown
+    try {
+      await service.removeVolume('my-vol')
+    } catch (err) {
+      caughtError = err
+    }
+
+    assert.instanceOf(caughtError, VolumeInUseError)
+    const err = caughtError as VolumeInUseError
+    assert.isTrue(err.message.includes('b'.repeat(12)))
+  })
+
+  test('VolumeInUseError usa ID curto como fallback quando resolução de nomes falha', async ({
+    assert,
+  }) => {
+    const containerId = 'c'.repeat(64)
+
+    const mockClient = {
+      isSocketAvailable: () => true,
+      deleteJson: async (_path: string): Promise<null> => {
+        throw new Error(
+          `Docker Engine respondeu 409: {"message":"remove my-vol: volume is in use - [${containerId}]"}`
+        )
+      },
+      getJson: async (_path: string): Promise<never> => {
+        throw new Error('Simulação de falha ao listar containers')
+      },
+    }
+
+    const service = new DockerManagerService(mockClient as never)
+
+    let caughtError: unknown
+    try {
+      await service.removeVolume('my-vol')
+    } catch (err) {
+      caughtError = err
+    }
+
+    assert.instanceOf(caughtError, VolumeInUseError)
+    const err = caughtError as VolumeInUseError
+    assert.isTrue(err.message.includes('c'.repeat(12)))
+  })
+
+  test('erros não relacionados a volume em uso são propagados sem alteração', async ({
+    assert,
+  }) => {
+    const mockClient = {
+      isSocketAvailable: () => true,
+      deleteJson: async (_path: string): Promise<null> => {
+        throw new Error('Docker Engine respondeu 500: Internal Server Error')
+      },
+      getJson: async (_path: string) => [],
+    }
+
+    const service = new DockerManagerService(mockClient as never)
+
+    let caughtError: unknown
+    try {
+      await service.removeVolume('my-vol')
+    } catch (err) {
+      caughtError = err
+    }
+
+    assert.notInstanceOf(caughtError, VolumeInUseError)
+    assert.instanceOf(caughtError, Error)
+    assert.isTrue((caughtError as Error).message.includes('Docker Engine respondeu 500'))
+  })
+
+  test('DELETE /api/docker/volumes/:name retorna 409 quando volume está em uso', async ({
+    client,
+    assert,
+  }) => {
+    if (!dockerAvailable) return
+
+    const token = await User.accessTokens.create(user)
+
+    // Listar volumes reais para tentar remover um que provavelmente está em uso
+    const listResponse = await client
+      .get('/api/docker/volumes')
+      .header('Authorization', `Bearer ${token.value!.release()}`)
+
+    const token2 = await User.accessTokens.create(user)
+    const body = listResponse.body()
+    const volumes: Array<{ name: string }> = body?.data ?? []
+
+    if (volumes.length === 0) return
+
+    // Tenta remover o primeiro volume — se estiver em uso, deve retornar 409
+    const response = await client
+      .delete(`/api/docker/volumes/${encodeURIComponent(volumes[0].name)}`)
+      .header('Authorization', `Bearer ${token2.value!.release()}`)
+
+    // Aceita 200 (volume removido) ou 409 (em uso) — ambos são respostas válidas
+    assert.isTrue(
+      [200, 409].includes(response.status()),
+      `Status esperado 200 ou 409, recebido ${response.status()}`
+    )
+
+    if (response.status() === 409) {
+      const responseBody = response.body() as { message?: string }
+      assert.isString(responseBody.message)
+      assert.isTrue(
+        responseBody.message!.includes('em uso'),
+        'Mensagem de erro deve indicar que o volume está em uso'
+      )
+    }
   })
 })

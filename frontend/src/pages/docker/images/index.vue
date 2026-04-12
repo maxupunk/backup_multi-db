@@ -77,6 +77,7 @@
 import { computed, onMounted, ref } from 'vue'
 import type { DockerImageDetail, DockerImageSummary } from '@/types/api'
 import { dockerImagesApi } from '@/services/dockerService'
+import { useNotifier } from '@/composables/useNotifier'
 import ImageCard from '@/components/docker/ImageCard.vue'
 import ImageDetailDialog from '@/components/docker/ImageDetailDialog.vue'
 import DockerUnavailableBanner from '@/components/docker/DockerUnavailableBanner.vue'
@@ -93,6 +94,8 @@ const confirmDialog = ref(false)
 const confirmMessage = ref('')
 const selectedDetail = ref<DockerImageDetail | null>(null)
 let pendingConfirm: (() => Promise<void>) | null = null
+
+const notify = useNotifier()
 
 const filtered = computed(() => {
   if (!search.value) return images.value
@@ -151,6 +154,8 @@ async function executeConfirmed() {
   actionLoading.value = true
   try {
     await pendingConfirm()
+  } catch (error) {
+    notify(error instanceof Error ? error.message : 'Erro ao executar ação.', 'error')
   } finally {
     actionLoading.value = false
     confirmDialog.value = false

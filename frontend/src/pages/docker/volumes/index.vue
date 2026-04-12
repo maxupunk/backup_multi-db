@@ -66,6 +66,7 @@
 import { computed, onMounted, ref } from 'vue'
 import type { DockerVolumeSummary, DockerVolumeDetail } from '@/types/api'
 import { dockerVolumesApi } from '@/services/dockerService'
+import { useNotifier } from '@/composables/useNotifier'
 import VolumeCard from '@/components/docker/VolumeCard.vue'
 import VolumeDetailDialog from '@/components/docker/VolumeDetailDialog.vue'
 import DockerUnavailableBanner from '@/components/docker/DockerUnavailableBanner.vue'
@@ -80,6 +81,8 @@ const detailDialog = ref(false)
 const confirmDialog = ref(false)
 const selectedDetail = ref<DockerVolumeDetail | null>(null)
 let pendingRemoveName = ''
+
+const notify = useNotifier()
 
 const filtered = computed(() => {
   if (!search.value) return volumes.value
@@ -121,6 +124,8 @@ async function executeRemove() {
   try {
     await dockerVolumesApi.remove(pendingRemoveName)
     await load()
+  } catch (error) {
+    notify(error instanceof Error ? error.message : 'Erro ao remover volume.', 'error')
   } finally {
     actionLoading.value = false
     confirmDialog.value = false

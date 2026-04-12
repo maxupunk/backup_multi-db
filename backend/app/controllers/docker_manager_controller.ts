@@ -1,5 +1,5 @@
 import type { HttpContext } from '@adonisjs/core/http'
-import { DockerManagerService } from '#services/docker_manager_service'
+import { DockerManagerService, VolumeInUseError, ImageInUseError } from '#services/docker_manager_service'
 import { DockerEngineHttpClient } from '#services/docker_engine_http_client'
 
 const UNAVAILABLE = { success: true, available: false, data: [] } as const
@@ -107,8 +107,15 @@ export default class DockerManagerController {
    */
   async removeVolume({ params, request, response }: HttpContext) {
     const force = request.input('force', 'false') === 'true'
-    const result = await this.service.removeVolume(params.name as string, force)
-    return response.ok({ success: true, data: result })
+    try {
+      const result = await this.service.removeVolume(params.name as string, force)
+      return response.ok({ success: true, data: result })
+    } catch (error) {
+      if (error instanceof VolumeInUseError) {
+        return response.conflict({ message: error.message })
+      }
+      throw error
+    }
   }
 
   // ================================================================
@@ -159,8 +166,15 @@ export default class DockerManagerController {
    */
   async removeImage({ params, request, response }: HttpContext) {
     const force = request.input('force', 'false') === 'true'
-    const result = await this.service.removeImage(params.id as string, force)
-    return response.ok({ success: true, data: result })
+    try {
+      const result = await this.service.removeImage(params.id as string, force)
+      return response.ok({ success: true, data: result })
+    } catch (error) {
+      if (error instanceof ImageInUseError) {
+        return response.conflict({ message: error.message })
+      }
+      throw error
+    }
   }
 
   /**

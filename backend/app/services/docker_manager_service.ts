@@ -26,6 +26,26 @@ import type {
 
 const DOCKER_LABEL_PROJECT = 'com.docker.compose.project'
 
+export class VolumeInUseError extends Error {
+  constructor(
+    message: string,
+    public readonly containerNames: string[]
+  ) {
+    super(message)
+    this.name = 'VolumeInUseError'
+  }
+}
+
+export class ImageInUseError extends Error {
+  constructor(
+    message: string,
+    public readonly containerNames: string[]
+  ) {
+    super(message)
+    this.name = 'ImageInUseError'
+  }
+}
+
 export class DockerManagerService {
   private readonly client: DockerEngineHttpClient
 
@@ -184,8 +204,50 @@ export class DockerManagerService {
 
   async removeVolume(name: string, force = false): Promise<DockerActionResult> {
     const query = force ? '?force=true' : ''
-    await this.client.deleteJson<null>(`/volumes/${encodeURIComponent(name)}${query}`)
+    try {
+      await this.client.deleteJson<null>(`/volumes/${encodeURIComponent(name)}${query}`)
+    } catch (error) {
+      if (error instanceof Error) {
+        const containerIds = this.#extractContainerIds(error.message)
+        if (containerIds.length > 0) {
+          const containerNames = await this.#resolveContainerNames(containerIds)
+          throw new VolumeInUseError(
+            `O volume está em uso pelos containers: ${containerNames.join(', ')}. Pare-os antes de remover o volume.`,
+            containerNames
+          )
+        }
+      }
+      throw error
+    }
     return { success: true, message: 'Volume removido com sucesso.' }
+  }
+
+  #extractContainerIds(message: string): string[] {
+    const match = message.match(/\[([^\]]+)\]/)
+    if (!match) return []
+    return match[1]
+      .split(',')
+      .map((id) => id.trim())
+      .filter((id) => /^[0-9a-f]{64}$/.test(id))
+  }
+
+  async #resolveContainerNames(ids: string[]): Promise<string[]> {
+    try {
+      const containers = await this.client.getJson<RawDockerContainerListItem[]>(
+        '/containers/json?all=true'
+      )
+      return ids.map((id) => {
+        const container = containers.find(
+          (c) => c.Id === id || c.Id?.startsWith(id) || id.startsWith(c.Id ?? '')
+        )
+        if (!container) return id.slice(0, 12)
+        const project = container.Labels?.[DOCKER_LABEL_PROJECT]
+        const containerName = container.Names?.[0]?.replace(/^\//, '') ?? id.slice(0, 12)
+        return project ? `${containerName} (${project})` : containerName
+      })
+    } catch {
+      return ids.map((id) => id.slice(0, 12))
+    }
   }
 
   // ================================================================
@@ -265,8 +327,28 @@ export class DockerManagerService {
 
   async removeImage(id: string, force = false): Promise<DockerActionResult> {
     const query = force ? '?force=true' : ''
-    await this.client.deleteJson<null>(`/images/${encodeURIComponent(id)}${query}`)
+    try {
+      await this.client.deleteJson<null>(`/images/${encodeURIComponent(id)}${query}`)
+    } catch (error) {
+      if (error instanceof Error) {
+        const containerIds = this.#extractImageContainerIds(error.message)
+        if (containerIds.length > 0) {
+          const containerNames = await this.#resolveContainerNames(containerIds)
+          throw new ImageInUseError(
+            `A imagem está em uso pelos containers: ${containerNames.join(', ')}. Pare-os antes de remover a imagem.`,
+            containerNames
+          )
+        }
+      }
+      throw error
+    }
     return { success: true, message: 'Imagem removida com sucesso.' }
+  }
+
+  #extractImageContainerIds(message: string): string[] {
+    const match = message.match(/running container ([0-9a-f]{12,64})/i)
+    if (!match) return []
+    return [match[1]]
   }
 
   async pruneImages(): Promise<DockerPruneResult> {
