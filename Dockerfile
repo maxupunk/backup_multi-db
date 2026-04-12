@@ -5,7 +5,7 @@
 # Stages:
 #   base           — imagem base com deps do sistema (mysql/pg clients, build tools)
 #   frontend-builder — compila o frontend Vue
-#   dependencies   — instala node_modules com npm ci (binários Linux)
+#   dependencies   — instala node_modules com pnpm (binários Linux)
 #   build          — compila a aplicação TypeScript
 #   production     — imagem final enxuta com apenas deps de produção
 #   development    — imagem dev com todos os node_modules compilados para Linux
@@ -15,8 +15,13 @@
 # Stage: base
 # Imagem base com dependências do SO necessárias em todos os stages.
 # python3 + build-essential são necessários para compilar better-sqlite3.
+# corepack habilita pnpm sem instalação extra.
 # -----------------------------------------------------------------------------
 FROM node:25.8.1-trixie AS base
+
+ENV PNPM_HOME="/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
+RUN npm install -g pnpm
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates \
@@ -62,10 +67,10 @@ RUN npm run build-only -- --outDir dist
 FROM base AS dependencies
 
 # Copiar apenas os manifestos primeiro para aproveitar o cache do Docker:
-# se package.json/package-lock.json não mudaram, o npm ci não é re-executado.
-COPY backend/package*.json ./
+# se package.json/pnpm-lock.yaml não mudaram, o pnpm install não é re-executado.
+COPY backend/package.json backend/pnpm-lock.yaml ./
 
-RUN npm ci
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
 
 # -----------------------------------------------------------------------------
 # Stage: build
@@ -94,14 +99,14 @@ ENV PORT=3333
 
 # Copiar apenas o build compilado e os manifestos de dependências
 COPY --from=build /app/build ./
-COPY --from=build /app/package*.json ./
+COPY --from=build /app/package.json /app/pnpm-lock.yaml ./
 COPY backend/docker-entrypoint.sh /docker-entrypoint.sh
 
 RUN sed -i 's/\r$//' /docker-entrypoint.sh \
     && chmod +x /docker-entrypoint.sh
 
 # Instalar apenas dependências de produção (recompila módulos nativos)
-RUN npm ci --omit=dev && npm cache clean --force
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile --prod
 
 # Diretórios de dados e logs
 RUN mkdir -p /app/storage/backups /app/storage/database /app/logs /storage/backups /storage/database

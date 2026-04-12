@@ -85,5 +85,13 @@
       "./app/middleware/*.ts"
     ]
   },
-  "prettier": "@adonisjs/prettier-config"
+  "prettier": "@adonisjs/prettier-config",
+  "pnpm": {
+    "overrides": {
+      "lodash": "^4.18.1",
+      "lodash-es": "^4.18.1",
+      "brace-expansion@^1": "1.1.13",
+      "brace-expansion@^2": "2.0.3"
+    }
+  }
 }
