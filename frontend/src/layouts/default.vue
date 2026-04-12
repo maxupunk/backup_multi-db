@@ -78,6 +78,44 @@
         :title="item.title"
         :to="item.to"
       />
+
+      <!-- Docker Manager group -->
+      <v-list-group value="docker">
+        <template #activator="{ props }">
+          <v-list-item
+            class="mb-1"
+            color="primary"
+            rounded="lg"
+            title="Docker"
+            v-bind="props"
+          >
+            <template #prepend>
+              <v-badge
+                v-if="dockerUnavailable"
+                color="warning"
+                dot
+                floating
+                offset-x="2"
+                offset-y="2"
+              >
+                <v-icon>mdi-docker</v-icon>
+              </v-badge>
+              <v-icon v-else>mdi-docker</v-icon>
+            </template>
+          </v-list-item>
+        </template>
+
+        <v-list-item
+          v-for="sub in dockerSubItems"
+          :key="sub.to"
+          class="mb-1"
+          color="primary"
+          :prepend-icon="sub.icon"
+          rounded="lg"
+          :title="sub.title"
+          :to="sub.to"
+        />
+      </v-list-group>
     </v-list>
   </v-navigation-drawer>
 
@@ -92,13 +130,14 @@
 </template>
 
 <script lang="ts" setup>
-import { computed, provide, ref, watch } from 'vue'
+import { computed, onMounted, provide, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useDisplay, useTheme } from 'vuetify'
 import { useAuthStore } from '@/stores/auth'
 import { useNotificationStore } from '@/stores/notification'
 import NotificationToast from '@/components/NotificationToast.vue'
 import RestoreProgressOverlay from '@/components/RestoreProgressOverlay.vue'
+import { dockerContainersApi } from '@/services/dockerService'
 
 const theme = useTheme()
 const { mdAndUp } = useDisplay()
@@ -117,13 +156,36 @@ const navItems = computed(() => [
   ...(authStore.user?.isAdmin ? [{ title: 'Usuários', icon: 'mdi-account-group', to: '/users' }] : []),
 ])
 
+const dockerSubItems = [
+  { title: 'Visão Geral', icon: 'mdi-docker', to: '/docker' },
+  { title: 'Containers', icon: 'mdi-cube-outline', to: '/docker/containers' },
+  { title: 'Volumes', icon: 'mdi-database-outline', to: '/docker/volumes' },
+  { title: 'Redes', icon: 'mdi-graph-outline', to: '/docker/networks' },
+  { title: 'Imagens', icon: 'mdi-layers-outline', to: '/docker/images' },
+]
+
+const dockerUnavailable = ref(false)
+
+async function checkDockerAvailability() {
+  try {
+    await dockerContainersApi.getGroups()
+    dockerUnavailable.value = false
+  } catch (err) {
+    dockerUnavailable.value = (err as Error).message === 'DOCKER_UNAVAILABLE'
+  }
+}
+
 const drawer = ref(mdAndUp.value)
 const rail = ref(false)
 
 const isDark = computed(() => theme.global.current.value.dark)
 
 const pageTitle = computed(() => {
-  const sortedItems = [...navItems.value].sort((a, b) => b.to.length - a.to.length)
+  const allItems = [
+    ...navItems.value,
+    ...dockerSubItems,
+  ]
+  const sortedItems = [...allItems].sort((a, b) => b.to.length - a.to.length)
   const item = sortedItems.find(i =>
     i.to === '/' ? route.path === '/' : route.path.startsWith(i.to)
   )
@@ -165,6 +227,10 @@ async function handleLogout() {
   await authStore.logout()
   router.push('/login')
 }
+
+onMounted(() => {
+  if (authStore.isAuthenticated) checkDockerAvailability()
+})
 
 
 

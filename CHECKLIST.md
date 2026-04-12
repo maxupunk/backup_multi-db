@@ -134,6 +134,17 @@
 - [x] Gerenciamento de usuários
 - [ ] Permissões por conexão
 
+### Docker Manager
+
+- [x] Gerenciamento de containers (listar, start, stop, restart)
+- [x] Visualização de logs de containers
+- [x] Gerenciamento de volumes (listar, inspecionar, remover)
+- [x] Gerenciamento de networks (listar, inspecionar)
+- [x] Gerenciamento de imagens (listar, inspecionar, remover, prune)
+- [x] Agrupamento de containers por projeto docker-compose
+- [x] Interface web com navegação dedicada (Docker Manager submenu)
+- [x] Indicador de disponibilidade do socket Docker no drawer de navegação
+
 ### Destinos de Armazenamento
 
 - [x] Local filesystem

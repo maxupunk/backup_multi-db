@@ -16,6 +16,7 @@ Projetado com foco em **experiência do usuário (UX)** inovadora e **instalaç�
 - 🔒 **Segurança de Ponta** - Senhas criptografadas com AES-256-GCM
 - ⏰ **Automação Inteligente** - Agendamentos flexíveis e retenção automática (GFS)
 - 📦 **Suporte Multi-Banco** - Compatível nativamente com MySQL, MariaDB e PostgreSQL
+- 🐳 **Docker Manager** - Gerencie containers, volumes, redes e imagens diretamente pela interface web
 
 ## 🏗️ Stack Tecnológica
 
@@ -181,6 +182,57 @@ npm run dev        # Desenvolvimento com Vite
 npm run build      # Build para produção (output: ../backend/public)
 npm run lint       # ESLint
 ```
+
+## 🐳 Docker Manager
+
+O **Docker Manager** permite gerenciar toda a infraestrutura de containers diretamente pela interface web, sem precisar de acesso ao terminal.
+
+### Funcionalidades
+
+| Recurso | Ações disponíveis |
+|---|---|
+| **Containers** | Listar, start, stop, restart, ver logs, inspecionar |
+| **Volumes** | Listar, inspecionar, remover |
+| **Redes** | Listar, inspecionar |
+| **Imagens** | Listar, inspecionar, remover, prune |
+
+### Endpoints da API
+
+Todas as rotas requerem autenticação (`Authorization: Bearer <token>`).
+
+```
+GET    /api/docker/containers
+GET    /api/docker/containers/:id
+POST   /api/docker/containers/:id/start
+POST   /api/docker/containers/:id/stop
+POST   /api/docker/containers/:id/restart
+GET    /api/docker/containers/:id/logs
+
+GET    /api/docker/volumes
+GET    /api/docker/volumes/:name
+DELETE /api/docker/volumes/:name
+
+GET    /api/docker/networks
+GET    /api/docker/networks/:id
+
+GET    /api/docker/images
+GET    /api/docker/images/:id
+DELETE /api/docker/images/:id
+POST   /api/docker/images/prune
+```
+
+### Requisito
+
+O socket Docker deve estar acessível pelo container backend. No `docker-compose.yml` isso já está configurado:
+
+```yaml
+volumes:
+  - /var/run/docker.sock:/var/run/docker.sock
+```
+
+Quando o socket não está disponível, as rotas de listagem retornam `{ available: false }` e a interface exibe um indicador de aviso no menu de navegação.
+
+---
 
 ## 🐳 Docker
 

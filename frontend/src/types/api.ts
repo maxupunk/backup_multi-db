@@ -647,3 +647,187 @@ export interface BrowseResult {
   cursor: string | null
   path: string
 }
+
+// ==================== Docker Manager ====================
+
+export interface DockerContainerPort {
+  IP?: string
+  PrivatePort: number
+  PublicPort?: number
+  Type: string
+}
+
+export type DockerContainerState =
+  | 'running'
+  | 'stopped'
+  | 'paused'
+  | 'restarting'
+  | 'dead'
+  | 'created'
+  | 'exited'
+  | string
+
+export interface DockerContainerSummary {
+  id: string
+  names: string[]
+  image: string
+  imageId: string
+  state: DockerContainerState
+  status: string
+  labels: Record<string, string>
+  ports: DockerContainerPort[]
+  created: number
+}
+
+export interface DockerContainerGroup {
+  projectName: string
+  containers: DockerContainerSummary[]
+}
+
+export interface DockerMount {
+  type: string
+  name?: string
+  source: string
+  destination: string
+  mode: string
+  rw: boolean
+}
+
+export interface DockerNetworkEndpoint {
+  networkId: string
+  networkName: string
+  ipAddress: string
+  gateway: string
+  aliases: string[] | null
+}
+
+export interface DockerContainerDetail {
+  id: string
+  name: string
+  image: string
+  imageId: string
+  created: string
+  state: {
+    status: string
+    running: boolean
+    paused: boolean
+    restarting: boolean
+    pid: number
+    startedAt: string
+    finishedAt: string
+    exitCode: number
+  }
+  config: {
+    hostname: string
+    env: string[]
+    cmd: string[] | null
+    entrypoint: string[] | null
+    labels: Record<string, string>
+    workingDir: string
+    user: string
+  }
+  hostConfig: {
+    restartPolicy: {
+      name: string
+      maximumRetryCount: number
+    }
+    networkMode: string
+  }
+  mounts: DockerMount[]
+  networks: DockerNetworkEndpoint[]
+}
+
+export interface DockerVolumeSummary {
+  name: string
+  driver: string
+  mountpoint: string
+  labels: Record<string, string>
+  scope: string
+  createdAt?: string
+}
+
+export interface DockerVolumeDetail extends DockerVolumeSummary {
+  options: Record<string, string>
+  status?: Record<string, unknown>
+}
+
+export interface DockerNetworkContainer {
+  containerId: string
+  name: string
+  macAddress: string
+  ipv4Address: string
+  ipv6Address: string
+}
+
+export interface DockerNetworkSummary {
+  id: string
+  name: string
+  driver: string
+  scope: string
+  ipam: {
+    driver: string
+    config: Array<{ subnet?: string; gateway?: string }>
+  }
+  internal: boolean
+  labels: Record<string, string>
+  created: string
+}
+
+export interface DockerNetworkDetail extends DockerNetworkSummary {
+  containers: Record<string, DockerNetworkContainer>
+  options: Record<string, string>
+}
+
+export interface DockerImageSummary {
+  id: string
+  parentId: string
+  repoTags: string[]
+  repoDigests: string[]
+  created: number
+  size: number
+  sharedSize: number
+  labels: Record<string, string>
+  containers: number
+}
+
+export interface DockerImageDetail {
+  id: string
+  repoTags: string[]
+  created: string
+  size: number
+  config: {
+    env: string[] | null
+    cmd: string[] | null
+    entrypoint: string[] | null
+    labels: Record<string, string>
+    workingDir: string
+    user: string
+  }
+  rootFs: {
+    type: string
+    layers: string[]
+  }
+}
+
+export interface DockerLogEntry {
+  timestamp: string
+  stream: 'stdout' | 'stderr'
+  message: string
+}
+
+export interface DockerActionResult {
+  success: boolean
+  message: string
+}
+
+export interface DockerPruneResult {
+  imagesDeleted: Array<{ untagged?: string; deleted?: string }>
+  spaceReclaimed: number
+}
+
+export interface DockerLogsParams {
+  tail?: number | 'all'
+  since?: number
+  timestamps?: boolean
+}
+

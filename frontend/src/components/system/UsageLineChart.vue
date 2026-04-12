@@ -81,7 +81,7 @@
       <div v-if="xTicks.length" class="chart-x-axis">
         <span
           v-for="tick in xTicks"
-          :key="tick.index"
+          :key="tick.tickPos"
           class="x-tick-label"
           :class="tick.position"
           :style="{ left: `${tick.percent}%` }"
@@ -177,6 +177,7 @@ const xTicks = computed(() => {
     const index = Math.round(Math.min(i * step, total - 1))
     const position = i === 0 ? 'x-tick--start' : i === X_TICK_COUNT - 1 ? 'x-tick--end' : 'x-tick--center'
     return {
+      tickPos: i,
       index,
       percent: (index / (total - 1)) * 100,
       label: formatXLabel(ts[index]!, props.rangeHours ?? 24),

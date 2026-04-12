@@ -13,6 +13,7 @@ const UsersController = () => import('#controllers/users_controller')
 const StorageDestinationsController = () => import('#controllers/storage_destinations_controller')
 const StoragesController = () => import('#controllers/storages_controller')
 const SystemController = () => import('#controllers/system_controller')
+const DockerManagerController = () => import('#controllers/docker_manager_controller')
 import AutoSwagger from 'adonis-autoswagger'
 import swagger from '#config/swagger'
 
@@ -140,6 +141,46 @@ router
         // ==================== User Management ====================
         router.get('users', [UsersController, 'index'])
         router.patch('users/:id/status', [UsersController, 'toggleStatus'])
+
+        // ==================== Docker Manager ====================
+        router
+          .group(() => {
+            // Containers
+            router.get('containers', [DockerManagerController, 'listContainers'])
+            router.get('containers/:id', [DockerManagerController, 'inspectContainer'])
+            router.get('containers/:id/logs', [DockerManagerController, 'containerLogs'])
+            router
+              .post('containers/:id/start', [DockerManagerController, 'startContainer'])
+              .use(middleware.rateLimit({ limiter: 'strict' }))
+            router
+              .post('containers/:id/stop', [DockerManagerController, 'stopContainer'])
+              .use(middleware.rateLimit({ limiter: 'strict' }))
+            router
+              .post('containers/:id/restart', [DockerManagerController, 'restartContainer'])
+              .use(middleware.rateLimit({ limiter: 'strict' }))
+
+            // Volumes
+            router.get('volumes', [DockerManagerController, 'listVolumes'])
+            router.get('volumes/:name', [DockerManagerController, 'inspectVolume'])
+            router
+              .delete('volumes/:name', [DockerManagerController, 'removeVolume'])
+              .use(middleware.rateLimit({ limiter: 'strict' }))
+
+            // Networks
+            router.get('networks', [DockerManagerController, 'listNetworks'])
+            router.get('networks/:id', [DockerManagerController, 'inspectNetwork'])
+
+            // Images — a rota /prune deve vir antes de /:id
+            router
+              .post('images/prune', [DockerManagerController, 'pruneImages'])
+              .use(middleware.rateLimit({ limiter: 'strict' }))
+            router.get('images', [DockerManagerController, 'listImages'])
+            router.get('images/:id', [DockerManagerController, 'inspectImage'])
+            router
+              .delete('images/:id', [DockerManagerController, 'removeImage'])
+              .use(middleware.rateLimit({ limiter: 'strict' }))
+          })
+          .prefix('docker')
       })
       .use(middleware.auth())
   })

@@ -23,6 +23,12 @@ declare module 'vue-router/auto-routes' {
     '/backups/': RouteRecordInfo<'/backups/', '/backups', Record<never, never>, Record<never, never>>,
     '/connections/': RouteRecordInfo<'/connections/', '/connections', Record<never, never>, Record<never, never>>,
     '/connections/[id]': RouteRecordInfo<'/connections/[id]', '/connections/:id', { id: ParamValue<true> }, { id: ParamValue<false> }>,
+    '/docker/': RouteRecordInfo<'/docker/', '/docker', Record<never, never>, Record<never, never>>,
+    '/docker/containers/': RouteRecordInfo<'/docker/containers/', '/docker/containers', Record<never, never>, Record<never, never>>,
+    '/docker/containers/[id]': RouteRecordInfo<'/docker/containers/[id]', '/docker/containers/:id', { id: ParamValue<true> }, { id: ParamValue<false> }>,
+    '/docker/images/': RouteRecordInfo<'/docker/images/', '/docker/images', Record<never, never>, Record<never, never>>,
+    '/docker/networks/': RouteRecordInfo<'/docker/networks/', '/docker/networks', Record<never, never>, Record<never, never>>,
+    '/docker/volumes/': RouteRecordInfo<'/docker/volumes/', '/docker/volumes', Record<never, never>, Record<never, never>>,
     '/login': RouteRecordInfo<'/login', '/login', Record<never, never>, Record<never, never>>,
     '/register': RouteRecordInfo<'/register', '/register', Record<never, never>, Record<never, never>>,
     '/settings/': RouteRecordInfo<'/settings/', '/settings', Record<never, never>, Record<never, never>>,
@@ -64,6 +70,30 @@ declare module 'vue-router/auto-routes' {
     }
     'src/pages/connections/[id].vue': {
       routes: '/connections/[id]'
+      views: never
+    }
+    'src/pages/docker/index.vue': {
+      routes: '/docker/'
+      views: never
+    }
+    'src/pages/docker/containers/index.vue': {
+      routes: '/docker/containers/'
+      views: never
+    }
+    'src/pages/docker/containers/[id].vue': {
+      routes: '/docker/containers/[id]'
+      views: never
+    }
+    'src/pages/docker/images/index.vue': {
+      routes: '/docker/images/'
+      views: never
+    }
+    'src/pages/docker/networks/index.vue': {
+      routes: '/docker/networks/'
+      views: never
+    }
+    'src/pages/docker/volumes/index.vue': {
+      routes: '/docker/volumes/'
       views: never
     }
     'src/pages/login.vue': {
