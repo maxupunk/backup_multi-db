@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process'
 import logger from '@adonisjs/core/services/logger'
 import transmit from '@adonisjs/transmit/services/main'
-import StorageDestination from '#models/storage_destination'
+import type StorageDestination from '#models/storage_destination'
 import type { StorageDestinationConfig, StorageProvider } from '#models/storage_destination'
 import type { CopyJob, CopyJobResult, CopyOptions } from './types.js'
 

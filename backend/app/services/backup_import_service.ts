@@ -15,7 +15,7 @@ import type { MultipartFile } from '@adonisjs/core/types/bodyparser'
 import logger from '@adonisjs/core/services/logger'
 import { getBackupStoragePath } from '#config/storage_paths'
 import Backup from '#models/backup'
-import Connection from '#models/connection'
+import type Connection from '#models/connection'
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 

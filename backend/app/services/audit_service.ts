@@ -1,4 +1,4 @@
-import { HttpContext } from '@adonisjs/core/http'
+import { type HttpContext } from '@adonisjs/core/http'
 import AuditLog from '#models/audit_log'
 import type { AuditAction, AuditEntityType, AuditStatus, AuditDetails } from '#models/audit_log'
 

@@ -1,4 +1,5 @@
-import StorageDestination, { type StorageProvider } from '#models/storage_destination'
+import type StorageDestination from '#models/storage_destination'
+import { type StorageProvider } from '#models/storage_destination'
 import type { StorageExplorerAdapter } from './storage_explorer_adapter.js'
 import type { BucketObjectMetadata, ListObjectsOptions, ListObjectsResult } from './types.js'
 import { S3ExplorerAdapter } from './s3_explorer_adapter.js'

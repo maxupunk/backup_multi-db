@@ -2,8 +2,8 @@ import type {
   DockerContainerDescriptor,
   DockerHostSuggestion,
 } from '#services/docker_discovery_types'
-import { ContainerPortResolver } from '#services/container_port_resolver'
-import { NetworkReachabilityResolver } from '#services/network_reachability_resolver'
+import { type ContainerPortResolver } from '#services/container_port_resolver'
+import { type NetworkReachabilityResolver } from '#services/network_reachability_resolver'
 
 export interface MapperContext {
   backendNetworkIds: string[]

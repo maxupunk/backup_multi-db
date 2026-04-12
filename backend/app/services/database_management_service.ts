@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process'
 import logger from '@adonisjs/core/services/logger'
-import Connection from '#models/connection'
+import type Connection from '#models/connection'
 
 /**
  * Resultado de uma operação de gerenciamento de banco de dados
