@@ -107,6 +107,8 @@ export interface DockerPortOption {
   hostPort: number
   protocol: string
   display: string
+  /** true = porta publicada no host; false = porta apenas exposta internamente */
+  isExternal: boolean
 }
 
 export interface DockerHostSuggestion {

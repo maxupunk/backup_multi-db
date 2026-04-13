@@ -40,6 +40,26 @@ async function apiFetch<T>(url: string, options: RequestInit = {}): Promise<T> {
   return data.data as T
 }
 
+/** Inicia download do browser sem precisar parsear JSON */
+function downloadViaAnchor(url: string, filename: string) {
+  const token = localStorage.getItem('token')
+  // Usa fetch para incluir o token de autenticação, depois cria object URL
+  void fetch(url, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  }).then(async (res) => {
+    if (!res.ok) throw new Error('Falha no download')
+    const blob = await res.blob()
+    const href = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = href
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(href)
+  })
+}
+
 // ============================================================
 // Containers
 // ============================================================
@@ -69,6 +89,13 @@ export const dockerContainersApi = {
     return apiFetch<DockerActionResult>(`${BASE}/containers/${encodeURIComponent(id)}/restart`, {
       method: 'POST',
     })
+  },
+
+  remove(id: string, force = false): Promise<DockerActionResult> {
+    return apiFetch<DockerActionResult>(
+      `${BASE}/containers/${encodeURIComponent(id)}?force=${force}`,
+      { method: 'DELETE' }
+    )
   },
 
   getLogs(id: string, params: DockerLogsParams = {}): Promise<DockerLogEntry[]> {
@@ -103,6 +130,13 @@ export const dockerVolumesApi = {
       { method: 'DELETE' }
     )
   },
+
+  exportVolume(name: string): void {
+    const safeName = name.replace(/[^a-zA-Z0-9_-]/g, '_')
+    const date = new Date().toISOString().slice(0, 10)
+    const filename = `volume-${safeName}-${date}.tar.gz`
+    downloadViaAnchor(`${BASE}/volumes/${encodeURIComponent(name)}/export`, filename)
+  },
 }
 
 // ============================================================
@@ -116,6 +150,27 @@ export const dockerNetworksApi = {
 
   getDetail(id: string): Promise<DockerNetworkDetail> {
     return apiFetch<DockerNetworkDetail>(`${BASE}/networks/${encodeURIComponent(id)}`)
+  },
+
+  create(name: string, driver = 'bridge'): Promise<DockerActionResult> {
+    return apiFetch<DockerActionResult>(`${BASE}/networks`, {
+      method: 'POST',
+      body: JSON.stringify({ name, driver }),
+    })
+  },
+
+  connect(networkId: string, containerId: string): Promise<DockerActionResult> {
+    return apiFetch<DockerActionResult>(
+      `${BASE}/networks/${encodeURIComponent(networkId)}/connect`,
+      { method: 'POST', body: JSON.stringify({ containerId }) }
+    )
+  },
+
+  disconnect(networkId: string, containerId: string, force = false): Promise<DockerActionResult> {
+    return apiFetch<DockerActionResult>(
+      `${BASE}/networks/${encodeURIComponent(networkId)}/disconnect`,
+      { method: 'POST', body: JSON.stringify({ containerId, force }) }
+    )
   },
 }
 

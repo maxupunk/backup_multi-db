@@ -31,9 +31,14 @@ test.group('Docker Manager — Auth', () => {
       { method: 'post', path: '/api/docker/containers/abc123/stop' },
       { method: 'post', path: '/api/docker/containers/abc123/restart' },
       { method: 'get', path: '/api/docker/containers/abc123/logs' },
+      { method: 'delete', path: '/api/docker/containers/abc123' },
       { method: 'delete', path: '/api/docker/volumes/my-volume' },
+      { method: 'get', path: '/api/docker/volumes/my-volume/export' },
       { method: 'delete', path: '/api/docker/images/sha256:abc' },
       { method: 'post', path: '/api/docker/images/prune' },
+      { method: 'post', path: '/api/docker/networks' },
+      { method: 'post', path: '/api/docker/networks/abc123/connect' },
+      { method: 'post', path: '/api/docker/networks/abc123/disconnect' },
     ] as const
 
     for (const route of routes) {
@@ -393,6 +398,189 @@ test.group('Docker Manager — Volume em Uso', (group) => {
         responseBody.message!.includes('em uso'),
         'Mensagem de erro deve indicar que o volume está em uso'
       )
+    }
+  })
+})
+
+// ================================================================
+// Novas rotas — Validação de entrada
+// ================================================================
+
+test.group('Docker Manager — Validação das Novas Rotas', (group) => {
+  let user: User
+
+  group.each.setup(async () => {
+    user = await User.create({
+      fullName: 'Validation Test User',
+      email: `docker_val_${Date.now()}@example.com`,
+      password: 'Password123!',
+      isActive: true,
+    })
+  })
+
+  test('POST /api/docker/networks retorna 400 sem nome', async ({ client, assert }) => {
+    const token = await User.accessTokens.create(user)
+    const response = await client
+      .post('/api/docker/networks')
+      .header('Authorization', `Bearer ${token.value!.release()}`)
+      .json({})
+
+    response.assertStatus(400)
+    const body = response.body() as { message?: string }
+    assert.isString(body.message)
+    assert.include(body.message!, 'Nome')
+  })
+
+  test('POST /api/docker/networks retorna 400 com nome vazio', async ({ client }) => {
+    const token = await User.accessTokens.create(user)
+    const response = await client
+      .post('/api/docker/networks')
+      .header('Authorization', `Bearer ${token.value!.release()}`)
+      .json({ name: '   ' })
+
+    response.assertStatus(400)
+  })
+
+  test('POST /api/docker/networks/:id/connect retorna 400 sem containerId', async ({
+    client,
+    assert,
+  }) => {
+    const token = await User.accessTokens.create(user)
+    const response = await client
+      .post('/api/docker/networks/some-network-id/connect')
+      .header('Authorization', `Bearer ${token.value!.release()}`)
+      .json({})
+
+    response.assertStatus(400)
+    const body = response.body() as { message?: string }
+    assert.isString(body.message)
+    assert.include(body.message!, 'containerId')
+  })
+
+  test('POST /api/docker/networks/:id/disconnect retorna 400 sem containerId', async ({
+    client,
+    assert,
+  }) => {
+    const token = await User.accessTokens.create(user)
+    const response = await client
+      .post('/api/docker/networks/some-network-id/disconnect')
+      .header('Authorization', `Bearer ${token.value!.release()}`)
+      .json({})
+
+    response.assertStatus(400)
+    const body = response.body() as { message?: string }
+    assert.isString(body.message)
+    assert.include(body.message!, 'containerId')
+  })
+})
+
+// ================================================================
+// Novas rotas — Socket disponível
+// ================================================================
+
+test.group('Docker Manager — Novas Rotas (Socket disponível)', (group) => {
+  let user: User
+
+  group.each.setup(async () => {
+    user = await User.create({
+      fullName: 'New Routes Test User',
+      email: `docker_new_${Date.now()}@example.com`,
+      password: 'Password123!',
+      isActive: true,
+    })
+  })
+
+  test('DELETE /api/docker/containers/:id com ID inexistente retorna erro de Docker', async ({
+    client,
+    assert,
+  }) => {
+    if (!dockerAvailable) return
+
+    const token = await User.accessTokens.create(user)
+    const response = await client
+      .delete('/api/docker/containers/nonexistent-container-id-000000000000000')
+      .header('Authorization', `Bearer ${token.value!.release()}`)
+
+    // Docker retorna 404 para container inexistente → controller propaga como 500
+    assert.isTrue(
+      [404, 500].includes(response.status()),
+      `Status esperado 404 ou 500, recebido ${response.status()}`
+    )
+  })
+
+  test('POST /api/docker/networks cria rede com driver bridge', async ({ client }) => {
+    if (!dockerAvailable) return
+
+    const token = await User.accessTokens.create(user)
+    const networkName = `test-japa-${Date.now()}`
+    const response = await client
+      .post('/api/docker/networks')
+      .header('Authorization', `Bearer ${token.value!.release()}`)
+      .json({ name: networkName, driver: 'bridge' })
+
+    response.assertStatus(200)
+    response.assertBodyContains({ success: true })
+  })
+
+  test('POST /api/docker/networks/:id/connect com container inválido retorna erro de Docker', async ({
+    client,
+    assert,
+  }) => {
+    if (!dockerAvailable) return
+
+    const token = await User.accessTokens.create(user)
+
+    // Listar redes para obter um ID válido
+    const listToken = await User.accessTokens.create(user)
+    const listResponse = await client
+      .get('/api/docker/networks')
+      .header('Authorization', `Bearer ${listToken.value!.release()}`)
+
+    const networks: Array<{ id: string }> = listResponse.body()?.data ?? []
+    if (networks.length === 0) return
+
+    const response = await client
+      .post(`/api/docker/networks/${networks[0].id}/connect`)
+      .header('Authorization', `Bearer ${token.value!.release()}`)
+      .json({ containerId: 'nonexistent-container-000000000000' })
+
+    // Docker retorna erro (404/500) pois o container não existe
+    assert.isTrue(
+      [404, 500].includes(response.status()),
+      `Status esperado 404 ou 500, recebido ${response.status()}`
+    )
+  })
+
+  test('GET /api/docker/volumes/:name/export retorna conteúdo comprimido quando disponível', async ({
+    client,
+    assert,
+  }) => {
+    if (!dockerAvailable) return
+
+    // Listar volumes
+    const listToken = await User.accessTokens.create(user)
+    const listResponse = await client
+      .get('/api/docker/volumes')
+      .header('Authorization', `Bearer ${listToken.value!.release()}`)
+
+    const volumes: Array<{ name: string }> = listResponse.body()?.data ?? []
+    if (volumes.length === 0) return // nenhum volume para exportar
+
+    const exportToken = await User.accessTokens.create(user)
+    const response = await client
+      .get(`/api/docker/volumes/${encodeURIComponent(volumes[0].name)}/export`)
+      .header('Authorization', `Bearer ${exportToken.value!.release()}`)
+
+    // Se a imagem alpine não estiver disponível, pode retornar 500
+    // Aceitamos 200 (sucesso) ou 500 (alpine não disponível)
+    assert.isTrue(
+      [200, 500].includes(response.status()),
+      `Status esperado 200 ou 500, recebido ${response.status()}`
+    )
+
+    if (response.status() === 200) {
+      const contentType = response.header('content-type')
+      assert.include(contentType, 'gzip')
     }
   })
 })

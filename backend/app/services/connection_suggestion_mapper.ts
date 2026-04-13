@@ -24,8 +24,12 @@ export class ConnectionSuggestionMapper {
           context.backendNetworkIds,
           context.dockerHostIp
         )
-        const portOptions = this.portResolver.resolve(container)
-        const hasExternalPort = portOptions.length > 0
+        const allPortOptions = this.portResolver.resolve(container)
+        // Quando não está na mesma rede, portas internas são inacessíveis — filtrá-las
+        const portOptions = hostResolution.sameNetwork
+          ? allPortOptions
+          : allPortOptions.filter((opt) => opt.isExternal)
+        const hasExternalPort = allPortOptions.some((opt) => opt.isExternal)
         const connectivityWarning =
           !hostResolution.sameNetwork && !hasExternalPort
             ? 'Container selecionado não publica porta externa e não está na mesma rede do sistema. Pode não haver acesso ao banco.'

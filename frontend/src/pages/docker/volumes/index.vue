@@ -41,6 +41,7 @@
             :loading="actionLoading"
             :volume="vol"
             @detail="showDetail"
+            @export="requestExport"
             @remove="requestRemove"
           />
         </v-col>
@@ -111,6 +112,11 @@ async function showDetail(vol: DockerVolumeSummary) {
     selectedDetail.value = { ...vol, options: {} }
     detailDialog.value = true
   }
+}
+
+function requestExport(name: string) {
+  notify(`Iniciando exportação do volume "${name}"...`, 'info')
+  dockerVolumesApi.exportVolume(name)
 }
 
 function requestRemove(name: string) {

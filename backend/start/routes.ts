@@ -158,10 +158,16 @@ router
             router
               .post('containers/:id/restart', [DockerManagerController, 'restartContainer'])
               .use(middleware.rateLimit({ limiter: 'strict' }))
+            router
+              .delete('containers/:id', [DockerManagerController, 'removeContainer'])
+              .use(middleware.rateLimit({ limiter: 'strict' }))
 
             // Volumes
             router.get('volumes', [DockerManagerController, 'listVolumes'])
             router.get('volumes/:name', [DockerManagerController, 'inspectVolume'])
+            router
+              .get('volumes/:name/export', [DockerManagerController, 'exportVolume'])
+              .use(middleware.rateLimit({ limiter: 'strict' }))
             router
               .delete('volumes/:name', [DockerManagerController, 'removeVolume'])
               .use(middleware.rateLimit({ limiter: 'strict' }))
@@ -169,6 +175,18 @@ router
             // Networks
             router.get('networks', [DockerManagerController, 'listNetworks'])
             router.get('networks/:id', [DockerManagerController, 'inspectNetwork'])
+            router
+              .post('networks', [DockerManagerController, 'createNetwork'])
+              .use(middleware.rateLimit({ limiter: 'strict' }))
+            router
+              .post('networks/:id/connect', [DockerManagerController, 'connectContainerToNetwork'])
+              .use(middleware.rateLimit({ limiter: 'strict' }))
+            router
+              .post('networks/:id/disconnect', [
+                DockerManagerController,
+                'disconnectContainerFromNetwork',
+              ])
+              .use(middleware.rateLimit({ limiter: 'strict' }))
 
             // Images — a rota /prune deve vir antes de /:id
             router

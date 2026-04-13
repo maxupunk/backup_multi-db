@@ -1,5 +1,10 @@
+import { createGzip } from 'node:zlib'
 import type { HttpContext } from '@adonisjs/core/http'
-import { DockerManagerService, VolumeInUseError, ImageInUseError } from '#services/docker_manager_service'
+import {
+  DockerManagerService,
+  VolumeInUseError,
+  ImageInUseError,
+} from '#services/docker_manager_service'
 import { DockerEngineHttpClient } from '#services/docker_engine_http_client'
 
 const UNAVAILABLE = { success: true, available: false, data: [] } as const
@@ -80,6 +85,16 @@ export default class DockerManagerController {
     return response.ok({ success: true, data: entries })
   }
 
+  /**
+   * DELETE /api/docker/containers/:id
+   * Remove um container. Query: force=true
+   */
+  async removeContainer({ params, request, response }: HttpContext) {
+    const force = request.input('force', 'false') === 'true'
+    const result = await this.service.removeContainer(params.id as string, force)
+    return response.ok({ success: true, data: result })
+  }
+
   // ================================================================
   // Volumes
   // ================================================================
@@ -118,6 +133,32 @@ export default class DockerManagerController {
     }
   }
 
+  /**
+   * GET /api/docker/volumes/:name/export
+   * Exporta o conteúdo do volume como arquivo tar.gz para download.
+   */
+  async exportVolume({ params, response }: HttpContext) {
+    const name = params.name as string
+    const { stream, cleanup } = await this.service.exportVolumeAsArchive(name)
+
+    const safeName = name.replace(/[^a-zA-Z0-9_-]/g, '_')
+    const date = new Date().toISOString().slice(0, 10)
+    const fileName = `volume-${safeName}-${date}.tar.gz`
+
+    response.header('Content-Type', 'application/gzip')
+    response.header('Content-Disposition', `attachment; filename="${fileName}"`)
+
+    const gzip = createGzip()
+
+    // Cleanup do container temporário após o stream encerrar
+    gzip.on('close', () => {
+      void cleanup()
+    })
+
+    stream.pipe(gzip)
+    return response.stream(gzip)
+  }
+
   // ================================================================
   // Networks
   // ================================================================
@@ -137,6 +178,57 @@ export default class DockerManagerController {
   async inspectNetwork({ params, response }: HttpContext) {
     const detail = await this.service.inspectNetwork(params.id as string)
     return response.ok({ success: true, data: detail })
+  }
+
+  /**
+   * POST /api/docker/networks
+   * Cria uma nova rede Docker.
+   */
+  async createNetwork({ request, response }: HttpContext) {
+    const name = request.input('name') as string | undefined
+    const driver = (request.input('driver') as string | undefined) ?? 'bridge'
+
+    if (!name || typeof name !== 'string' || !name.trim()) {
+      return response.badRequest({ success: false, message: 'Nome da rede é obrigatório.' })
+    }
+
+    const result = await this.service.createNetwork(name.trim(), driver)
+    return response.ok({ success: true, data: result })
+  }
+
+  /**
+   * POST /api/docker/networks/:id/connect
+   * Conecta um container a uma rede.
+   */
+  async connectContainerToNetwork({ params, request, response }: HttpContext) {
+    const containerId = request.input('containerId') as string | undefined
+
+    if (!containerId || typeof containerId !== 'string') {
+      return response.badRequest({ success: false, message: 'containerId é obrigatório.' })
+    }
+
+    const result = await this.service.connectContainerToNetwork(containerId, params.id as string)
+    return response.ok({ success: true, data: result })
+  }
+
+  /**
+   * POST /api/docker/networks/:id/disconnect
+   * Desconecta um container de uma rede.
+   */
+  async disconnectContainerFromNetwork({ params, request, response }: HttpContext) {
+    const containerId = request.input('containerId') as string | undefined
+    const force = request.input('force', false) === true || request.input('force') === 'true'
+
+    if (!containerId || typeof containerId !== 'string') {
+      return response.badRequest({ success: false, message: 'containerId é obrigatório.' })
+    }
+
+    const result = await this.service.disconnectContainerFromNetwork(
+      containerId,
+      params.id as string,
+      force
+    )
+    return response.ok({ success: true, data: result })
   }
 
   // ================================================================

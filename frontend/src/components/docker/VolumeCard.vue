@@ -11,7 +11,7 @@
         {{ volume.mountpoint }}
       </div>
 
-      <div class="d-flex justify-end ga-1">
+      <div class="d-flex justify-end ga-1 flex-wrap">
         <v-btn
           density="compact"
           prepend-icon="mdi-information-outline"
@@ -20,6 +20,17 @@
           @click="emit('detail', volume)"
         >
           Detalhes
+        </v-btn>
+        <v-btn
+          color="primary"
+          density="compact"
+          :disabled="loading"
+          prepend-icon="mdi-archive-arrow-down-outline"
+          size="small"
+          variant="tonal"
+          @click="emit('export', volume.name)"
+        >
+          Exportar
         </v-btn>
         <v-btn
           color="error"
@@ -45,5 +56,6 @@ defineProps<{ volume: DockerVolumeSummary; loading?: boolean }>()
 const emit = defineEmits<{
   (e: 'remove', name: string): void
   (e: 'detail', volume: DockerVolumeSummary): void
+  (e: 'export', name: string): void
 }>()
 </script>

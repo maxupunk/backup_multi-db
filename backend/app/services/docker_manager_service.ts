@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto'
+import type { IncomingMessage } from 'node:http'
 import { DockerEngineHttpClient } from '#services/docker_engine_http_client'
 import type {
   DockerActionResult,
@@ -222,6 +224,62 @@ export class DockerManagerService {
     return { success: true, message: 'Volume removido com sucesso.' }
   }
 
+  /**
+   * Exporta o conteúdo de um volume como um stream tar.
+   * Cria um container temporário com o volume montado, obtém o arquivo via Docker API
+   * e retorna o stream junto com uma função de cleanup.
+   */
+  async exportVolumeAsArchive(
+    name: string
+  ): Promise<{ stream: IncomingMessage; cleanup: () => Promise<void> }> {
+    const containerName = `backup-vol-${randomUUID().slice(0, 8)}`
+
+    // Cria container temporário com alpine e o volume montado em /data
+    const created = await this.client.postJson<{ Id?: string; Warnings?: string[] }>(
+      `/containers/create?name=${encodeURIComponent(containerName)}`,
+      {
+        Image: 'alpine:latest',
+        Cmd: ['true'],
+        HostConfig: {
+          Binds: [`${name}:/data:ro`],
+          AutoRemove: false,
+        },
+      },
+      15_000
+    )
+
+    const containerId = created?.Id
+    if (!containerId) {
+      throw new Error('Falha ao criar container temporário para backup do volume.')
+    }
+
+    const cleanup = async () => {
+      try {
+        await this.client.deleteJson<null>(
+          `/containers/${encodeURIComponent(containerId)}?force=true`
+        )
+      } catch {
+        // ignora erros de cleanup — container será removido pelo Docker eventualmente
+      }
+    }
+
+    try {
+      // Inicia o container (necessário para que o Docker permita archive)
+      await this.client.postJson<null>(`/containers/${encodeURIComponent(containerId)}/start`)
+
+      // Obtém archive do path /data — Docker retorna um tar stream
+      const stream = await this.client.getStream(
+        `/containers/${encodeURIComponent(containerId)}/archive?path=%2Fdata`,
+        60_000
+      )
+
+      return { stream, cleanup }
+    } catch (error) {
+      await cleanup()
+      throw error
+    }
+  }
+
   #extractContainerIds(message: string): string[] {
     const match = message.match(/\[([^\]]+)\]/)
     if (!match) return []
@@ -280,6 +338,37 @@ export class DockerManagerService {
       ),
       options: raw.Options ?? {},
     }
+  }
+
+  async createNetwork(networkName: string, driver = 'bridge'): Promise<DockerActionResult> {
+    await this.client.postJson<{ Id: string }>('/networks/create', {
+      Name: networkName,
+      Driver: driver,
+      CheckDuplicate: true,
+    })
+    return { success: true, message: `Rede "${networkName}" criada com sucesso.` }
+  }
+
+  async connectContainerToNetwork(
+    containerId: string,
+    networkId: string
+  ): Promise<DockerActionResult> {
+    await this.client.postJson<null>(`/networks/${encodeURIComponent(networkId)}/connect`, {
+      Container: containerId,
+    })
+    return { success: true, message: 'Container conectado à rede com sucesso.' }
+  }
+
+  async disconnectContainerFromNetwork(
+    containerId: string,
+    networkId: string,
+    force = false
+  ): Promise<DockerActionResult> {
+    await this.client.postJson<null>(`/networks/${encodeURIComponent(networkId)}/disconnect`, {
+      Container: containerId,
+      Force: force,
+    })
+    return { success: true, message: 'Container desconectado da rede com sucesso.' }
   }
 
   // ================================================================
@@ -363,6 +452,16 @@ export class DockerManagerService {
       })),
       spaceReclaimed: raw?.SpaceReclaimed ?? 0,
     }
+  }
+
+  // ================================================================
+  // Containers — Remoção
+  // ================================================================
+
+  async removeContainer(id: string, force = false): Promise<DockerActionResult> {
+    const query = `?v=0&force=${force ? 'true' : 'false'}`
+    await this.client.deleteJson<null>(`/containers/${encodeURIComponent(id)}${query}`)
+    return { success: true, message: 'Container removido com sucesso.' }
   }
 
   // ================================================================

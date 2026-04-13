@@ -78,8 +78,9 @@
                   </v-btn>
 
                   <v-alert v-if="discoverError" class="mt-3" closable color="error" density="compact" variant="tonal"
-                    @click:close="discoverError = ''">
-                    {{ discoverError }}
+                    @click:close="discoverError = ''; discoverErrorDetail = ''">
+                    <div>{{ discoverError }}</div>
+                    <div v-if="discoverErrorDetail" class="text-caption mt-1 font-italic">{{ discoverErrorDetail }}</div>
                   </v-alert>
 
                   <v-alert v-if="availableDatabases.length > 0" class="mt-3" color="success" density="compact"
@@ -270,7 +271,7 @@ import type { DatabaseType, DockerHostSuggestion, ScheduleFrequency, StorageDest
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useDisplay } from 'vuetify'
-import { connectionsApi, storageDestinationsApi } from '@/services/api'
+import { ApiError, connectionsApi, storageDestinationsApi } from '@/services/api'
 import { useNotifier } from '@/composables/useNotifier'
 import { useStorageDestinationOptions } from '@/composables/useStorageDestinationOptions'
 import { databaseTypeOptions, defaultDatabasePorts } from '@/ui/database'
@@ -298,6 +299,7 @@ const selectedDockerSuggestion = ref<DockerHostSuggestion | null>(null)
 const discoveringDatabases = ref(false)
 const availableDatabases = ref<string[]>([])
 const discoverError = ref('')
+const discoverErrorDetail = ref('')
 
 // Opção especial para backup completo
 const ALL_DATABASES_VALUE = '*'
@@ -362,6 +364,7 @@ const selectedDockerPortItems = computed(() => {
   return selectedDockerSuggestion.value.portOptions.map((option) => ({
     title: option.display,
     value: option.hostPort,
+    subtitle: option.isExternal ? undefined : 'Requer mesma rede Docker',
   }))
 })
 
@@ -441,6 +444,7 @@ function markPasswordAsModified() {
 async function discoverDatabases() {
   discoveringDatabases.value = true
   discoverError.value = ''
+  discoverErrorDetail.value = ''
   availableDatabases.value = []
 
   try {
@@ -464,7 +468,15 @@ async function discoverDatabases() {
       }
     }
   } catch (error) {
-    discoverError.value = error instanceof Error ? error.message : 'Erro ao conectar'
+    if (error instanceof ApiError) {
+      discoverError.value = error.message
+      const data = error.data as Record<string, unknown> | undefined
+      if (data && typeof data.error === 'string' && data.error !== error.message) {
+        discoverErrorDetail.value = data.error
+      }
+    } else {
+      discoverError.value = error instanceof Error ? error.message : 'Erro ao conectar'
+    }
     availableDatabases.value = []
   } finally {
     discoveringDatabases.value = false
@@ -608,8 +620,18 @@ async function testConnection() {
       `Conexão bem-sucedida! Latência: ${response.data?.latencyMs}ms`,
       'success',
     )
-  } catch {
-    notify('Falha ao testar conexão', 'error')
+  } catch (error) {
+    let message = 'Falha ao testar conexão'
+    if (error instanceof ApiError) {
+      message = error.message
+      const data = error.data as Record<string, unknown> | undefined
+      if (data && typeof data.error === 'string' && data.error !== error.message) {
+        message = `${error.message}: ${data.error}`
+      }
+    } else if (error instanceof Error) {
+      message = error.message
+    }
+    notify(message, 'error')
   } finally {
     testing.value = false
   }

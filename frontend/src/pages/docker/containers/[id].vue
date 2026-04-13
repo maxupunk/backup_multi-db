@@ -22,7 +22,7 @@
         </div>
         <ContainerStatusChip :state="detail.state.status" />
         <v-spacer />
-        <div class="d-flex ga-2">
+        <div class="d-flex ga-2 flex-wrap">
           <v-btn
             color="success"
             density="comfortable"
@@ -52,6 +52,16 @@
             @click="handleAction('restart')"
           >
             Reiniciar
+          </v-btn>
+          <v-btn
+            color="error"
+            density="comfortable"
+            :disabled="actionLoading"
+            prepend-icon="mdi-delete"
+            variant="outlined"
+            @click="removeDialog = true"
+          >
+            Remover
           </v-btn>
         </div>
       </div>
@@ -118,12 +128,41 @@
           <v-tabs-window-item value="volumes">
             <v-card-text>
               <ContainerMountsTable :mounts="detail.mounts" />
+              <template v-if="namedVolumes.length > 0">
+                <v-divider class="my-4" />
+                <p class="text-caption font-weight-bold mb-3">Exportar volume como arquivo</p>
+                <div class="d-flex flex-wrap ga-2">
+                  <v-btn
+                    v-for="mount in namedVolumes"
+                    :key="mount.name"
+                    color="primary"
+                    density="comfortable"
+                    prepend-icon="mdi-archive-arrow-down-outline"
+                    size="small"
+                    variant="tonal"
+                    @click="exportVolume(mount.name!)"
+                  >
+                    {{ mount.name }}
+                  </v-btn>
+                </div>
+              </template>
             </v-card-text>
           </v-tabs-window-item>
 
           <!-- Redes -->
           <v-tabs-window-item value="networks">
             <v-card-text>
+              <div class="d-flex justify-end mb-3">
+                <v-btn
+                  color="primary"
+                  density="comfortable"
+                  prepend-icon="mdi-lan-connect"
+                  variant="tonal"
+                  @click="networkDialog = true"
+                >
+                  Gerenciar Redes
+                </v-btn>
+              </div>
               <ContainerNetworkTable :networks="detail.networks" />
             </v-card-text>
           </v-tabs-window-item>
@@ -155,26 +194,48 @@
       @cancel="confirmDialog = false"
       @confirm="executeConfirmed"
     />
+
+    <ContainerNetworkDialog
+      v-if="detail"
+      v-model="networkDialog"
+      :container-id="getContainerId()"
+      :container-name="containerName"
+      :current-networks="detail.networks"
+      @updated="load"
+    />
+
+    <ContainerRemoveDialog
+      v-model="removeDialog"
+      :container-name="containerName"
+      :loading="removeLoading"
+      @cancel="removeDialog = false"
+      @confirm="executeRemove"
+    />
   </div>
 </template>
 
 <script lang="ts" setup>
 import { computed, onMounted, ref } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import type { DockerContainerDetail } from '@/types/api'
-import { dockerContainersApi } from '@/services/dockerService'
+import { dockerContainersApi, dockerVolumesApi } from '@/services/dockerService'
+import { useNotifier } from '@/composables/useNotifier'
 import ContainerStatusChip from '@/components/docker/ContainerStatusChip.vue'
 import ContainerEnvironmentTable from '@/components/docker/ContainerEnvironmentTable.vue'
 import ContainerMountsTable from '@/components/docker/ContainerMountsTable.vue'
 import ContainerNetworkTable from '@/components/docker/ContainerNetworkTable.vue'
 import ContainerPortsTable from '@/components/docker/ContainerPortsTable.vue'
 import ContainerLogsViewer from '@/components/docker/ContainerLogsViewer.vue'
+import ContainerNetworkDialog from '@/components/docker/ContainerNetworkDialog.vue'
+import ContainerRemoveDialog from '@/components/docker/ContainerRemoveDialog.vue'
 import DockerUnavailableBanner from '@/components/docker/DockerUnavailableBanner.vue'
 import DockerActionConfirmDialog from '@/components/docker/DockerActionConfirmDialog.vue'
 
 type ActionType = 'start' | 'stop' | 'restart'
 
 const route = useRoute()
+const router = useRouter()
+const notify = useNotifier()
 
 function getContainerId(): string {
   const params = route.params as Record<string, string | string[]>
@@ -184,14 +245,20 @@ function getContainerId(): string {
 const detail = ref<DockerContainerDetail | null>(null)
 const loading = ref(false)
 const actionLoading = ref(false)
+const removeLoading = ref(false)
 const error = ref<string | null>(null)
 const tab = ref('info')
 
 const confirmDialog = ref(false)
 const confirmMessage = ref('')
+const networkDialog = ref(false)
+const removeDialog = ref(false)
 let pendingAction: (() => Promise<void>) | null = null
 
 const containerName = computed(() => detail.value?.name ?? getContainerId().slice(0, 12))
+const namedVolumes = computed(() =>
+  (detail.value?.mounts ?? []).filter((m) => m.type === 'volume' && !!m.name)
+)
 
 async function load() {
   loading.value = true
@@ -224,6 +291,25 @@ async function executeConfirmed() {
     actionLoading.value = false
     confirmDialog.value = false
     pendingAction = null
+  }
+}
+
+function exportVolume(name: string) {
+  notify(`Iniciando exportação do volume "${name}"...`, 'info')
+  dockerVolumesApi.exportVolume(name)
+}
+
+async function executeRemove(force: boolean) {
+  removeLoading.value = true
+  try {
+    await dockerContainersApi.remove(getContainerId(), force)
+    notify(`Container "${containerName.value}" removido com sucesso.`, 'success')
+    await router.push('/docker/containers')
+  } catch (e) {
+    notify(e instanceof Error ? e.message : 'Erro ao remover container.', 'error')
+  } finally {
+    removeLoading.value = false
+    removeDialog.value = false
   }
 }
 
