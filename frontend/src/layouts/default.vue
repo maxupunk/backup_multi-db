@@ -53,67 +53,34 @@
     <v-list class="mt-2 px-2" density="compact" nav>
       <!-- Main section -->
       <v-list-subheader v-if="!rail">Principal</v-list-subheader>
-      <v-list-item
-        v-for="item in navItems"
-        :key="item.to"
-        class="mb-1"
-        color="primary"
-        :prepend-icon="item.icon"
-        rounded="lg"
-        :title="item.title"
-        :to="item.to"
-      />
-
-      <!-- System section -->
-      <v-divider class="my-2" />
-      <v-list-subheader v-if="!rail">Sistema</v-list-subheader>
-      <v-list-item
-        v-for="item in systemNavItems"
-        :key="item.to"
-        class="mb-1"
-        color="primary"
-        :prepend-icon="item.icon"
-        rounded="lg"
-        :title="item.title"
-        :to="item.to"
-      />
-
+      <v-list-item v-for="item in navItems" :key="item.to" class="mb-1" color="primary" :prepend-icon="item.icon"
+        rounded="lg" :title="item.title" :to="item.to" />
       <!-- Docker section -->
       <v-divider class="my-2" />
       <v-list-subheader v-if="!rail">
         <span class="d-flex align-center ga-1">
           Docker
-          <v-icon
-            v-if="dockerUnavailable"
-            color="warning"
-            icon="mdi-alert"
-            size="14"
-          />
+          <v-icon v-if="dockerUnavailable" color="warning" icon="mdi-alert" size="14" />
         </span>
       </v-list-subheader>
-      <v-list-item
-        v-for="sub in dockerSubItems"
-        :key="sub.to"
-        class="mb-1"
-        color="primary"
-        rounded="lg"
-        :title="sub.title"
-        :to="sub.to"
-      >
+      <v-list-item v-for="sub in dockerSubItems" :key="sub.to" class="mb-1" color="primary" rounded="lg"
+        :title="sub.title" :to="sub.to">
         <template #prepend>
-          <v-badge
-            v-if="dockerUnavailable && sub.to === '/docker'"
-            color="warning"
-            dot
-            floating
-            offset-x="2"
-            offset-y="2"
-          >
+          <v-badge v-if="dockerUnavailable && sub.to === '/docker'" color="warning" dot floating offset-x="2"
+            offset-y="2">
             <v-icon>{{ sub.icon }}</v-icon>
           </v-badge>
           <v-icon v-else>{{ sub.icon }}</v-icon>
         </template>
       </v-list-item>
+
+      <!-- System section -->
+      <v-divider class="my-2" />
+      <v-list-subheader v-if="!rail">Sistema</v-list-subheader>
+      <v-list-item v-for="item in systemNavItems" :key="item.to" class="mb-1" color="primary" :prepend-icon="item.icon"
+        rounded="lg" :title="item.title" :to="item.to" />
+
+
     </v-list>
   </v-navigation-drawer>
 
