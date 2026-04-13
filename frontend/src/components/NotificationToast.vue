@@ -1,9 +1,20 @@
 <template>
     <div class="notification-container">
         <transition-group name="notification-list" tag="div">
-            <v-alert v-for="notification in store.notifications" :key="notification.id" :type="notification.type"
-                :title="notification.title" class="mb-2 notification-item" closable elevation="4" max-width="400"
-                border="start" density="comfortable" variant="tonal" @click:close="store.remove(notification.id)">
+            <v-alert
+                v-for="notification in store.notifications"
+                :key="notification.id"
+                :type="notification.type"
+                :title="notification.title"
+                class="mb-2 notification-item"
+                closable
+                elevation="4"
+                max-width="400"
+                border="start"
+                density="comfortable"
+                variant="tonal"
+                @click:close="store.remove(notification.id)"
+            >
                 <template v-slot:text>
                     <div class="text-body-2">{{ notification.message }}</div>
                     <div class="text-caption text-medium-emphasis mt-1 d-flex justify-end">
@@ -20,10 +31,10 @@ import { useNotificationStore } from '@/stores/notification'
 
 const store = useNotificationStore()
 
-function formatTime(isoString: string) {
+function formatTime(isoString: string): string {
     try {
         return new Date(isoString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-    } catch (e) {
+    } catch {
         return isoString
     }
 }

@@ -219,13 +219,6 @@ export class BackupService {
         `(ID: ${connection.id}) para "${destinationName}" - Backup ID: ${backup.id}`
     )
 
-    // Envia notificação de backup iniciado
-    NotificationService.backupStarted(
-      `${connection.name} / ${connDb.databaseName}`,
-      connection.id,
-      trigger
-    )
-
     // Envia notificação de espaço baixo se aplicável
     if (spaceCheck.warning) {
       const spaceInfo = await StorageSpaceService.getDestinationSpaceInfo(destination)
@@ -375,15 +368,6 @@ export class BackupService {
         `[Backup] Concluído backup do database "${connDb.databaseName}" da conexão "${connection.name}" ` +
           `- Backup ID: ${backup.id}, Arquivo: ${result.fileName}, Tamanho: ${fileSizeKb} KB`
       )
-
-      // Envia notificação de backup concluído
-      NotificationService.backupCompleted(
-        `${connection.name} / ${connDb.databaseName}`,
-        connection.id,
-        backup.id,
-        result.fileName!,
-        result.fileSize!
-      )
     } else {
       this.copyPartialResultToBackup(backup, result)
       backup.markAsFailed(result.error ?? 'Erro desconhecido', result.exitCode)
@@ -391,13 +375,6 @@ export class BackupService {
       logger.error(
         `[Backup] Falhou backup do database "${connDb.databaseName}" da conexão "${connection.name}" ` +
           `- Backup ID: ${backup.id}, Erro: ${result.error ?? 'Erro desconhecido'}`
-      )
-
-      // Envia notificação de backup falhou
-      NotificationService.backupFailed(
-        `${connection.name} / ${connDb.databaseName}`,
-        connection.id,
-        result.error ?? 'Erro desconhecido'
       )
     }
 

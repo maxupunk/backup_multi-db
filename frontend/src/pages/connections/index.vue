@@ -320,13 +320,7 @@ async function testConnection(connection: Connection) {
 async function runBackup(connection: Connection) {
   backupLoading[connection.id] = true
   try {
-    const response = await connectionsApi.backup(connection.id)
-    // A resposta agora contém múltiplos backups
-    const data = response.data as { successful?: number; totalDatabases?: number } | undefined
-    const msg = data?.successful
-      ? `${data.successful} de ${data.totalDatabases} backup(s) concluído(s)`
-      : response.message ?? 'Backup concluído'
-    notify(msg, 'success')
+    await connectionsApi.backup(connection.id)
     loadConnections()
   } catch {
     notify('Falha ao executar backup', 'error')

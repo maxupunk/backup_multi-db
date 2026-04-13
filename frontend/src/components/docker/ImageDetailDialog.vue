@@ -27,7 +27,7 @@
         <template v-if="detail?.config.cmd?.length">
           <v-divider class="my-3" />
           <div class="text-caption font-weight-bold mb-1">CMD</div>
-          <code class="text-caption d-block pa-2 rounded" style="background: #f5f5f5">
+          <code class="text-caption d-block pa-2 rounded bg-surface-variant">
             {{ detail.config.cmd.join(' ') }}
           </code>
         </template>
@@ -35,7 +35,7 @@
         <template v-if="detail?.config.entrypoint?.length">
           <v-divider class="my-3" />
           <div class="text-caption font-weight-bold mb-1">Entrypoint</div>
-          <code class="text-caption d-block pa-2 rounded" style="background: #f5f5f5">
+          <code class="text-caption d-block pa-2 rounded bg-surface-variant">
             {{ detail.config.entrypoint.join(' ') }}
           </code>
         </template>

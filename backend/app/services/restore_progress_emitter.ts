@@ -1,6 +1,6 @@
 import transmit from '@adonisjs/transmit/services/main'
 import logger from '@adonisjs/core/services/logger'
-import { NotificationService, NOTIFICATION_CHANNELS } from '#services/notification_service'
+import { NOTIFICATION_CHANNELS } from '#services/notification_service'
 
 /**
  * Estágios possíveis de uma restauração
@@ -63,7 +63,6 @@ export class RestoreProgressEmitter {
    */
   started(): void {
     this.emitProgress('validating', 0, 'Restauração iniciada')
-    NotificationService.restoreStarted(this.connectionName, this.backupId, this.databaseName)
   }
 
   /**
@@ -137,12 +136,6 @@ export class RestoreProgressEmitter {
    */
   completed(durationSeconds: number): void {
     this.emitProgress('completed', 100, `Restauração concluída em ${durationSeconds}s`)
-    NotificationService.restoreCompleted(
-      this.connectionName,
-      this.backupId,
-      this.databaseName,
-      durationSeconds
-    )
   }
 
   /**
@@ -150,7 +143,6 @@ export class RestoreProgressEmitter {
    */
   failed(error: string): void {
     this.emitProgress('failed', 0, error)
-    NotificationService.restoreFailed(this.connectionName, this.backupId, this.databaseName, error)
   }
 
   /**
