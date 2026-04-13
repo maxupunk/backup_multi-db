@@ -44,6 +44,7 @@
             <ContainerCard
               :container="container"
               :loading="loading"
+              :resources="resourcesById?.[container.id] ?? null"
               @restart="emit('restart', $event)"
               @start="emit('start', $event)"
               @stop="emit('stop', $event)"
@@ -57,12 +58,13 @@
 
 <script lang="ts" setup>
 import { computed, ref } from 'vue'
-import type { DockerContainerGroup } from '@/types/api'
+import type { DockerContainerGroup, DockerContainerResourceMetrics } from '@/types/api'
 import ContainerCard from './ContainerCard.vue'
 
 const props = defineProps<{
   group: DockerContainerGroup
   loading?: boolean
+  resourcesById?: Record<string, DockerContainerResourceMetrics>
 }>()
 
 const emit = defineEmits<{

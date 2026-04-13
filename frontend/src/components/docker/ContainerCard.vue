@@ -26,6 +26,36 @@
         </v-chip>
       </div>
 
+      <!-- Resource meters -->
+      <template v-if="resources && container.state === 'running'">
+        <div class="resource-meters mb-3">
+          <div class="d-flex align-center justify-space-between mb-1">
+            <span class="text-caption text-medium-emphasis">CPU</span>
+            <span class="text-caption font-weight-medium">{{ resources.cpu.usagePercent.toFixed(1) }}%</span>
+          </div>
+          <v-progress-linear
+            :model-value="resources.cpu.usagePercent"
+            :color="resolveColor(resources.cpu.usagePercent)"
+            bg-color="rgba(var(--v-border-color), 0.12)"
+            height="4"
+            rounded
+            class="mb-2"
+          />
+
+          <div class="d-flex align-center justify-space-between mb-1">
+            <span class="text-caption text-medium-emphasis">Memória</span>
+            <span class="text-caption font-weight-medium">{{ resources.memory.usagePercent.toFixed(1) }}%</span>
+          </div>
+          <v-progress-linear
+            :model-value="resources.memory.usagePercent"
+            :color="resolveColor(resources.memory.usagePercent)"
+            bg-color="rgba(var(--v-border-color), 0.12)"
+            height="4"
+            rounded
+          />
+        </div>
+      </template>
+
       <!-- Actions -->
       <div class="d-flex justify-end ga-1">
         <v-btn
@@ -73,12 +103,13 @@
 
 <script lang="ts" setup>
 import { computed } from 'vue'
-import type { DockerContainerSummary } from '@/types/api'
+import type { DockerContainerResourceMetrics, DockerContainerSummary } from '@/types/api'
 import ContainerStatusChip from './ContainerStatusChip.vue'
 
 const props = defineProps<{
   container: DockerContainerSummary
   loading?: boolean
+  resources?: DockerContainerResourceMetrics | null
 }>()
 
 const emit = defineEmits<{
@@ -89,4 +120,10 @@ const emit = defineEmits<{
 
 const primaryName = computed(() => props.container.names[0] ?? props.container.id.slice(0, 12))
 const visiblePorts = computed(() => props.container.ports.slice(0, 4))
+
+function resolveColor(percent: number): string {
+  if (percent >= 85) return 'error'
+  if (percent >= 65) return 'warning'
+  return 'success'
+}
 </script>

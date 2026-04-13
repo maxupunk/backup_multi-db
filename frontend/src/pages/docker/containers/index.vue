@@ -38,6 +38,7 @@
         :key="group.projectName"
         :group="group"
         :loading="actionLoading"
+        :resources-by-id="resourcesByContainerId"
         @restart="handleAction('restart', $event)"
         @restart-all="handleAll('restart', $event)"
         @start="handleAction('start', $event)"
@@ -62,8 +63,9 @@
 
 <script lang="ts" setup>
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import type { DockerContainerGroup } from '@/types/api'
+import type { DockerContainerGroup, DockerContainerResourceMetrics } from '@/types/api'
 import { dockerContainersApi } from '@/services/dockerService'
+import { useDockerContainerResources } from '@/composables/useDockerContainerResources'
 import ContainerProjectGroup from '@/components/docker/ContainerProjectGroup.vue'
 import DockerUnavailableBanner from '@/components/docker/DockerUnavailableBanner.vue'
 import DockerActionConfirmDialog from '@/components/docker/DockerActionConfirmDialog.vue'
@@ -78,6 +80,16 @@ const unavailable = ref(false)
 const stateFilter = ref<StateFilter>('all')
 const autoRefresh = ref(false)
 let refreshTimer: ReturnType<typeof setInterval> | null = null
+
+const { overview: resourcesOverview } = useDockerContainerResources()
+
+const resourcesByContainerId = computed((): Record<string, DockerContainerResourceMetrics> => {
+  const map: Record<string, DockerContainerResourceMetrics> = {}
+  for (const c of resourcesOverview.value?.containers ?? []) {
+    map[c.containerId] = c
+  }
+  return map
+})
 
 const REFRESH_INTERVAL_MS = 30_000
 
