@@ -1,3 +1,7 @@
+import { createWriteStream } from 'node:fs'
+import { unlink } from 'node:fs/promises'
+import { join } from 'node:path'
+import { pipeline } from 'node:stream/promises'
 import { createGzip } from 'node:zlib'
 import type { HttpContext } from '@adonisjs/core/http'
 import {
@@ -6,6 +10,8 @@ import {
   ImageInUseError,
 } from '#services/docker_manager_service'
 import { DockerEngineHttpClient } from '#services/docker_engine_http_client'
+import StorageDestination from '#models/storage_destination'
+import { StorageDestinationService } from '#services/storage_destination_service'
 
 const UNAVAILABLE = { success: true, available: false, data: [] } as const
 
@@ -129,6 +135,55 @@ export default class DockerManagerController {
       if (error instanceof VolumeInUseError) {
         return response.conflict({ message: error.message })
       }
+      throw error
+    }
+  }
+
+  /**
+   * POST /api/docker/volumes/:name/backup
+   * Faz backup do volume para um destino de armazenamento.
+   * Body: { storageId: number }
+   */
+  async backupVolumeToStorage({ params, request, response }: HttpContext) {
+    const name = params.name as string
+    const storageId = Number(request.input('storageId'))
+
+    if (!storageId) {
+      return response.badRequest({ success: false, message: 'storageId é obrigatório' })
+    }
+
+    const destination = await StorageDestination.find(storageId)
+    if (!destination) {
+      return response.notFound({
+        success: false,
+        message: 'Destino de armazenamento não encontrado',
+      })
+    }
+
+    const safeName = name.replace(/[^a-zA-Z0-9_-]/g, '_')
+    const date = new Date().toISOString().slice(0, 10)
+    const fileName = `volume-${safeName}-${date}.tar.gz`
+    const relativePath = join('docker-volumes', fileName)
+
+    const localBasePath = StorageDestinationService.getLocalBasePath(destination)
+    const localFullPath = join(localBasePath, relativePath)
+    StorageDestinationService.ensureLocalDirectory(localFullPath)
+
+    const { stream, cleanup } = await this.service.exportVolumeAsArchive(name)
+    try {
+      const gzip = createGzip()
+      await pipeline(stream, gzip, createWriteStream(localFullPath))
+      await cleanup()
+
+      const config = destination.getDecryptedConfig()
+      if (config && config.type !== 'local') {
+        await StorageDestinationService.uploadBackupFile(destination, relativePath, localFullPath)
+        await unlink(localFullPath)
+      }
+
+      return response.ok({ success: true, data: { fileName, relativePath } })
+    } catch (error) {
+      await cleanup()
       throw error
     }
   }

@@ -64,6 +64,7 @@ export type ScannedRoutes = {
     'docker_manager.list_volumes': { paramsTuple?: []; params?: {} }
     'docker_manager.inspect_volume': { paramsTuple: [ParamValue]; params: {'name': ParamValue} }
     'docker_manager.export_volume': { paramsTuple: [ParamValue]; params: {'name': ParamValue} }
+    'docker_manager.backup_volume_to_storage': { paramsTuple: [ParamValue]; params: {'name': ParamValue} }
     'docker_manager.remove_volume': { paramsTuple: [ParamValue]; params: {'name': ParamValue} }
     'docker_manager.list_networks': { paramsTuple?: []; params?: {} }
     'docker_manager.inspect_network': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
@@ -177,6 +178,7 @@ export type ScannedRoutes = {
     'docker_manager.start_container': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'docker_manager.stop_container': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'docker_manager.restart_container': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'docker_manager.backup_volume_to_storage': { paramsTuple: [ParamValue]; params: {'name': ParamValue} }
     'docker_manager.create_network': { paramsTuple?: []; params?: {} }
     'docker_manager.connect_container_to_network': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'docker_manager.disconnect_container_from_network': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }

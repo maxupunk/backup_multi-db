@@ -137,6 +137,13 @@ export const dockerVolumesApi = {
     const filename = `volume-${safeName}-${date}.tar.gz`
     downloadViaAnchor(`${BASE}/volumes/${encodeURIComponent(name)}/export`, filename)
   },
+
+  exportToStorage(name: string, storageId: number): Promise<{ fileName: string; relativePath: string }> {
+    return apiFetch<{ fileName: string; relativePath: string }>(
+      `${BASE}/volumes/${encodeURIComponent(name)}/backup`,
+      { method: 'POST', body: JSON.stringify({ storageId }) }
+    )
+  },
 }
 
 // ============================================================

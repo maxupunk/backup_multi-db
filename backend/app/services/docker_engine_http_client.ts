@@ -192,4 +192,43 @@ export class DockerEngineHttpClient {
       req.end()
     })
   }
+
+  /**
+   * Faz pull de uma imagem Docker consumindo o stream de progresso até o fim.
+   * Lança erro se o pull falhar.
+   */
+  async pullImage(image: string, timeoutMs = 120_000): Promise<void> {
+    const [repo, tag = 'latest'] = image.split(':')
+    const path = `/images/create?fromImage=${encodeURIComponent(repo)}&tag=${encodeURIComponent(tag)}`
+
+    return new Promise((resolve, reject) => {
+      const req = request(
+        { socketPath: this.socketPath, method: 'POST', path },
+        (res) => {
+          const status = res.statusCode ?? 0
+
+          if (status < 200 || status >= 300) {
+            let body = ''
+            res.on('data', (chunk: Buffer) => { body += chunk.toString() })
+            res.on('end', () =>
+              reject(new Error(`Falha ao baixar imagem "${image}": ${body || status}`))
+            )
+            return
+          }
+
+          // Consume newline-delimited JSON progress until stream ends
+          res.resume()
+          res.on('end', resolve)
+          res.on('error', reject)
+        }
+      )
+
+      req.setTimeout(timeoutMs, () => {
+        req.destroy(new Error(`Tempo limite ao baixar imagem "${image}"`))
+      })
+
+      req.on('error', reject)
+      req.end()
+    })
+  }
 }

@@ -169,6 +169,9 @@ router
               .get('volumes/:name/export', [DockerManagerController, 'exportVolume'])
               .use(middleware.rateLimit({ limiter: 'strict' }))
             router
+              .post('volumes/:name/backup', [DockerManagerController, 'backupVolumeToStorage'])
+              .use(middleware.rateLimit({ limiter: 'backup' }))
+            router
               .delete('volumes/:name', [DockerManagerController, 'removeVolume'])
               .use(middleware.rateLimit({ limiter: 'strict' }))
 

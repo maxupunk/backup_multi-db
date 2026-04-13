@@ -40,6 +40,7 @@
           <VolumeCard
             :loading="actionLoading"
             :volume="vol"
+            @backup="requestBackup"
             @detail="showDetail"
             @export="requestExport"
             @remove="requestRemove"
@@ -52,6 +53,14 @@
     </template>
 
     <VolumeDetailDialog v-model="detailDialog" :detail="selectedDetail" />
+
+    <VolumeBackupDialog
+      v-model="backupDialog"
+      :loading="actionLoading"
+      :volume-name="pendingBackupName"
+      @backup-download="handleBackupDownload"
+      @backup-storage="handleBackupStorage"
+    />
 
     <DockerActionConfirmDialog
       v-model="confirmDialog"
@@ -70,6 +79,7 @@ import { dockerVolumesApi } from '@/services/dockerService'
 import { useNotifier } from '@/composables/useNotifier'
 import VolumeCard from '@/components/docker/VolumeCard.vue'
 import VolumeDetailDialog from '@/components/docker/VolumeDetailDialog.vue'
+import VolumeBackupDialog from '@/components/docker/VolumeBackupDialog.vue'
 import DockerUnavailableBanner from '@/components/docker/DockerUnavailableBanner.vue'
 import DockerActionConfirmDialog from '@/components/docker/DockerActionConfirmDialog.vue'
 
@@ -80,8 +90,10 @@ const unavailable = ref(false)
 const search = ref('')
 const detailDialog = ref(false)
 const confirmDialog = ref(false)
+const backupDialog = ref(false)
 const selectedDetail = ref<DockerVolumeDetail | null>(null)
 let pendingRemoveName = ''
+const pendingBackupName = ref('')
 
 const notify = useNotifier()
 
@@ -115,8 +127,32 @@ async function showDetail(vol: DockerVolumeSummary) {
 }
 
 function requestExport(name: string) {
-  notify(`Iniciando exportação do volume "${name}"...`, 'info')
+  notify(`Iniciando download do volume "${name}"...`, 'info')
   dockerVolumesApi.exportVolume(name)
+}
+
+function requestBackup(name: string) {
+  pendingBackupName.value = name
+  backupDialog.value = true
+}
+
+function handleBackupDownload(name: string) {
+  backupDialog.value = false
+  notify(`Iniciando download do volume "${name}"...`, 'info')
+  dockerVolumesApi.exportVolume(name)
+}
+
+async function handleBackupStorage(name: string, storageId: number) {
+  actionLoading.value = true
+  try {
+    await dockerVolumesApi.exportToStorage(name, storageId)
+    notify(`Backup do volume "${name}" enviado com sucesso.`, 'success')
+  } catch (error) {
+    notify(error instanceof Error ? error.message : 'Erro ao fazer backup do volume.', 'error')
+  } finally {
+    actionLoading.value = false
+    backupDialog.value = false
+  }
 }
 
 function requestRemove(name: string) {

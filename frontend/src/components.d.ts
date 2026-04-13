@@ -47,6 +47,7 @@ declare module 'vue' {
     SystemInfoCard: typeof import('./components/system/SystemInfoCard.vue')['default']
     SystemResourceCharts: typeof import('./components/system/SystemResourceCharts.vue')['default']
     UsageLineChart: typeof import('./components/system/UsageLineChart.vue')['default']
+    VolumeBackupDialog: typeof import('./components/docker/VolumeBackupDialog.vue')['default']
     VolumeCard: typeof import('./components/docker/VolumeCard.vue')['default']
     VolumeDetailDialog: typeof import('./components/docker/VolumeDetailDialog.vue')['default']
   }

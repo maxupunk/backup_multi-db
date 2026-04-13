@@ -64,7 +64,7 @@
         </span>
       </v-list-subheader>
       <v-list-item v-for="sub in dockerSubItems" :key="sub.to" class="mb-1" color="primary" rounded="lg"
-        :title="sub.title" :to="sub.to">
+        :exact="sub.exact ?? false" :title="sub.title" :to="sub.to">
         <template #prepend>
           <v-badge v-if="dockerUnavailable && sub.to === '/docker'" color="warning" dot floating offset-x="2"
             offset-y="2">
@@ -125,7 +125,7 @@ const systemNavItems = computed(() => [
 ])
 
 const dockerSubItems = [
-  { title: 'Visão Geral', icon: 'mdi-docker', to: '/docker' },
+  { title: 'Visão Geral', icon: 'mdi-docker', to: '/docker', exact: true },
   { title: 'Containers', icon: 'mdi-cube-outline', to: '/docker/containers' },
   { title: 'Volumes', icon: 'mdi-database-outline', to: '/docker/volumes' },
   { title: 'Redes', icon: 'mdi-graph-outline', to: '/docker/networks' },

@@ -225,6 +225,19 @@ export class DockerManagerService {
   }
 
   /**
+   * Garante que a imagem esteja disponível localmente.
+   * Se não existir, faz pull automaticamente.
+   */
+  private async ensureImage(image: string): Promise<void> {
+    try {
+      await this.client.getJson(`/images/${encodeURIComponent(image)}/json`)
+    } catch {
+      // Imagem não encontrada — faz pull
+      await this.client.pullImage(image)
+    }
+  }
+
+  /**
    * Exporta o conteúdo de um volume como um stream tar.
    * Cria um container temporário com o volume montado, obtém o arquivo via Docker API
    * e retorna o stream junto com uma função de cleanup.
@@ -233,6 +246,9 @@ export class DockerManagerService {
     name: string
   ): Promise<{ stream: IncomingMessage; cleanup: () => Promise<void> }> {
     const containerName = `backup-vol-${randomUUID().slice(0, 8)}`
+
+    // Garante que a imagem alpine está disponível (baixa se necessário)
+    await this.ensureImage('alpine:latest')
 
     // Cria container temporário com alpine e o volume montado em /data
     const created = await this.client.postJson<{ Id?: string; Warnings?: string[] }>(
