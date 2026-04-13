@@ -96,6 +96,8 @@
               :range-hours="rangeHours"
               :color="resolveChartColor(resolveUsageColor(container.memory.usagePercent))"
               :height="84"
+              :raw-values="resolveContainerRawMemoryHistory()"
+              :raw-formatter="formatBytes"
             />
             <p class="text-caption text-medium-emphasis mt-2 mb-0">
               {{ formatBytes(container.memory.usageBytes) }} / {{ formatBytes(container.memory.limitBytes) }}
@@ -170,6 +172,12 @@ function resolveContainerHistory(metric: 'cpu' | 'memory', fallbackValue: number
   }
 
   return [0, fallbackValue]
+}
+
+function resolveContainerRawMemoryHistory(): number[] {
+  const values = props.historyPoints.map((point) => point.memoryUsedBytes)
+  if (values.length >= 2) return values
+  return [0, props.container.memory.usageBytes]
 }
 
 function resolveChartColor(color: string): string {

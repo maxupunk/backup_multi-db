@@ -54,7 +54,7 @@ import { computed, ref } from 'vue'
 const props = defineProps<{ env: string[] }>()
 
 const search = ref('')
-const showValues = ref(false)
+const showValues = ref(true)
 
 const parsed = computed(() =>
   props.env.map((line) => {

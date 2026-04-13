@@ -74,6 +74,7 @@
         >
           <span v-if="hoveredPoint.timeLabel" class="tooltip-time">{{ hoveredPoint.timeLabel }}</span>
           {{ hoveredPoint.value.toFixed(1) }}%
+          <span v-if="hoveredPoint.rawLabel" class="tooltip-raw">{{ hoveredPoint.rawLabel }}</span>
         </div>
       </div>
 
@@ -116,6 +117,8 @@ const props = withDefaults(defineProps<{
   rangeHours?: number
   color?: string
   height?: number
+  rawValues?: number[]
+  rawFormatter?: (value: number) => string
 }>(), {
   color: 'rgb(var(--v-theme-primary))',
   height: 110,
@@ -129,6 +132,7 @@ const hoveredPoint = ref<{
   value: number
   timeLabel: string
   tooltipLeft: number
+  rawLabel?: string
 } | null>(null)
 
 // Maps a percentage (0–100) to SVG Y coordinate
@@ -233,12 +237,18 @@ function handlePointerMove(event: MouseEvent): void {
 
   const ts = props.timestamps
 
+  const rawVal = props.rawValues?.[index]
+  const rawLabel = rawVal !== undefined && props.rawFormatter
+    ? props.rawFormatter(rawVal)
+    : undefined
+
   hoveredPoint.value = {
     x: point.x,
     y: point.y,
     value,
     timeLabel: ts?.[index] ? formatTooltipLabel(ts[index]!, props.rangeHours ?? 24) : '',
     tooltipLeft: pointerX,
+    rawLabel,
   }
 }
 
@@ -333,6 +343,13 @@ function clearHoveredPoint(): void {
   font-size: 10px;
   font-weight: 400;
   opacity: 0.8;
+}
+
+.tooltip-raw {
+  font-size: 10px;
+  font-weight: 500;
+  opacity: 0.85;
+  margin-top: 1px;
 }
 
 /* X-axis: labels positioned via left % */

@@ -49,8 +49,7 @@
     v-model="drawer"
     class="border-e"
     color="surface"
-    :permanent="mdAndUp"
-    :rail="mdAndUp && rail"
+    :rail="rail"
     :temporary="!mdAndUp"
   >
     <!-- Brand -->
@@ -178,6 +177,9 @@ async function checkDockerAvailability() {
 const drawer = ref(mdAndUp.value)
 const rail = ref(false)
 
+// 3-state cycle on desktop: full → icon-only → hidden
+// On mobile: simple toggle show/hide
+
 const isDark = computed(() => theme.global.current.value.dark)
 
 const pageTitle = computed(() => {
@@ -213,7 +215,18 @@ watch(
 
 function toggleDrawer() {
   if (mdAndUp.value) {
-    rail.value = !rail.value
+    if (!drawer.value) {
+      // Hidden → open full
+      drawer.value = true
+      rail.value = false
+    } else if (!rail.value) {
+      // Full → icon-only
+      rail.value = true
+    } else {
+      // Icon-only → hidden
+      drawer.value = false
+      rail.value = false
+    }
   } else {
     drawer.value = !drawer.value
   }

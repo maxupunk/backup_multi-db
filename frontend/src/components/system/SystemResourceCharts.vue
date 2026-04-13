@@ -44,6 +44,8 @@
               :range-hours="rangeHours"
               :color="resolveChartColor(metric.color)"
               :height="96"
+              :raw-values="metric.historyRawValues"
+              :raw-formatter="metric.rawFormatter"
             />
           </div>
 
@@ -86,6 +88,8 @@ type MetricCard = {
   percentage: number
   badge: string
   historyValues: number[]
+  historyRawValues?: number[]
+  rawFormatter?: (v: number) => string
   primaryValue: string
   secondaryLabel: string
   secondaryValue: string
@@ -127,6 +131,8 @@ const metricCards = computed<MetricCard[]>(() => {
       percentage: props.system.resources.memory.usagePercent,
       badge: `${formatBytes(props.system.resources.memory.freeBytes)} livre`,
       historyValues: resolveHistoryValues('memory'),
+      historyRawValues: resolveRawHistoryValues(),
+      rawFormatter: formatBytes,
       primaryValue: formatBytes(props.system.resources.memory.usedBytes),
       secondaryLabel: 'Total',
       secondaryValue: formatBytes(props.system.resources.memory.totalBytes),
@@ -154,6 +160,12 @@ function resolveHistoryValues(metric: 'cpu' | 'memory'): number[] {
   }
 
   return [0, metric === 'cpu' ? props.system?.resources.cpu.usagePercent ?? 0 : props.system?.resources.memory.usagePercent ?? 0]
+}
+
+function resolveRawHistoryValues(): number[] {
+  const values = props.history.map((point) => point.memoryUsedBytes)
+  if (values.length >= 2) return values
+  return [0, props.system?.resources.memory.usedBytes ?? 0]
 }
 
 function resolveChartColor(color: string): string {
