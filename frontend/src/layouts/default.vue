@@ -21,11 +21,7 @@
           </v-btn>
         </template>
         <v-list class="pa-2" rounded="lg">
-          <v-list-item
-            class="mb-2"
-            :subtitle="authStore.user.email"
-            :title="authStore.user.fullName || 'Usuário'"
-          >
+          <v-list-item class="mb-2" :subtitle="authStore.user.email" :title="authStore.user.fullName || 'Usuário'">
             <template #prepend>
               <v-avatar color="primary" size="44">
                 <span class="text-h6 font-weight-bold">{{ userInitials }}</span>
@@ -33,25 +29,13 @@
             </template>
           </v-list-item>
           <v-divider class="mb-2" />
-          <v-list-item
-            base-color="error"
-            prepend-icon="mdi-logout"
-            rounded="lg"
-            title="Sair"
-            @click="handleLogout"
-          />
+          <v-list-item base-color="error" prepend-icon="mdi-logout" rounded="lg" title="Sair" @click="handleLogout" />
         </v-list>
       </v-menu>
     </template>
   </v-app-bar>
 
-  <v-navigation-drawer
-    v-model="drawer"
-    class="border-e"
-    color="surface"
-    :rail="rail"
-    :temporary="!mdAndUp"
-  >
+  <v-navigation-drawer v-model="drawer" class="border-e" color="surface" :rail="rail" :temporary="!mdAndUp">
     <!-- Brand -->
     <v-list-item class="py-4" nav>
       <template #prepend>
@@ -67,6 +51,8 @@
 
     <!-- Navigation -->
     <v-list class="mt-2 px-2" density="compact" nav>
+      <!-- Main section -->
+      <v-list-subheader v-if="!rail">Principal</v-list-subheader>
       <v-list-item
         v-for="item in navItems"
         :key="item.to"
@@ -78,43 +64,56 @@
         :to="item.to"
       />
 
-      <!-- Docker Manager group -->
-      <v-list-group value="docker">
-        <template #activator="{ props }">
-          <v-list-item
-            class="mb-1"
-            color="primary"
-            rounded="lg"
-            title="Docker"
-            v-bind="props"
-          >
-            <template #prepend>
-              <v-badge
-                v-if="dockerUnavailable"
-                color="warning"
-                dot
-                floating
-                offset-x="2"
-                offset-y="2"
-              >
-                <v-icon>mdi-docker</v-icon>
-              </v-badge>
-              <v-icon v-else>mdi-docker</v-icon>
-            </template>
-          </v-list-item>
-        </template>
+      <!-- System section -->
+      <v-divider class="my-2" />
+      <v-list-subheader v-if="!rail">Sistema</v-list-subheader>
+      <v-list-item
+        v-for="item in systemNavItems"
+        :key="item.to"
+        class="mb-1"
+        color="primary"
+        :prepend-icon="item.icon"
+        rounded="lg"
+        :title="item.title"
+        :to="item.to"
+      />
 
-        <v-list-item
-          v-for="sub in dockerSubItems"
-          :key="sub.to"
-          class="mb-1"
-          color="primary"
-          :prepend-icon="sub.icon"
-          rounded="lg"
-          :title="sub.title"
-          :to="sub.to"
-        />
-      </v-list-group>
+      <!-- Docker section -->
+      <v-divider class="my-2" />
+      <v-list-subheader v-if="!rail">
+        <span class="d-flex align-center ga-1">
+          Docker
+          <v-icon
+            v-if="dockerUnavailable"
+            color="warning"
+            icon="mdi-alert"
+            size="14"
+          />
+        </span>
+      </v-list-subheader>
+      <v-list-item
+        v-for="sub in dockerSubItems"
+        :key="sub.to"
+        class="mb-1"
+        color="primary"
+        rounded="lg"
+        :title="sub.title"
+        :to="sub.to"
+      >
+        <template #prepend>
+          <v-badge
+            v-if="dockerUnavailable && sub.to === '/docker'"
+            color="warning"
+            dot
+            floating
+            offset-x="2"
+            offset-y="2"
+          >
+            <v-icon>{{ sub.icon }}</v-icon>
+          </v-badge>
+          <v-icon v-else>{{ sub.icon }}</v-icon>
+        </template>
+      </v-list-item>
     </v-list>
   </v-navigation-drawer>
 
@@ -145,14 +144,17 @@ const notificationStore = useNotificationStore()
 const router = useRouter()
 const route = useRoute()
 
-const navItems = computed(() => [
-  { title: 'Dashboard', icon: 'mdi-view-dashboard', to: '/' },
-  { title: 'Conexões', icon: 'mdi-database', to: '/connections' },
+const navItems = [
+  { title: 'Dashboard', icon: 'mdi-view-dashboard-outline', to: '/' },
+  { title: 'Conexões', icon: 'mdi-database-outline', to: '/connections' },
   { title: 'Backups', icon: 'mdi-backup-restore', to: '/backups' },
-  { title: 'Armazenamentos', icon: 'mdi-bucket', to: '/storages' },
+  { title: 'Armazenamentos', icon: 'mdi-bucket-outline', to: '/storages' },
+]
+
+const systemNavItems = computed(() => [
   { title: 'Auditoria', icon: 'mdi-history', to: '/audit' },
-  { title: 'Configurações', icon: 'mdi-cog', to: '/settings' },
-  ...(authStore.user?.isAdmin ? [{ title: 'Usuários', icon: 'mdi-account-group', to: '/users' }] : []),
+  ...(authStore.user?.isAdmin ? [{ title: 'Usuários', icon: 'mdi-account-group-outline', to: '/users' }] : []),
+  { title: 'Configurações', icon: 'mdi-cog-outline', to: '/settings' },
 ])
 
 const dockerSubItems = [
@@ -184,7 +186,8 @@ const isDark = computed(() => theme.global.current.value.dark)
 
 const pageTitle = computed(() => {
   const allItems = [
-    ...navItems.value,
+    ...navItems,
+    ...systemNavItems.value,
     ...dockerSubItems,
   ]
   const sortedItems = [...allItems].sort((a, b) => b.to.length - a.to.length)

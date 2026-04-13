@@ -1,4 +1,5 @@
 import { DateTime } from 'luxon'
+import db from '@adonisjs/lucid/services/db'
 import ResourceMetricHistory from '#models/resource_metric_history'
 import type { DockerContainerResourceOverview } from '#services/docker_container_monitoring_service'
 import type { SystemResourceMetrics } from '#services/system_monitoring_service'
@@ -91,23 +92,55 @@ export class ResourceMetricsHistoryService {
   }
 
   static async getHistory(rangeHours = 24): Promise<ResourceMetricsHistoryResponse> {
+    const MAX_POINTS = 300
     const boundedHours = Math.max(1, Math.min(rangeHours, this.RETENTION_DAYS * 24))
     const startAt = DateTime.now().minus({ hours: boundedHours })
 
-    const rows = await ResourceMetricHistory.query()
-      .where('collected_at', '>=', startAt.toSQL())
-      .orderBy('collected_at', 'asc')
+    // Bucket rows at the SQL level so we never return more than MAX_POINTS per
+    // entity.  This prevents Cloudflare 502 timeouts when fetching long ranges
+    // (7d / 15d) that would otherwise produce tens-of-thousands of raw rows.
+    const bucketSeconds = Math.max(60, Math.ceil((boundedHours * 3600) / MAX_POINTS))
+
+    type RawRow = {
+      scope: 'system' | 'container'
+      entity_id: string | null
+      entity_name: string | null
+      cpu_usage_percent: number
+      memory_usage_percent: number
+      memory_used_bytes: number
+      memory_total_bytes: number
+      bucket_time: string
+    }
+
+    const rows = (await db
+      .from('resource_metric_history')
+      .select('scope', 'entity_id', 'entity_name')
+      .select(
+        db.raw('AVG(cpu_usage_percent) as cpu_usage_percent'),
+        db.raw('AVG(memory_usage_percent) as memory_usage_percent'),
+        db.raw('CAST(AVG(memory_used_bytes) AS INTEGER) as memory_used_bytes'),
+        db.raw('CAST(AVG(memory_total_bytes) AS INTEGER) as memory_total_bytes'),
+        db.raw(
+          `datetime(CAST(strftime('%s', collected_at) / ? AS INTEGER) * ?, 'unixepoch') as bucket_time`,
+          [bucketSeconds, bucketSeconds]
+        )
+      )
+      .where('collected_at', '>=', startAt.toISO())
+      .groupByRaw(`scope, entity_id, CAST(strftime('%s', collected_at) / ? AS INTEGER)`, [
+        bucketSeconds,
+      ])
+      .orderByRaw('scope, entity_id, bucket_time')) as RawRow[]
 
     const system: ResourceHistoryPoint[] = []
     const containerMap = new Map<string, ContainerResourceHistory>()
 
     for (const row of rows) {
       const point: ResourceHistoryPoint = {
-        timestamp: row.collectedAt.toISO() ?? DateTime.now().toISO() ?? '',
-        cpuUsagePercent: row.cpuUsagePercent,
-        memoryUsagePercent: row.memoryUsagePercent,
-        memoryUsedBytes: row.memoryUsedBytes,
-        memoryTotalBytes: row.memoryTotalBytes,
+        timestamp: row.bucket_time.replace(' ', 'T') + '.000Z',
+        cpuUsagePercent: Number(row.cpu_usage_percent),
+        memoryUsagePercent: Number(row.memory_usage_percent),
+        memoryUsedBytes: Number(row.memory_used_bytes),
+        memoryTotalBytes: Number(row.memory_total_bytes),
       }
 
       if (row.scope === 'system') {
@@ -115,7 +148,7 @@ export class ResourceMetricsHistoryService {
         continue
       }
 
-      const containerId = row.entityId ?? 'unknown'
+      const containerId = row.entity_id ?? 'unknown'
       const existing = containerMap.get(containerId)
 
       if (existing) {
@@ -125,7 +158,7 @@ export class ResourceMetricsHistoryService {
 
       containerMap.set(containerId, {
         containerId,
-        containerName: row.entityName ?? containerId,
+        containerName: row.entity_name ?? containerId,
         points: [point],
       })
     }
