@@ -16,7 +16,7 @@ type BroadcastableValue =
   | BroadcastableValue[]
 
 /**
- * Emite métricas de CPU e RAM via SSE a cada ~1 segundo.
+ * Emite métricas de CPU e RAM via SSE a cada ~5 segundos.
  *
  * Responsabilidade única: fazer polling das métricas de sistema e
  * broadcastar para o canal `notifications/system-resources`.
@@ -25,7 +25,7 @@ type BroadcastableValue =
  * da aplicação (start/transmit.ts).
  */
 export class SystemResourceEmitter {
-  private static readonly INTERVAL_MS = 1_000
+  private static readonly INTERVAL_MS = 5_000
   private static intervalHandle: ReturnType<typeof setInterval> | null = null
 
   /**
