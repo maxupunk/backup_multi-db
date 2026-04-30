@@ -137,6 +137,59 @@ export class S3ExplorerAdapter implements StorageExplorerAdapter {
     })
   }
 
+  async deleteObject(
+    config: StorageDestinationConfig,
+    key: string,
+    isDirectory: boolean
+  ): Promise<void> {
+    this.assertS3Config(config)
+    const { DeleteObjectCommand, DeleteObjectsCommand, ListObjectsV2Command } =
+      await import('@aws-sdk/client-s3')
+    const client = await this.getClient(config)
+
+    if (!isDirectory) {
+      await client.send(
+        new DeleteObjectCommand({
+          Bucket: config.bucket,
+          Key: key,
+        })
+      )
+      return
+    }
+
+    const prefix = key.endsWith('/') ? key : `${key}/`
+    let continuationToken: string | undefined
+
+    do {
+      const response = await client.send(
+        new ListObjectsV2Command({
+          Bucket: config.bucket,
+          Prefix: prefix,
+          ContinuationToken: continuationToken,
+        })
+      )
+
+      const keys = (response.Contents ?? [])
+        .map((item) => item.Key)
+        .filter((value): value is string => Boolean(value))
+
+      for (let index = 0; index < keys.length; index += 1000) {
+        const chunk = keys.slice(index, index + 1000)
+
+        await client.send(
+          new DeleteObjectsCommand({
+            Bucket: config.bucket,
+            Delete: {
+              Objects: chunk.map((itemKey) => ({ Key: itemKey })),
+            },
+          })
+        )
+      }
+
+      continuationToken = response.NextContinuationToken
+    } while (continuationToken)
+  }
+
   async testConnection(config: StorageDestinationConfig): Promise<void> {
     this.assertS3Config(config)
     const { ListObjectsV2Command } = await import('@aws-sdk/client-s3')

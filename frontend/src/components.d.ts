@@ -41,6 +41,7 @@ declare module 'vue' {
     RestoreProgressOverlay: typeof import('./components/RestoreProgressOverlay.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
+    StorageExplorerDeleteDialog: typeof import('./components/storages/StorageExplorerDeleteDialog.vue')['default']
     StorageFormFields: typeof import('./components/storages/StorageFormFields.vue')['default']
     StorageProviderIcon: typeof import('./components/storages/StorageProviderIcon.vue')['default']
     StorageTestButton: typeof import('./components/storages/StorageTestButton.vue')['default']

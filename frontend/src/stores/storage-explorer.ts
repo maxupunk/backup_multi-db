@@ -55,6 +55,15 @@ export const useStorageExplorerStore = defineStore('storage-explorer', () => {
     }
   }
 
+  async function removeObject (key: string, isDirectory: boolean) {
+    if (storageId.value === null) {
+      throw new Error('Nenhum armazenamento selecionado')
+    }
+
+    await storagesApi.deleteObject(storageId.value, { key, isDirectory })
+    await browse(storageId.value, currentPath.value)
+  }
+
   function navigateTo (path: string) {
     if (storageId.value !== null) {
       browse(storageId.value, path)
@@ -97,6 +106,7 @@ export const useStorageExplorerStore = defineStore('storage-explorer', () => {
     hasMore,
     breadcrumbs,
     browse,
+    removeObject,
     navigateTo,
     navigateUp,
     loadMore,

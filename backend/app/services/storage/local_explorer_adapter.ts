@@ -1,5 +1,6 @@
 import { existsSync, statSync, readdirSync } from 'node:fs'
-import { join } from 'node:path'
+import { rm, unlink } from 'node:fs/promises'
+import { isAbsolute, join, relative, resolve } from 'node:path'
 import { getBackupStoragePath } from '#config/storage_paths'
 import type { StorageDestinationConfig } from '#models/storage_destination'
 import type { StorageExplorerAdapter } from './storage_explorer_adapter.js'
@@ -18,15 +19,19 @@ export class LocalExplorerAdapter implements StorageExplorerAdapter {
   }
 
   private getBasePath(config: Extract<StorageDestinationConfig, { type: 'local' }>): string {
-    return config.basePath?.trim() || getBackupStoragePath()
+    return resolve(config.basePath?.trim() || getBackupStoragePath())
   }
 
   private resolveSafePath(basePath: string, subPath: string): string {
-    const resolved = join(basePath, subPath)
+    const resolvedBasePath = resolve(basePath)
+    const resolved = resolve(resolvedBasePath, subPath || '.')
+    const relativePath = relative(resolvedBasePath, resolved)
+
     // Previne path traversal
-    if (!resolved.startsWith(basePath)) {
+    if (relativePath.startsWith('..') || isAbsolute(relativePath)) {
       throw new Error('Acesso negado: tentativa de path traversal')
     }
+
     return resolved
   }
 
@@ -52,7 +57,7 @@ export class LocalExplorerAdapter implements StorageExplorerAdapter {
       if (count >= limit) break
 
       const fullPath = join(targetPath, entry.name)
-      const relativePath = fullPath.replace(basePath, '').replace(/\\/g, '/')
+      const relativePath = relative(basePath, fullPath).replace(/\\/g, '/')
       const isDir = entry.isDirectory()
 
       let stat = null
@@ -109,6 +114,31 @@ export class LocalExplorerAdapter implements StorageExplorerAdapter {
     _expiresInSeconds: number
   ): Promise<string> {
     throw new Error('Presigned URLs não são suportadas para armazenamento local')
+  }
+
+  async deleteObject(
+    config: StorageDestinationConfig,
+    key: string,
+    isDirectory: boolean
+  ): Promise<void> {
+    this.assertLocalConfig(config)
+    const basePath = this.getBasePath(config)
+    const fullPath = this.resolveSafePath(basePath, key)
+
+    if (fullPath === basePath) {
+      throw new Error('Não é permitido excluir a raiz do armazenamento')
+    }
+
+    if (!existsSync(fullPath)) {
+      throw new Error(`${isDirectory ? 'Diretório' : 'Arquivo'} não encontrado: ${key}`)
+    }
+
+    if (isDirectory) {
+      await rm(fullPath, { recursive: true, force: false })
+      return
+    }
+
+    await unlink(fullPath)
   }
 
   async testConnection(config: StorageDestinationConfig): Promise<void> {

@@ -30,6 +30,12 @@ export interface StorageExplorerAdapter {
   ): Promise<string>
 
   /**
+   * Exclui um arquivo ou pasta do storage.
+   * Quando `isDirectory=true`, a implementação deve remover o conteúdo recursivamente.
+   */
+  deleteObject(config: StorageDestinationConfig, key: string, isDirectory: boolean): Promise<void>
+
+  /**
    * Testa conectividade com o storage
    */
   testConnection(config: StorageDestinationConfig): Promise<void>

@@ -693,6 +693,11 @@ export interface BrowseResult {
   path: string
 }
 
+export interface DeleteStorageObjectPayload {
+  key: string
+  isDirectory: boolean
+}
+
 // ==================== Docker Manager ====================
 
 export interface DockerContainerPort {

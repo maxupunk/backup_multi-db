@@ -106,6 +106,26 @@ export class SftpExplorerAdapter implements StorageExplorerAdapter {
     throw new Error('Presigned URLs não são suportadas para SFTP')
   }
 
+  async deleteObject(
+    config: StorageDestinationConfig,
+    key: string,
+    isDirectory: boolean
+  ): Promise<void> {
+    this.assertSftpConfig(config)
+    const client = await this.connect(config)
+
+    try {
+      if (isDirectory) {
+        await client.rmdir(key, true)
+        return
+      }
+
+      await client.delete(key)
+    } finally {
+      await client.end()
+    }
+  }
+
   async testConnection(config: StorageDestinationConfig): Promise<void> {
     this.assertSftpConfig(config)
     const client = await this.connect(config)

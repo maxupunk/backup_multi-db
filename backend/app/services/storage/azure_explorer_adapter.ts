@@ -147,6 +147,26 @@ export class AzureExplorerAdapter implements StorageExplorerAdapter {
     return `${blob.url}?${sas.toString()}`
   }
 
+  async deleteObject(
+    config: StorageDestinationConfig,
+    key: string,
+    isDirectory: boolean
+  ): Promise<void> {
+    this.assertAzureConfig(config)
+    const container = await this.getContainerClient(config)
+
+    if (!isDirectory) {
+      await container.deleteBlob(key)
+      return
+    }
+
+    const prefix = key.endsWith('/') ? key : `${key}/`
+
+    for await (const blob of container.listBlobsFlat({ prefix })) {
+      await container.deleteBlob(blob.name)
+    }
+  }
+
   async testConnection(config: StorageDestinationConfig): Promise<void> {
     this.assertAzureConfig(config)
     const container = await this.getContainerClient(config)

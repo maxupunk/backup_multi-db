@@ -93,15 +93,28 @@
       </template>
 
       <template #item.actions="{ item }">
-        <v-menu v-if="!item.isDirectory" location="bottom end">
+        <v-menu location="bottom end">
           <template #activator="{ props: menuProps }">
-            <v-btn icon="mdi-dots-vertical" size="small" variant="text" v-bind="menuProps" />
+            <v-btn
+              icon="mdi-dots-vertical"
+              size="small"
+              variant="text"
+              v-bind="menuProps"
+              @click.stop
+            />
           </template>
           <v-list density="compact">
             <v-list-item
+              v-if="!item.isDirectory"
               prepend-icon="mdi-information"
               title="Detalhes"
-              @click="emit('show-details', item)"
+              @click.stop="emit('show-details', item)"
+            />
+            <v-list-item
+              base-color="error"
+              prepend-icon="mdi-delete"
+              :title="item.isDirectory ? 'Excluir pasta' : 'Excluir arquivo'"
+              @click.stop="openDeleteDialog(item)"
             />
           </v-list>
         </v-menu>
@@ -127,25 +140,40 @@
         </div>
       </template>
     </v-data-table>
+
+    <StorageExplorerDeleteDialog
+      v-model="deleteDialog"
+      :loading="deleteLoading"
+      :target="objectToDelete"
+      @cancel="deleteDialog = false"
+      @confirm="deleteObject"
+    />
   </div>
 </template>
 
 <script lang="ts" setup>
 import type { BucketObject } from '@/types/api'
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useDisplay } from 'vuetify'
+import { ApiError } from '@/services/api'
+import { useNotifier } from '@/composables/useNotifier'
 import { useStorageExplorerStore } from '@/stores/storage-explorer'
 import { getFileIcon } from '@/ui/storage'
 import { formatDateTimePtBR, formatFileSize } from '@/utils/format'
+import StorageExplorerDeleteDialog from '@/components/storages/StorageExplorerDeleteDialog.vue'
 
 const { mdAndUp } = useDisplay()
 const explorerStore = useStorageExplorerStore()
+const notify = useNotifier()
 
 const emit = defineEmits<{
   'show-details': [object: BucketObject]
 }>()
 
 const searchFilter = ref('')
+const deleteDialog = ref(false)
+const deleteLoading = ref(false)
+const objectToDelete = ref<BucketObject | null>(null)
 
 const headers = [
   { title: 'Nome', key: 'name', sortable: true },
@@ -167,6 +195,36 @@ function handleRowClick (_event: Event, row: { item: BucketObject }) {
     explorerStore.navigateTo(row.item.key)
   }
 }
+
+function openDeleteDialog (item: BucketObject) {
+  objectToDelete.value = item
+  deleteDialog.value = true
+}
+
+async function deleteObject () {
+  if (!objectToDelete.value) return
+
+  const target = objectToDelete.value
+  deleteLoading.value = true
+
+  try {
+    await explorerStore.removeObject(target.key, target.isDirectory)
+    notify(target.isDirectory ? 'Pasta excluída com sucesso' : 'Arquivo excluído com sucesso', 'success')
+    deleteDialog.value = false
+  } catch (error) {
+    const fallbackMessage = target.isDirectory ? 'Erro ao excluir pasta' : 'Erro ao excluir arquivo'
+    const message = error instanceof ApiError ? error.message : fallbackMessage
+    notify(message, 'error')
+  } finally {
+    deleteLoading.value = false
+  }
+}
+
+watch(deleteDialog, (opened) => {
+  if (!opened) {
+    objectToDelete.value = null
+  }
+})
 </script>
 
 <style scoped>

@@ -8,20 +8,7 @@ import { BaseModel, column } from '@adonisjs/lucid/orm'
 import { DateTime } from 'luxon'
 
 export class AuditLogSchema extends BaseModel {
-  static $columns = [
-    'action',
-    'createdAt',
-    'description',
-    'details',
-    'entityId',
-    'entityName',
-    'entityType',
-    'errorMessage',
-    'id',
-    'ipAddress',
-    'status',
-    'userAgent',
-  ] as const
+  static $columns = ['action', 'createdAt', 'description', 'details', 'entityId', 'entityName', 'entityType', 'errorMessage', 'id', 'ipAddress', 'status', 'userAgent'] as const
   $columns = AuditLogSchema.$columns
   @column()
   declare action: string
@@ -50,18 +37,7 @@ export class AuditLogSchema extends BaseModel {
 }
 
 export class AuthAccessTokenSchema extends BaseModel {
-  static $columns = [
-    'abilities',
-    'createdAt',
-    'expiresAt',
-    'hash',
-    'id',
-    'lastUsedAt',
-    'name',
-    'tokenableId',
-    'type',
-    'updatedAt',
-  ] as const
+  static $columns = ['abilities', 'createdAt', 'expiresAt', 'hash', 'id', 'lastUsedAt', 'name', 'tokenableId', 'type', 'updatedAt'] as const
   $columns = AuthAccessTokenSchema.$columns
   @column()
   declare abilities: string
@@ -86,30 +62,7 @@ export class AuthAccessTokenSchema extends BaseModel {
 }
 
 export class BackupSchema extends BaseModel {
-  static $columns = [
-    'checksum',
-    'compressed',
-    'connectionDatabaseId',
-    'connectionId',
-    'createdAt',
-    'databaseName',
-    'durationSeconds',
-    'errorMessage',
-    'exitCode',
-    'fileName',
-    'filePath',
-    'fileSize',
-    'finishedAt',
-    'id',
-    'metadata',
-    'protected',
-    'retentionType',
-    'startedAt',
-    'status',
-    'storageDestinationId',
-    'trigger',
-    'updatedAt',
-  ] as const
+  static $columns = ['checksum', 'compressed', 'connectionDatabaseId', 'connectionId', 'createdAt', 'databaseName', 'durationSeconds', 'errorMessage', 'exitCode', 'fileName', 'filePath', 'fileSize', 'finishedAt', 'id', 'metadata', 'protected', 'retentionType', 'startedAt', 'status', 'storageDestinationId', 'trigger', 'updatedAt'] as const
   $columns = BackupSchema.$columns
   @column()
   declare checksum: string | null
@@ -158,14 +111,7 @@ export class BackupSchema extends BaseModel {
 }
 
 export class ConnectionDatabaseSchema extends BaseModel {
-  static $columns = [
-    'connectionId',
-    'createdAt',
-    'databaseName',
-    'enabled',
-    'id',
-    'updatedAt',
-  ] as const
+  static $columns = ['connectionId', 'createdAt', 'databaseName', 'enabled', 'id', 'updatedAt'] as const
   $columns = ConnectionDatabaseSchema.$columns
   @column()
   declare connectionId: number
@@ -182,25 +128,7 @@ export class ConnectionDatabaseSchema extends BaseModel {
 }
 
 export class ConnectionSchema extends BaseModel {
-  static $columns = [
-    'createdAt',
-    'host',
-    'id',
-    'lastBackupAt',
-    'lastError',
-    'lastTestedAt',
-    'name',
-    'options',
-    'passwordEncrypted',
-    'port',
-    'scheduleEnabled',
-    'scheduleFrequency',
-    'status',
-    'storageDestinationId',
-    'type',
-    'updatedAt',
-    'username',
-  ] as const
+  static $columns = ['createdAt', 'host', 'id', 'lastBackupAt', 'lastError', 'lastTestedAt', 'name', 'options', 'passwordEncrypted', 'port', 'scheduleEnabled', 'scheduleFrequency', 'status', 'storageDestinationId', 'type', 'updatedAt', 'username'] as const
   $columns = ConnectionSchema.$columns
   @column.dateTime({ autoCreate: true })
   declare createdAt: DateTime
@@ -239,19 +167,7 @@ export class ConnectionSchema extends BaseModel {
 }
 
 export class ResourceMetricHistorySchema extends BaseModel {
-  static $columns = [
-    'collectedAt',
-    'cpuUsagePercent',
-    'createdAt',
-    'entityId',
-    'entityName',
-    'id',
-    'memoryTotalBytes',
-    'memoryUsagePercent',
-    'memoryUsedBytes',
-    'scope',
-    'updatedAt',
-  ] as const
+  static $columns = ['collectedAt', 'cpuUsagePercent', 'createdAt', 'entityId', 'entityName', 'id', 'memoryTotalBytes', 'memoryUsagePercent', 'memoryUsedBytes', 'scope', 'updatedAt'] as const
   $columns = ResourceMetricHistorySchema.$columns
   @column.dateTime()
   declare collectedAt: DateTime
@@ -278,17 +194,7 @@ export class ResourceMetricHistorySchema extends BaseModel {
 }
 
 export class StorageDestinationSchema extends BaseModel {
-  static $columns = [
-    'configEncrypted',
-    'createdAt',
-    'id',
-    'isDefault',
-    'name',
-    'provider',
-    'status',
-    'type',
-    'updatedAt',
-  ] as const
+  static $columns = ['configEncrypted', 'createdAt', 'id', 'isDefault', 'name', 'provider', 'status', 'type', 'updatedAt'] as const
   $columns = StorageDestinationSchema.$columns
   @column()
   declare configEncrypted: string
@@ -326,16 +232,7 @@ export class SystemSettingSchema extends BaseModel {
 }
 
 export class UserSchema extends BaseModel {
-  static $columns = [
-    'createdAt',
-    'email',
-    'fullName',
-    'id',
-    'isActive',
-    'isAdmin',
-    'password',
-    'updatedAt',
-  ] as const
+  static $columns = ['createdAt', 'email', 'fullName', 'id', 'isActive', 'isAdmin', 'password', 'updatedAt'] as const
   $columns = UserSchema.$columns
   @column.dateTime({ autoCreate: true })
   declare createdAt: DateTime

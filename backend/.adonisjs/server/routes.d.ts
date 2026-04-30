@@ -33,6 +33,7 @@ export type ScannedRoutes = {
     'storages.destroy': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'storages.test': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'storages.browse': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'storages.destroy_object': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'storages.start_copy': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'storages.start_archive': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'connections.test': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
@@ -210,6 +211,7 @@ export type ScannedRoutes = {
     'connections.destroy': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'storage_destinations.destroy': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'storages.destroy': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'storages.destroy_object': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'backups.destroy': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'docker_manager.remove_container': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'docker_manager.remove_volume': { paramsTuple: [ParamValue]; params: {'name': ParamValue} }

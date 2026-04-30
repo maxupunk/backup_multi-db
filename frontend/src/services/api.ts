@@ -22,6 +22,7 @@ import type {
   CreateConnectionPayload,
   CreateStorageDestinationPayload,
   CreateStoragePayload,
+  DeleteStorageObjectPayload,
   DashboardStats,
   DockerContainerResourceOverview,
   DockerHostsResponseData,
@@ -749,6 +750,13 @@ export const storagesApi = {
     return request<ApiResponse<BrowseResult>>(
       `/storages/${id}/browse${query ? `?${query}` : ''}`,
     )
+  },
+
+  async deleteObject (id: number, payload: DeleteStorageObjectPayload): Promise<ApiResponse> {
+    return request<ApiResponse>(`/storages/${id}/object`, {
+      method: 'DELETE',
+      body: JSON.stringify(payload),
+    })
   },
 
   async startCopy (id: number, payload: CopyStoragePayload): Promise<ApiResponse<{ jobId: string }>> {

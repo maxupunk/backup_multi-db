@@ -13,13 +13,23 @@ const DEFAULT_PRESIGNED_URL_EXPIRES = 15 * 60 // 15 minutos
 /**
  * Serviço de exploração de buckets/storages.
  *
- * Responsabilidade única: listar objetos, obter metadados e gerar URLs pre-assinadas
- * para qualquer storage cadastrado no sistema.
+ * Responsabilidade única: listar objetos, obter metadados, excluir itens e gerar URLs
+ * pre-assinadas para qualquer storage cadastrado no sistema.
  *
  * O adapter correto é resolvido via factory pelo provider/type do storage.
  */
 export class BucketExplorerService {
   private static readonly adapters: Map<string, StorageExplorerAdapter> = new Map()
+
+  private static assertDeletableKey(key: string): string {
+    const normalizedKey = key.trim()
+
+    if (!normalizedKey || normalizedKey === '/' || normalizedKey === '.') {
+      throw new Error('Não é permitido excluir a raiz do armazenamento')
+    }
+
+    return normalizedKey
+  }
 
   private static getAdapter(provider: StorageProvider): StorageExplorerAdapter {
     if (this.adapters.has(provider)) {
@@ -96,6 +106,23 @@ export class BucketExplorerService {
     const provider = storage.getEffectiveProvider()
     const adapter = this.getAdapter(provider)
     return adapter.getPresignedUrl(config, key, expiresInSeconds)
+  }
+
+  static async deleteObject(
+    storage: StorageDestination,
+    key: string,
+    isDirectory: boolean
+  ): Promise<void> {
+    const config = storage.getDecryptedConfig()
+    if (!config) {
+      throw new Error('Configuração do storage inválida ou ausente')
+    }
+
+    const provider = storage.getEffectiveProvider()
+    const adapter = this.getAdapter(provider)
+    const normalizedKey = this.assertDeletableKey(key)
+
+    return adapter.deleteObject(config, normalizedKey, isDirectory)
   }
 
   static async testConnection(storage: StorageDestination): Promise<void> {

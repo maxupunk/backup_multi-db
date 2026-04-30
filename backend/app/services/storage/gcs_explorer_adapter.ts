@@ -132,6 +132,24 @@ export class GcsExplorerAdapter implements StorageExplorerAdapter {
     return url
   }
 
+  async deleteObject(
+    config: StorageDestinationConfig,
+    key: string,
+    isDirectory: boolean
+  ): Promise<void> {
+    this.assertGcsConfig(config)
+    const storage = await this.getStorage(config)
+    const bucket = storage.bucket(config.bucket)
+
+    if (!isDirectory) {
+      await bucket.file(key).delete()
+      return
+    }
+
+    const prefix = key.endsWith('/') ? key : `${key}/`
+    await bucket.deleteFiles({ prefix, force: true })
+  }
+
   async testConnection(config: StorageDestinationConfig): Promise<void> {
     this.assertGcsConfig(config)
     const storage = await this.getStorage(config)

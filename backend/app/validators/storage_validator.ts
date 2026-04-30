@@ -196,6 +196,13 @@ export const browseStorageValidator = vine.compile(
   })
 )
 
+export const deleteStorageObjectValidator = vine.compile(
+  vine.object({
+    key: vine.string().trim().minLength(1),
+    isDirectory: vine.boolean(),
+  })
+)
+
 // ==================== Copy Storage ====================
 
 export const copyStorageValidator = vine.compile(

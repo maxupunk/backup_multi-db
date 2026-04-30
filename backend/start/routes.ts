@@ -92,6 +92,7 @@ router
           .use(middleware.rateLimit({ limiter: 'strict' }))
 
         router.get('storages/:id/browse', [StoragesController, 'browse'])
+        router.delete('storages/:id/object', [StoragesController, 'destroyObject'])
 
         router
           .post('storages/:id/copy', [StoragesController, 'startCopy'])

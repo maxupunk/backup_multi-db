@@ -11,6 +11,7 @@ import {
   updateStorageValidator,
   listStoragesValidator,
   browseStorageValidator,
+  deleteStorageObjectValidator,
   copyStorageValidator,
   archiveStorageValidator,
 } from '#validators/storage_validator'
@@ -373,6 +374,53 @@ export default class StoragesController {
       return response.unprocessableEntity({
         success: false,
         message: `Erro ao explorar armazenamento: ${err.message}`,
+      })
+    }
+  }
+
+  async destroyObject(ctx: HttpContext) {
+    const { params, request, response } = ctx
+    const storage = await StorageDestination.find(params.id)
+
+    if (!storage) {
+      return response.notFound({
+        success: false,
+        message: 'Armazenamento não encontrado',
+      })
+    }
+
+    const payload = await request.validateUsing(deleteStorageObjectValidator)
+
+    try {
+      await BucketExplorerService.deleteObject(storage, payload.key, payload.isDirectory)
+
+      await AuditService.log(
+        {
+          action: 'settings.updated',
+          entityType: 'settings',
+          entityId: storage.id,
+          entityName: storage.name,
+          description: `${payload.isDirectory ? 'Pasta' : 'Arquivo'} "${payload.key}" removid${payload.isDirectory ? 'a' : 'o'} do armazenamento "${storage.name}"`,
+          details: {
+            metadata: {
+              key: payload.key,
+              isDirectory: payload.isDirectory,
+            },
+          },
+        },
+        ctx
+      )
+
+      return response.ok({
+        success: true,
+        message: payload.isDirectory
+          ? 'Pasta excluída com sucesso'
+          : 'Arquivo excluído com sucesso',
+      })
+    } catch (err: any) {
+      return response.unprocessableEntity({
+        success: false,
+        message: `Erro ao excluir ${payload.isDirectory ? 'pasta' : 'arquivo'}: ${err.message}`,
       })
     }
   }
