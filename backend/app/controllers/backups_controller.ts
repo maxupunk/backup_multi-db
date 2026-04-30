@@ -260,16 +260,9 @@ export default class BackupsController {
       })
     }
 
-    if (!backup.connection) {
-      return response.unprocessableEntity({
-        success: false,
-        message: 'Conexão associada ao backup não encontrada',
-      })
-    }
-
     // Resolver conexão de destino (pode ser diferente da origem)
     // Cast necessário: Lucid declara o campo como BelongsTo<T>, mas após preload o valor é a instância da conexão
-    let targetConnection = backup.connection as unknown as Connection
+    let targetConnection = backup.connection ? (backup.connection as unknown as Connection) : null
 
     if (payload.targetConnectionId && payload.targetConnectionId !== backup.connectionId) {
       const specifiedConnection = await Connection.find(payload.targetConnectionId)
@@ -281,7 +274,7 @@ export default class BackupsController {
         })
       }
 
-      if (specifiedConnection.type !== backup.connection.type) {
+      if (backup.connection && specifiedConnection.type !== backup.connection.type) {
         return response.unprocessableEntity({
           success: false,
           message: `O tipo da conexão de destino (${specifiedConnection.type}) deve ser igual ao da conexão original do backup (${backup.connection.type})`,
@@ -289,6 +282,14 @@ export default class BackupsController {
       }
 
       targetConnection = specifiedConnection
+    }
+
+    if (!targetConnection) {
+      return response.unprocessableEntity({
+        success: false,
+        message:
+          'Conexão associada ao backup não encontrada. Selecione uma conexão de destino para restaurar este backup importado.',
+      })
     }
 
     const options: RestoreOptions = {

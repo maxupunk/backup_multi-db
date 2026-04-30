@@ -3,6 +3,7 @@ import User from '#models/user'
 import Connection from '#models/connection'
 import ConnectionDatabase from '#models/connection_database'
 import Backup from '#models/backup'
+import { RestoreService, type RestoreResult } from '#services/restore_service'
 import { DateTime } from 'luxon'
 
 test.group('Backups', (group) => {
@@ -157,6 +158,55 @@ test.group('Backups', (group) => {
     const check = await Backup.find(backup.id)
     if (check) {
       throw new Error('Backup should be deleted')
+    }
+  })
+
+  test('restore imported backup using selected target connection', async ({ client }) => {
+    const importedBackup = await Backup.create({
+      connectionId: null,
+      connectionDatabaseId: null,
+      databaseName: 'imported_db',
+      status: 'completed',
+      startedAt: DateTime.now(),
+      finishedAt: DateTime.now(),
+      filePath: 'imported_backup.sql',
+      fileName: 'imported_backup.sql',
+      fileSize: 1024,
+      trigger: 'manual',
+      metadata: {
+        isImported: true,
+      },
+    })
+
+    const originalRestore = RestoreService.prototype.restore
+    RestoreService.prototype.restore = async function stubRestore(): Promise<RestoreResult> {
+      return {
+        success: true,
+        databaseName: 'imported_db',
+        durationSeconds: 0,
+      }
+    }
+
+    try {
+      const token = await User.accessTokens.create(user)
+      const response = await client
+        .post(`/api/backups/${importedBackup.id}/restore`)
+        .header('Authorization', `Bearer ${token.value!.release()}`)
+        .json({
+          targetConnectionId: connection.id,
+          targetDatabase: importedBackup.databaseName,
+          skipSafetyBackup: true,
+        })
+
+      response.assertStatus(202)
+      response.assertBodyContains({
+        success: true,
+        data: {
+          databaseName: importedBackup.databaseName,
+        },
+      })
+    } finally {
+      RestoreService.prototype.restore = originalRestore
     }
   })
 })
