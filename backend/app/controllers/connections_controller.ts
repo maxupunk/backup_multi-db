@@ -59,7 +59,7 @@ export default class ConnectionsController {
       dbQuery.where('enabled', true).orderBy('databaseName', 'asc')
     })
     connectionsQuery.preload('backups', (backupsQuery) => {
-      backupsQuery.orderBy('createdAt', 'desc').limit(1)
+      backupsQuery.groupOrderBy('created_at', 'desc').groupLimit(1)
     })
 
     const connections = await connectionsQuery.paginate(page, limit)

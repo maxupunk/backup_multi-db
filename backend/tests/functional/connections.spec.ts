@@ -1,5 +1,7 @@
 import { test } from '@japa/runner'
+import { DateTime } from 'luxon'
 import User from '#models/user'
+import Backup from '#models/backup'
 import Connection from '#models/connection'
 import ConnectionDatabase from '#models/connection_database'
 import { getScheduler } from '#services/scheduler_service'
@@ -112,6 +114,114 @@ test.group('Connections', (group) => {
         ],
       },
     })
+  })
+
+  test('list connections loads the latest backup for each connection', async ({
+    client,
+    assert,
+  }) => {
+    const firstConnection = await Connection.create({
+      name: 'Connection With Latest Backup A',
+      type: 'postgresql',
+      host: 'localhost',
+      port: 5432,
+      username: 'user_a',
+      passwordEncrypted: 'password',
+      status: 'active',
+      lastBackupAt: DateTime.fromISO('2026-04-30T11:00:00.000Z'),
+    })
+
+    const secondConnection = await Connection.create({
+      name: 'Connection With Latest Backup B',
+      type: 'mysql',
+      host: '127.0.0.1',
+      port: 3306,
+      username: 'user_b',
+      passwordEncrypted: 'password',
+      status: 'active',
+      lastBackupAt: DateTime.fromISO('2026-04-30T10:00:00.000Z'),
+    })
+
+    const firstDatabase = await ConnectionDatabase.create({
+      connectionId: firstConnection.id,
+      databaseName: 'db_a',
+      enabled: true,
+    })
+
+    const secondDatabase = await ConnectionDatabase.create({
+      connectionId: secondConnection.id,
+      databaseName: 'db_b',
+      enabled: true,
+    })
+
+    const olderFirstBackup = await Backup.create({
+      connectionId: firstConnection.id,
+      connectionDatabaseId: firstDatabase.id,
+      databaseName: firstDatabase.databaseName,
+      status: 'completed',
+      compressed: true,
+      retentionType: 'hourly',
+      protected: false,
+      trigger: 'manual',
+      createdAt: DateTime.fromISO('2026-04-30T09:00:00.000Z'),
+      updatedAt: DateTime.fromISO('2026-04-30T09:00:00.000Z'),
+    })
+
+    const latestFirstBackup = await Backup.create({
+      connectionId: firstConnection.id,
+      connectionDatabaseId: firstDatabase.id,
+      databaseName: firstDatabase.databaseName,
+      status: 'completed',
+      compressed: true,
+      retentionType: 'hourly',
+      protected: false,
+      trigger: 'manual',
+      createdAt: DateTime.fromISO('2026-04-30T11:00:00.000Z'),
+      updatedAt: DateTime.fromISO('2026-04-30T11:00:00.000Z'),
+    })
+
+    const latestSecondBackup = await Backup.create({
+      connectionId: secondConnection.id,
+      connectionDatabaseId: secondDatabase.id,
+      databaseName: secondDatabase.databaseName,
+      status: 'completed',
+      compressed: true,
+      retentionType: 'hourly',
+      protected: false,
+      trigger: 'manual',
+      createdAt: DateTime.fromISO('2026-04-30T10:00:00.000Z'),
+      updatedAt: DateTime.fromISO('2026-04-30T10:00:00.000Z'),
+    })
+
+    const token = await User.accessTokens.create(user)
+    const response = await client
+      .get('/api/connections')
+      .header('Authorization', `Bearer ${token.value!.release()}`)
+
+    response.assertStatus(200)
+
+    const rows = response.body().data.data as Array<{
+      id: number
+      backups?: Array<{ id: number }>
+    }>
+
+    const firstRow = rows.find((item) => item.id === firstConnection.id)
+    const secondRow = rows.find((item) => item.id === secondConnection.id)
+
+    assert.exists(firstRow)
+    assert.exists(secondRow)
+    assert.deepEqual(
+      firstRow?.backups?.map((backup) => backup.id),
+      [latestFirstBackup.id]
+    )
+    assert.deepEqual(
+      secondRow?.backups?.map((backup) => backup.id),
+      [latestSecondBackup.id]
+    )
+
+    if (firstRow?.backups?.some((backup) => backup.id === olderFirstBackup.id)) {
+      throw new Error('A listagem não deve retornar backups antigos quando existir um mais recente')
+    }
   })
 
   test('show a specific connection', async ({ client }) => {
