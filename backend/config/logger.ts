@@ -1,6 +1,7 @@
 import env from '#start/env'
 import app from '@adonisjs/core/services/app'
-import { defineConfig, targets } from '@adonisjs/core/logger'
+import { defineConfig, destination, targets } from '@adonisjs/core/logger'
+import { resolveLogLevel } from '#services/log_level_resolver'
 
 const loggerConfig = defineConfig({
   default: 'app',
@@ -13,13 +14,13 @@ const loggerConfig = defineConfig({
     app: {
       enabled: true,
       name: env.get('APP_NAME'),
-      level: env.get('LOG_LEVEL'),
-      transport: {
-        targets: targets()
-          .pushIf(!app.inProduction, targets.pretty())
-          .pushIf(app.inProduction, targets.file({ destination: 1 }))
-          .toArray(),
-      },
+      level: resolveLogLevel(env.get('NODE_ENV'), env.get('LOG_LEVEL')),
+      desination: app.inProduction ? destination(1) : undefined,
+      transport: app.inProduction
+        ? undefined
+        : {
+            targets: targets().push(targets.pretty()).toArray(),
+          },
     },
   },
 })

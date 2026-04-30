@@ -25,6 +25,12 @@ test.group('Stats', (group) => {
     response.assertStatus(401)
   })
 
+  test('block unauthenticated access to system heap', async ({ client }) => {
+    const response = await client.get('/api/system/heap')
+
+    response.assertStatus(401)
+  })
+
   test('get dashboard stats', async ({ client }) => {
     const token = await User.accessTokens.create(user)
     const response = await client
@@ -141,6 +147,50 @@ test.group('Stats', (group) => {
     const expectedStatus = jobs.isRunning ? 'ok' : 'down'
     if (jobs.status !== expectedStatus) {
       throw new Error('jobs.status deve refletir jobs.isRunning')
+    }
+  })
+
+  test('get system heap snapshot', async ({ client }) => {
+    const token = await User.accessTokens.create(user)
+    const response = await client
+      .get('/api/system/heap')
+      .header('Authorization', `Bearer ${token.value!.release()}`)
+
+    response.assertStatus(200)
+    response.assertBodyContains({
+      success: true,
+      data: {},
+    })
+
+    const body = response.body()
+    const heap = body?.data
+
+    if (!heap) {
+      throw new Error('data deve existir no payload de /api/system/heap')
+    }
+
+    if (typeof heap.timestamp !== 'string' || !heap.timestamp) {
+      throw new Error('data.timestamp deve ser string')
+    }
+
+    for (const field of [
+      'rssBytes',
+      'heapTotalBytes',
+      'heapUsedBytes',
+      'heapUsagePercent',
+      'externalBytes',
+      'arrayBuffersBytes',
+      'activeHandles',
+      'activeRequests',
+      'uptimeSeconds',
+    ]) {
+      if (typeof heap[field] !== 'number') {
+        throw new Error(`data.${field} deve ser number`)
+      }
+    }
+
+    if (heap.heapTotalBytes < heap.heapUsedBytes) {
+      throw new Error('data.heapTotalBytes deve ser maior ou igual a data.heapUsedBytes')
     }
   })
 })

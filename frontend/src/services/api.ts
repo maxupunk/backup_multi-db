@@ -34,6 +34,7 @@ import type {
   StorageDestination,
   StorageProvider,
   StorageSpaceInfo,
+  SystemHeapSnapshot,
   SystemStatus,
   UpdateConnectionPayload,
   UpdateStorageDestinationPayload,
@@ -496,6 +497,10 @@ export const statsApi = {
 export const systemApi = {
   async status (): Promise<ApiResponse<SystemStatus>> {
     return request<ApiResponse<SystemStatus>>('/system/status')
+  },
+
+  async heap (): Promise<ApiResponse<SystemHeapSnapshot>> {
+    return request<ApiResponse<SystemHeapSnapshot>>('/system/heap')
   },
 
   async containerResources (): Promise<ApiResponse<DockerContainerResourceOverview>> {

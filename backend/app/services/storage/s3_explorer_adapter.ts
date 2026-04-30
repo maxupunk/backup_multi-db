@@ -1,4 +1,5 @@
 import type { StorageDestinationConfig } from '#models/storage_destination'
+import { S3ClientRegistry } from './s3_client_registry.js'
 import { S3ConfigService } from './s3_config_service.js'
 import type { StorageExplorerAdapter } from './storage_explorer_adapter.js'
 import type { BucketObjectMetadata, ListObjectsOptions, ListObjectsResult } from './types.js'
@@ -9,18 +10,9 @@ import type { BucketObjectMetadata, ListObjectsOptions, ListObjectsResult } from
  */
 export class S3ExplorerAdapter implements StorageExplorerAdapter {
   private async getClient(config: Extract<StorageDestinationConfig, { type: 's3' }>) {
-    const { S3Client } = await import('@aws-sdk/client-s3')
     const normalized = S3ConfigService.normalize(config)
 
-    return new S3Client({
-      region: normalized.region,
-      endpoint: normalized.endpoint,
-      forcePathStyle: normalized.forcePathStyle ?? false,
-      credentials: {
-        accessKeyId: normalized.accessKeyId,
-        secretAccessKey: normalized.secretAccessKey,
-      },
-    })
+    return S3ClientRegistry.getClient(normalized)
   }
 
   private assertS3Config(

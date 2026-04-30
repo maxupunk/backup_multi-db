@@ -8,6 +8,7 @@ import type Backup from '#models/backup'
 import type Connection from '#models/connection'
 import { StorageDestinationService } from '#services/storage_destination_service'
 import { BackupService } from '#services/backup_service'
+import { ProcessOutputBuffer } from '#services/process_output_buffer'
 import type { RestoreProgressEmitter } from '#services/restore_progress_emitter'
 
 /**
@@ -77,6 +78,8 @@ interface RestoreConfig {
  * Suporta MySQL, MariaDB e PostgreSQL.
  */
 export class RestoreService {
+  private static readonly PROCESS_OUTPUT_CAPTURE_LIMIT_BYTES = 256 * 1024
+
   /**
    * Restaura um backup para o banco de dados.
    * Se o database de destino existir (e skipSafetyBackup não estiver ativo),
@@ -698,7 +701,6 @@ export class RestoreService {
    */
   private buildRestoreConfig(connection: Connection, targetDatabase: string): RestoreConfig {
     const password = connection.getDecryptedPassword()
-    const processEnv = { ...process.env }
 
     if (connection.type === 'postgresql') {
       return {
@@ -716,7 +718,7 @@ export class RestoreService {
           '-v',
           'ON_ERROR_STOP=1',
         ],
-        env: { ...processEnv, PGPASSWORD: password },
+        env: { ...process.env, PGPASSWORD: password },
       }
     }
 
@@ -734,7 +736,7 @@ export class RestoreService {
         ...connection.getMysqlSslArgs(),
         targetDatabase,
       ],
-      env: processEnv,
+      env: process.env,
     }
   }
 
@@ -752,15 +754,19 @@ export class RestoreService {
         stdio: ['pipe', 'pipe', 'pipe'],
       })
 
-      let stderrData = ''
-      let stdoutData = ''
+      const stderrBuffer = new ProcessOutputBuffer(
+        RestoreService.PROCESS_OUTPUT_CAPTURE_LIMIT_BYTES
+      )
+      const stdoutBuffer = new ProcessOutputBuffer(
+        RestoreService.PROCESS_OUTPUT_CAPTURE_LIMIT_BYTES
+      )
 
       restoreProcess.stdout?.on('data', (data: Buffer) => {
-        stdoutData += data.toString()
+        stdoutBuffer.append(data)
       })
 
       restoreProcess.stderr?.on('data', (data: Buffer) => {
-        stderrData += data.toString()
+        stderrBuffer.append(data)
       })
 
       // Erro ao iniciar o processo
@@ -776,6 +782,8 @@ export class RestoreService {
       })
 
       restoreProcess.on('close', (exitCode) => {
+        const stderrData = stderrBuffer.toString()
+        const stdoutData = stdoutBuffer.toString()
         const warnings = this.extractWarnings(stderrData)
 
         if (exitCode === 0) {

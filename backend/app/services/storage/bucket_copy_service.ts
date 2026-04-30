@@ -6,7 +6,9 @@ import type { StorageDestinationConfig, StorageProvider } from '#models/storage_
 import type { CopyJob, CopyJobResult, CopyOptions } from './types.js'
 
 const COPY_CHANNEL_PREFIX = 'notifications/storage-copy'
-const JOB_TTL_MS = 24 * 60 * 60 * 1000 // 24h
+const JOB_TTL_MS = 6 * 60 * 60 * 1000 // 6h
+const RETENTION_SWEEP_INTERVAL_MS = 5 * 60 * 1000
+const MAX_RETAINED_COPY_JOBS = 50
 
 /**
  * Serviço de cópia entre storages usando rclone.
@@ -17,16 +19,16 @@ const JOB_TTL_MS = 24 * 60 * 60 * 1000 // 24h
 export class BucketCopyService {
   private static jobs = new Map<string, CopyJob>()
   private static jobProcesses = new Map<string, ReturnType<typeof spawn>>()
+  private static cleanupSchedule = new Map<string, number>()
+  private static retentionSweepHandle: ReturnType<typeof setInterval> | null = null
 
   private static generateJobId(): string {
     return `copy-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
   }
 
   private static scheduleCleanup(jobId: string): void {
-    setTimeout(() => {
-      this.jobs.delete(jobId)
-      this.jobProcesses.delete(jobId)
-    }, JOB_TTL_MS)
+    this.cleanupSchedule.set(jobId, Date.now() + JOB_TTL_MS)
+    this.ensureRetentionSweep()
   }
 
   static getJob(jobId: string): CopyJob | null {
@@ -38,6 +40,8 @@ export class BucketCopyService {
     destination: StorageDestination,
     options: CopyOptions = {}
   ): Promise<CopyJob> {
+    await this.runRetentionSweep()
+
     const jobId = this.generateJobId()
 
     const job: CopyJob = {
@@ -52,7 +56,6 @@ export class BucketCopyService {
     }
 
     this.jobs.set(jobId, job)
-    this.scheduleCleanup(jobId)
 
     // Executa a cópia de forma assíncrona
     this.executeCopy(job, source, destination, options).catch((err) => {
@@ -75,6 +78,7 @@ export class BucketCopyService {
 
     job.status = 'cancelled'
     job.completedAt = new Date().toISOString()
+    this.scheduleCleanup(jobId)
     this.emitProgress(job)
     return true
   }
@@ -124,6 +128,7 @@ export class BucketCopyService {
       job.filesTransferred = result.filesTransferred
       job.bytesTransferred = result.bytesTransferred
       job.completedAt = new Date().toISOString()
+      this.scheduleCleanup(job.id)
       this.emitProgress(job)
 
       return result
@@ -131,6 +136,7 @@ export class BucketCopyService {
       job.status = 'failed'
       job.error = err.message
       job.completedAt = new Date().toISOString()
+      this.scheduleCleanup(job.id)
       this.emitProgress(job)
 
       return {
@@ -347,6 +353,73 @@ export class BucketCopyService {
       TiB: 1024 ** 4,
     }
     return Math.round(num * (multipliers[unit] ?? 1))
+  }
+
+  private static ensureRetentionSweep(): void {
+    if (this.retentionSweepHandle !== null) {
+      return
+    }
+
+    this.retentionSweepHandle = setInterval(() => {
+      void this.runRetentionSweep()
+    }, RETENTION_SWEEP_INTERVAL_MS)
+    this.retentionSweepHandle.unref?.()
+  }
+
+  private static stopRetentionSweepIfIdle(): void {
+    if (this.retentionSweepHandle === null || this.cleanupSchedule.size > 0) {
+      return
+    }
+
+    clearInterval(this.retentionSweepHandle)
+    this.retentionSweepHandle = null
+  }
+
+  private static async runRetentionSweep(nowMs = Date.now()): Promise<void> {
+    for (const [jobId, cleanupAt] of this.cleanupSchedule.entries()) {
+      if (cleanupAt > nowMs) {
+        continue
+      }
+
+      this.cleanupSchedule.delete(jobId)
+      this.removeJob(jobId)
+    }
+
+    this.pruneOverflowJobs()
+    this.stopRetentionSweepIfIdle()
+  }
+
+  private static pruneOverflowJobs(): void {
+    const overflow = this.jobs.size - MAX_RETAINED_COPY_JOBS
+
+    if (overflow <= 0) {
+      return
+    }
+
+    const removableJobs = [...this.jobs.values()]
+      .filter(
+        (job) => job.status === 'completed' || job.status === 'failed' || job.status === 'cancelled'
+      )
+      .sort((left, right) => {
+        const leftTime = this.getRetentionTimestamp(left)
+        const rightTime = this.getRetentionTimestamp(right)
+        return leftTime - rightTime
+      })
+      .slice(0, overflow)
+
+    for (const job of removableJobs) {
+      this.removeJob(job.id)
+    }
+  }
+
+  private static getRetentionTimestamp(job: CopyJob): number {
+    return new Date(job.completedAt ?? job.startedAt).getTime()
+  }
+
+  private static removeJob(jobId: string): void {
+    this.cleanupSchedule.delete(jobId)
+    this.jobs.delete(jobId)
+    this.jobProcesses.delete(jobId)
   }
 
   private static emitProgress(job: CopyJob): void {

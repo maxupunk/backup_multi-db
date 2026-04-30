@@ -44,6 +44,7 @@ declare module 'vue' {
     StorageFormFields: typeof import('./components/storages/StorageFormFields.vue')['default']
     StorageProviderIcon: typeof import('./components/storages/StorageProviderIcon.vue')['default']
     StorageTestButton: typeof import('./components/storages/StorageTestButton.vue')['default']
+    SystemHeapPanel: typeof import('./components/system/SystemHeapPanel.vue')['default']
     SystemInfoCard: typeof import('./components/system/SystemInfoCard.vue')['default']
     SystemResourceCharts: typeof import('./components/system/SystemResourceCharts.vue')['default']
     UsageLineChart: typeof import('./components/system/UsageLineChart.vue')['default']

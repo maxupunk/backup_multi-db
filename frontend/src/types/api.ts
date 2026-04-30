@@ -382,6 +382,19 @@ export interface SystemStatus {
   jobs: JobsSystemStatus
 }
 
+export interface SystemHeapSnapshot {
+  timestamp: string
+  rssBytes: number
+  heapTotalBytes: number
+  heapUsedBytes: number
+  heapUsagePercent: number
+  externalBytes: number
+  arrayBuffersBytes: number
+  activeHandles: number
+  activeRequests: number
+  uptimeSeconds: number
+}
+
 export interface DockerContainerResourceMetrics {
   containerId: string
   containerName: string

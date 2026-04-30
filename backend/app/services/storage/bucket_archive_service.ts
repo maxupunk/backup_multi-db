@@ -13,6 +13,8 @@ import type { ArchiveJob, BucketObject } from './types.js'
 const ARCHIVE_CHANNEL_PREFIX = 'notifications/storage-archive'
 const ARCHIVE_TTL_MS = 15 * 60 * 1000 // 15 min
 const JOB_CLEANUP_TTL_MS = 60 * 60 * 1000 // 1h
+const RETENTION_SWEEP_INTERVAL_MS = 60 * 1000
+const MAX_RETAINED_ARCHIVE_JOBS = 50
 
 /**
  * Serviço de geração de archives (tar.gz) de storages.
@@ -27,6 +29,9 @@ export class BucketArchiveService {
   private static jobs = new Map<string, ArchiveJob>()
   /** Mapeia jobId → caminho do arquivo temporário em disco */
   private static tmpFiles = new Map<string, string>()
+  private static expirations = new Map<string, number>()
+  private static cleanupSchedule = new Map<string, number>()
+  private static retentionSweepHandle: ReturnType<typeof setInterval> | null = null
 
   private static generateJobId(): string {
     return `archive-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
@@ -47,6 +52,8 @@ export class BucketArchiveService {
     storage: StorageDestination,
     path: string | null = null
   ): Promise<ArchiveJob> {
+    await this.runRetentionSweep()
+
     const jobId = this.generateJobId()
 
     const job: ArchiveJob = {
@@ -205,22 +212,13 @@ export class BucketArchiveService {
   }
 
   private static scheduleExpiration(jobId: string): void {
-    setTimeout(async () => {
-      const job = this.jobs.get(jobId)
-      if (job && job.status === 'ready') {
-        job.status = 'expired'
-        this.emitProgress(job)
-      }
-      await this.deleteTmpFile(jobId)
-      this.scheduleJobCleanup(jobId)
-    }, ARCHIVE_TTL_MS)
+    this.expirations.set(jobId, Date.now() + ARCHIVE_TTL_MS)
+    this.ensureRetentionSweep()
   }
 
   private static scheduleJobCleanup(jobId: string): void {
-    setTimeout(async () => {
-      await this.deleteTmpFile(jobId)
-      this.jobs.delete(jobId)
-    }, JOB_CLEANUP_TTL_MS)
+    this.cleanupSchedule.set(jobId, Date.now() + JOB_CLEANUP_TTL_MS)
+    this.ensureRetentionSweep()
   }
 
   private static async deleteTmpFile(jobId: string): Promise<void> {
@@ -233,6 +231,97 @@ export class BucketArchiveService {
         )
       })
     }
+  }
+
+  private static ensureRetentionSweep(): void {
+    if (this.retentionSweepHandle !== null) {
+      return
+    }
+
+    this.retentionSweepHandle = setInterval(() => {
+      void this.runRetentionSweep()
+    }, RETENTION_SWEEP_INTERVAL_MS)
+    this.retentionSweepHandle.unref?.()
+  }
+
+  private static stopRetentionSweepIfIdle(): void {
+    if (
+      this.retentionSweepHandle === null ||
+      this.expirations.size > 0 ||
+      this.cleanupSchedule.size > 0
+    ) {
+      return
+    }
+
+    clearInterval(this.retentionSweepHandle)
+    this.retentionSweepHandle = null
+  }
+
+  private static async runRetentionSweep(nowMs = Date.now()): Promise<void> {
+    for (const [jobId, expiresAt] of this.expirations.entries()) {
+      if (expiresAt > nowMs) {
+        continue
+      }
+
+      this.expirations.delete(jobId)
+      await this.expireJob(jobId)
+    }
+
+    for (const [jobId, cleanupAt] of this.cleanupSchedule.entries()) {
+      if (cleanupAt > nowMs) {
+        continue
+      }
+
+      this.cleanupSchedule.delete(jobId)
+      await this.removeJob(jobId)
+    }
+
+    await this.pruneOverflowJobs()
+    this.stopRetentionSweepIfIdle()
+  }
+
+  private static async expireJob(jobId: string): Promise<void> {
+    const job = this.jobs.get(jobId)
+
+    if (job?.status === 'ready') {
+      job.status = 'expired'
+      this.emitProgress(job)
+    }
+
+    await this.deleteTmpFile(jobId)
+    this.scheduleJobCleanup(jobId)
+  }
+
+  private static async pruneOverflowJobs(): Promise<void> {
+    const overflow = this.jobs.size - MAX_RETAINED_ARCHIVE_JOBS
+
+    if (overflow <= 0) {
+      return
+    }
+
+    const removableJobs = [...this.jobs.values()]
+      .filter((job) => job.status === 'failed' || job.status === 'expired')
+      .sort((left, right) => {
+        const leftTime = this.getRetentionTimestamp(left)
+        const rightTime = this.getRetentionTimestamp(right)
+        return leftTime - rightTime
+      })
+      .slice(0, overflow)
+
+    for (const job of removableJobs) {
+      await this.removeJob(job.id)
+    }
+  }
+
+  private static getRetentionTimestamp(job: ArchiveJob): number {
+    return new Date(job.completedAt ?? job.startedAt).getTime()
+  }
+
+  private static async removeJob(jobId: string): Promise<void> {
+    this.expirations.delete(jobId)
+    this.cleanupSchedule.delete(jobId)
+    await this.deleteTmpFile(jobId)
+    this.jobs.delete(jobId)
   }
 
   private static emitProgress(job: ArchiveJob): void {

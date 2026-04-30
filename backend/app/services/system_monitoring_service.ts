@@ -42,6 +42,19 @@ export type SystemOverview = {
   jobs: JobsStatusResponse
 }
 
+export type SystemHeapSnapshot = {
+  timestamp: string
+  rssBytes: number
+  heapTotalBytes: number
+  heapUsedBytes: number
+  heapUsagePercent: number
+  externalBytes: number
+  arrayBuffersBytes: number
+  activeHandles: number
+  activeRequests: number
+  uptimeSeconds: number
+}
+
 export class SystemMonitoringService {
   private static readonly CPU_SAMPLE_INTERVAL_MS = 150
   private static readonly CACHE_TTL_MS = 2_000
@@ -72,6 +85,25 @@ export class SystemMonitoringService {
     this.cachedAt = now
 
     return overview
+  }
+
+  static getHeapSnapshot(): SystemHeapSnapshot {
+    const memoryUsage = process.memoryUsage()
+    const heapUsagePercent =
+      memoryUsage.heapTotal > 0 ? (memoryUsage.heapUsed / memoryUsage.heapTotal) * 100 : 0
+
+    return {
+      timestamp: new Date().toISOString(),
+      rssBytes: memoryUsage.rss,
+      heapTotalBytes: memoryUsage.heapTotal,
+      heapUsedBytes: memoryUsage.heapUsed,
+      heapUsagePercent: this.roundPercent(heapUsagePercent),
+      externalBytes: memoryUsage.external,
+      arrayBuffersBytes: memoryUsage.arrayBuffers,
+      activeHandles: this.getActiveHandlesCount(),
+      activeRequests: this.getActiveRequestsCount(),
+      uptimeSeconds: Math.floor(process.uptime()),
+    }
   }
 
   private static getJobsStatus(): JobsStatusResponse {
@@ -143,5 +175,21 @@ export class SystemMonitoringService {
 
   private static roundPercent(value: number): number {
     return Math.min(100, Math.max(0, Math.round(value * 100) / 100))
+  }
+
+  private static getActiveHandlesCount(): number {
+    const processWithInternals = process as NodeJS.Process & {
+      _getActiveHandles?: () => unknown[]
+    }
+
+    return processWithInternals._getActiveHandles?.().length ?? 0
+  }
+
+  private static getActiveRequestsCount(): number {
+    const processWithInternals = process as NodeJS.Process & {
+      _getActiveRequests?: () => unknown[]
+    }
+
+    return processWithInternals._getActiveRequests?.().length ?? 0
   }
 }

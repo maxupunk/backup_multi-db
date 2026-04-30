@@ -1,4 +1,5 @@
 import type { StorageDestinationConfig } from '#models/storage_destination'
+import { AzureBlobServiceRegistry } from './azure_blob_service_registry.js'
 import type { StorageExplorerAdapter } from './storage_explorer_adapter.js'
 import type { BucketObjectMetadata, ListObjectsOptions, ListObjectsResult } from './types.js'
 
@@ -17,8 +18,9 @@ export class AzureExplorerAdapter implements StorageExplorerAdapter {
   private async getContainerClient(
     config: Extract<StorageDestinationConfig, { type: 'azure_blob' }>
   ) {
-    const { BlobServiceClient } = await import('@azure/storage-blob')
-    const service = BlobServiceClient.fromConnectionString(config.connectionString)
+    const service = await AzureBlobServiceRegistry.getClient({
+      connectionString: config.connectionString,
+    })
     return service.getContainerClient(config.container)
   }
 
@@ -114,14 +116,12 @@ export class AzureExplorerAdapter implements StorageExplorerAdapter {
     expiresInSeconds: number
   ): Promise<string> {
     this.assertAzureConfig(config)
-    const {
-      BlobServiceClient,
-      generateBlobSASQueryParameters,
-      BlobSASPermissions,
-      StorageSharedKeyCredential,
-    } = await import('@azure/storage-blob')
+    const { generateBlobSASQueryParameters, BlobSASPermissions, StorageSharedKeyCredential } =
+      await import('@azure/storage-blob')
 
-    const service = BlobServiceClient.fromConnectionString(config.connectionString)
+    const service = await AzureBlobServiceRegistry.getClient({
+      connectionString: config.connectionString,
+    })
     const container = service.getContainerClient(config.container)
     const blob = container.getBlobClient(key)
 

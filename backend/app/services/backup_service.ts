@@ -464,18 +464,17 @@ export class BackupService {
    */
   private buildDumpConfig(connection: Connection, databaseName: string): DumpConfig {
     const password = connection.getDecryptedPassword()
-    const processEnv = { ...process.env }
     const isFullBackup = databaseName === ALL_DATABASES_MARKER
 
     if (connection.type === 'postgresql') {
       return isFullBackup
-        ? this.buildPostgresDumpAllConfig(connection, password, processEnv)
-        : this.buildPostgresConfig(connection, databaseName, password, processEnv)
+        ? this.buildPostgresDumpAllConfig(connection, password)
+        : this.buildPostgresConfig(connection, databaseName, password)
     }
 
     return isFullBackup
-      ? this.buildMySqlAllDatabasesConfig(connection, password, processEnv)
-      : this.buildMySqlConfig(connection, databaseName, password, processEnv)
+      ? this.buildMySqlAllDatabasesConfig(connection, password)
+      : this.buildMySqlConfig(connection, databaseName, password)
   }
 
   /**
@@ -484,8 +483,7 @@ export class BackupService {
   private buildPostgresConfig(
     connection: Connection,
     databaseName: string,
-    password: string,
-    processEnv: NodeJS.ProcessEnv
+    password: string
   ): DumpConfig {
     return {
       command: 'pg_dump',
@@ -500,7 +498,7 @@ export class BackupService {
         databaseName,
         '--no-password',
       ],
-      env: { ...processEnv, PGPASSWORD: password },
+      env: { ...process.env, PGPASSWORD: password },
     }
   }
 
@@ -508,11 +506,7 @@ export class BackupService {
    * Configuração para PostgreSQL (pg_dumpall) - backup completo de TODOS os databases
    * Inclui: todos os databases, roles/usuários, tablespaces e permissões
    */
-  private buildPostgresDumpAllConfig(
-    connection: Connection,
-    password: string,
-    processEnv: NodeJS.ProcessEnv
-  ): DumpConfig {
+  private buildPostgresDumpAllConfig(connection: Connection, password: string): DumpConfig {
     return {
       command: 'pg_dumpall',
       args: [
@@ -524,7 +518,7 @@ export class BackupService {
         connection.username,
         '--no-password',
       ],
-      env: { ...processEnv, PGPASSWORD: password },
+      env: { ...process.env, PGPASSWORD: password },
     }
   }
 
@@ -534,8 +528,7 @@ export class BackupService {
   private buildMySqlConfig(
     connection: Connection,
     databaseName: string,
-    password: string,
-    processEnv: NodeJS.ProcessEnv
+    password: string
   ): DumpConfig {
     return {
       command: 'mysqldump',
@@ -553,7 +546,7 @@ export class BackupService {
         '--triggers',
         databaseName,
       ],
-      env: processEnv,
+      env: process.env,
     }
   }
 
@@ -561,11 +554,7 @@ export class BackupService {
    * Configuração para MySQL/MariaDB (mysqldump --all-databases) - backup completo
    * Inclui: todos os databases, usuários e permissões
    */
-  private buildMySqlAllDatabasesConfig(
-    connection: Connection,
-    password: string,
-    processEnv: NodeJS.ProcessEnv
-  ): DumpConfig {
+  private buildMySqlAllDatabasesConfig(connection: Connection, password: string): DumpConfig {
     return {
       command: 'mysqldump',
       args: [
@@ -582,7 +571,7 @@ export class BackupService {
         '--triggers',
         '--all-databases',
       ],
-      env: processEnv,
+      env: process.env,
     }
   }
 

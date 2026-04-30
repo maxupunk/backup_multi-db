@@ -7,6 +7,9 @@ import { DEFAULT_LOCAL_STORAGE_NAME, getBackupStoragePath } from '#config/storag
 import type Backup from '#models/backup'
 import type Connection from '#models/connection'
 import StorageDestination from '#models/storage_destination'
+import { S3ClientRegistry, type ReusableS3ClientConfig } from '#services/storage/s3_client_registry'
+import { AzureBlobServiceRegistry } from '#services/storage/azure_blob_service_registry'
+import { GcsStorageRegistry } from '#services/storage/gcs_storage_registry'
 import { S3ConfigService } from '#services/storage/s3_config_service'
 
 type DownloadResult = {
@@ -14,17 +17,13 @@ type DownloadResult = {
   contentLength?: number
 }
 
-type S3NormalizedConfig = {
-  region: string
-  endpoint?: string
-  forcePathStyle?: boolean
-  accessKeyId: string
-  secretAccessKey: string
-}
-
 type GcsConfig = {
   projectId?: string
   credentialsJson?: string
+}
+
+type AzureBlobConfig = {
+  connectionString: string
 }
 
 type SftpConfig = {
@@ -63,25 +62,16 @@ export class StorageDestinationService {
   // Provider client factories
   // ---------------------------------------------------------------------------
 
-  private static async createS3Client(config: S3NormalizedConfig) {
-    const { S3Client } = await import('@aws-sdk/client-s3')
-    return new S3Client({
-      region: config.region,
-      endpoint: config.endpoint,
-      forcePathStyle: config.forcePathStyle,
-      credentials: {
-        accessKeyId: config.accessKeyId,
-        secretAccessKey: config.secretAccessKey,
-      },
-    })
+  private static createS3Client(config: ReusableS3ClientConfig) {
+    return S3ClientRegistry.getClient(config)
   }
 
-  private static async createGcsStorage(config: GcsConfig) {
-    const { Storage } = await import('@google-cloud/storage')
-    const options: Record<string, unknown> = {}
-    if (config.projectId) options.projectId = config.projectId
-    if (config.credentialsJson) options.credentials = JSON.parse(config.credentialsJson)
-    return new Storage(options as any)
+  private static createAzureBlobService(config: AzureBlobConfig) {
+    return AzureBlobServiceRegistry.getClient(config)
+  }
+
+  private static createGcsStorage(config: GcsConfig) {
+    return GcsStorageRegistry.getClient(config)
   }
 
   private static async createSftpClient(config: SftpConfig) {
@@ -227,9 +217,8 @@ export class StorageDestinationService {
     }
 
     if (config.type === 'azure_blob') {
-      const { BlobServiceClient } = await import('@azure/storage-blob')
       const key = this.buildRemoteKey(config.prefix ?? '', relativePath)
-      const blobService = BlobServiceClient.fromConnectionString(config.connectionString)
+      const blobService = await this.createAzureBlobService(config)
       const container = blobService.getContainerClient(config.container)
       await container.createIfNotExists()
       await container.getBlockBlobClient(key).uploadFile(localFullPath)
@@ -279,9 +268,8 @@ export class StorageDestinationService {
     }
 
     if (config.type === 'azure_blob') {
-      const { BlobServiceClient } = await import('@azure/storage-blob')
       const key = this.buildRemoteKey(config.prefix ?? '', relativePath)
-      const blobService = BlobServiceClient.fromConnectionString(config.connectionString)
+      const blobService = await this.createAzureBlobService(config)
       const download = await blobService
         .getContainerClient(config.container)
         .getBlobClient(key)
@@ -326,9 +314,8 @@ export class StorageDestinationService {
     }
 
     if (config.type === 'azure_blob') {
-      const { BlobServiceClient } = await import('@azure/storage-blob')
       const key = this.buildRemoteKey(config.prefix ?? '', relativePath)
-      const blobService = BlobServiceClient.fromConnectionString(config.connectionString)
+      const blobService = await this.createAzureBlobService(config)
       await blobService.getContainerClient(config.container).getBlobClient(key).deleteIfExists()
       return
     }

@@ -1,4 +1,5 @@
 import type { StorageDestinationConfig } from '#models/storage_destination'
+import { GcsStorageRegistry } from './gcs_storage_registry.js'
 import type { StorageExplorerAdapter } from './storage_explorer_adapter.js'
 import type { BucketObjectMetadata, ListObjectsOptions, ListObjectsResult } from './types.js'
 
@@ -15,13 +16,10 @@ export class GcsExplorerAdapter implements StorageExplorerAdapter {
   }
 
   private async getStorage(config: Extract<StorageDestinationConfig, { type: 'gcs' }>) {
-    const { Storage } = await import('@google-cloud/storage')
-    const options: Record<string, unknown> = {}
-    if (config.projectId) options.projectId = config.projectId
-    if (config.credentialsJson) {
-      options.credentials = JSON.parse(config.credentialsJson)
-    }
-    return new Storage(options as any)
+    return GcsStorageRegistry.getClient({
+      projectId: config.projectId,
+      credentialsJson: config.credentialsJson,
+    })
   }
 
   private buildPrefix(configPrefix: string | undefined, path: string): string {

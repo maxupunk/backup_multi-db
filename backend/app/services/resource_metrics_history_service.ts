@@ -24,13 +24,32 @@ export type ResourceMetricsHistoryResponse = {
   containers: ContainerResourceHistory[]
 }
 
+type PendingResourceMetricRow = {
+  scope: 'system' | 'container'
+  entity_id: string | null
+  entity_name: string | null
+  cpu_usage_percent: number
+  memory_usage_percent: number
+  memory_used_bytes: number
+  memory_total_bytes: number
+  collected_at: string
+  created_at: string
+  updated_at: string
+}
+
 export class ResourceMetricsHistoryService {
+  private static readonly TABLE_NAME = 'resource_metric_history'
   private static readonly RETENTION_DAYS = 15
   private static readonly MIN_PERSIST_INTERVAL_MS = 60_000
   private static readonly PRUNE_INTERVAL_MS = 6 * 60 * 60 * 1000
+  private static readonly FLUSH_INTERVAL_MS = 5 * 60 * 1000
+  private static readonly MAX_PENDING_ROWS = 100
 
   private static readonly lastPersistedAtByKey = new Map<string, number>()
+  private static readonly pendingRows: PendingResourceMetricRow[] = []
   private static lastPruneAt = 0
+  private static lastFlushAt = Date.now()
+  private static flushPromise: Promise<void> | null = null
 
   static getRetentionDays(): number {
     return this.RETENTION_DAYS
@@ -47,17 +66,20 @@ export class ResourceMetricsHistoryService {
       return
     }
 
-    await ResourceMetricHistory.create({
-      scope: 'system',
-      entityId: null,
-      entityName: 'Servidor',
-      cpuUsagePercent: resources.cpu.usagePercent,
-      memoryUsagePercent: resources.memory.usagePercent,
-      memoryUsedBytes: resources.memory.usedBytes,
-      memoryTotalBytes: resources.memory.totalBytes,
-      collectedAt,
-    })
+    this.enqueueRows([
+      this.buildInsertRow({
+        scope: 'system',
+        entityId: null,
+        entityName: 'Servidor',
+        cpuUsagePercent: resources.cpu.usagePercent,
+        memoryUsagePercent: resources.memory.usagePercent,
+        memoryUsedBytes: resources.memory.usedBytes,
+        memoryTotalBytes: resources.memory.totalBytes,
+        collectedAt,
+      }),
+    ])
 
+    await this.flushPendingRowsIfNeeded()
     await this.pruneOldRecordsIfNeeded()
   }
 
@@ -87,7 +109,22 @@ export class ResourceMetricsHistoryService {
       return
     }
 
-    await ResourceMetricHistory.createMany(rows)
+    this.enqueueRows(
+      rows.map((row) =>
+        this.buildInsertRow({
+          scope: row.scope,
+          entityId: row.entityId,
+          entityName: row.entityName,
+          cpuUsagePercent: row.cpuUsagePercent,
+          memoryUsagePercent: row.memoryUsagePercent,
+          memoryUsedBytes: row.memoryUsedBytes,
+          memoryTotalBytes: row.memoryTotalBytes,
+          collectedAt: row.collectedAt,
+        })
+      )
+    )
+
+    await this.flushPendingRowsIfNeeded()
     await this.pruneOldRecordsIfNeeded()
   }
 
@@ -95,6 +132,8 @@ export class ResourceMetricsHistoryService {
     const MAX_POINTS = 300
     const boundedHours = Math.max(1, Math.min(rangeHours, this.RETENTION_DAYS * 24))
     const startAt = DateTime.now().minus({ hours: boundedHours })
+
+    await this.flushPendingRows()
 
     // Bucket rows at the SQL level so we never return more than MAX_POINTS per
     // entity.  This prevents Cloudflare 502 timeouts when fetching long ranges
@@ -125,7 +164,7 @@ export class ResourceMetricsHistoryService {
           [bucketSeconds, bucketSeconds]
         )
       )
-      .where('collected_at', '>=', startAt.toISO())
+      .where('collected_at', '>=', this.toSqlTimestamp(startAt))
       .groupByRaw(`scope, entity_id, CAST(strftime('%s', collected_at) / ? AS INTEGER)`, [
         bucketSeconds,
       ])
@@ -181,8 +220,46 @@ export class ResourceMetricsHistoryService {
     return true
   }
 
+  static async flushPendingRows(force = true): Promise<void> {
+    if (this.flushPromise) {
+      await this.flushPromise
+
+      if (force && this.pendingRows.length) {
+        await this.flushPendingRows(force)
+      }
+
+      return
+    }
+
+    if (!this.pendingRows.length) {
+      return
+    }
+
+    const rowsToInsert = this.pendingRows.splice(0, this.pendingRows.length)
+
+    this.flushPromise = (async () => {
+      try {
+        await db.table(this.TABLE_NAME).insert(rowsToInsert)
+        this.lastFlushAt = Date.now()
+      } catch (error) {
+        this.pendingRows.unshift(...rowsToInsert)
+        throw error
+      } finally {
+        this.flushPromise = null
+      }
+    })()
+
+    await this.flushPromise
+
+    if (force && this.pendingRows.length) {
+      await this.flushPendingRows(force)
+    }
+  }
+
   private static async pruneOldRecordsIfNeeded(): Promise<void> {
     const nowMs = Date.now()
+
+    this.pruneStaleEntries(nowMs)
 
     if (nowMs - this.lastPruneAt < this.PRUNE_INTERVAL_MS) {
       return
@@ -191,6 +268,72 @@ export class ResourceMetricsHistoryService {
     this.lastPruneAt = nowMs
     const threshold = DateTime.now().minus({ days: this.RETENTION_DAYS })
 
-    await ResourceMetricHistory.query().where('collected_at', '<', threshold.toSQL()).delete()
+    await ResourceMetricHistory.query()
+      .where('collected_at', '<', this.toSqlTimestamp(threshold))
+      .delete()
+  }
+
+  private static pruneStaleEntries(nowMs: number): void {
+    const staleTtlMs = this.MIN_PERSIST_INTERVAL_MS * 10
+
+    for (const [key, lastPersistedAt] of this.lastPersistedAtByKey.entries()) {
+      if (nowMs - lastPersistedAt <= staleTtlMs) {
+        continue
+      }
+
+      this.lastPersistedAtByKey.delete(key)
+    }
+  }
+
+  private static enqueueRows(rows: PendingResourceMetricRow[]): void {
+    this.pendingRows.push(...rows)
+  }
+
+  private static async flushPendingRowsIfNeeded(): Promise<void> {
+    if (!this.pendingRows.length) {
+      return
+    }
+
+    const nowMs = Date.now()
+    const shouldFlush =
+      this.pendingRows.length >= this.MAX_PENDING_ROWS ||
+      nowMs - this.lastFlushAt >= this.FLUSH_INTERVAL_MS
+
+    if (!shouldFlush) {
+      return
+    }
+
+    await this.flushPendingRows(false)
+  }
+
+  private static buildInsertRow(params: {
+    scope: PendingResourceMetricRow['scope']
+    entityId: string | null
+    entityName: string | null
+    cpuUsagePercent: number
+    memoryUsagePercent: number
+    memoryUsedBytes: number
+    memoryTotalBytes: number
+    collectedAt: DateTime
+  }): PendingResourceMetricRow {
+    const persistedAt = DateTime.now().toUTC()
+    const persistedAtSql = this.toSqlTimestamp(persistedAt)
+
+    return {
+      scope: params.scope,
+      entity_id: params.entityId,
+      entity_name: params.entityName,
+      cpu_usage_percent: params.cpuUsagePercent,
+      memory_usage_percent: params.memoryUsagePercent,
+      memory_used_bytes: params.memoryUsedBytes,
+      memory_total_bytes: params.memoryTotalBytes,
+      collected_at: this.toSqlTimestamp(params.collectedAt),
+      created_at: persistedAtSql,
+      updated_at: persistedAtSql,
+    }
+  }
+
+  private static toSqlTimestamp(value: DateTime): string {
+    return value.toUTC().toFormat('yyyy-LL-dd HH:mm:ss')
   }
 }

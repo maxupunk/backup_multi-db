@@ -9,7 +9,7 @@
         </p>
       </div>
 
-      <v-btn color="primary" :loading="loading" prepend-icon="mdi-refresh" @click="loadStats">
+      <v-btn color="primary" :loading="refreshingDashboard" prepend-icon="mdi-refresh" @click="refreshDashboard">
         Atualizar
       </v-btn>
     </div>
@@ -135,6 +135,17 @@
       </v-col>
     </v-row>
 
+    <SystemHeapPanel
+      :current="currentHeapSnapshot"
+      :snapshots="heapSnapshots"
+      :loading="heapLoading"
+      :error="heapError"
+      :poll-interval-ms="heapPollIntervalMs"
+      :retention-hours="heapRetentionHours"
+      @refresh="refreshHeap"
+      @clear-history="clearHeapHistory"
+    />
+
     <v-row class="mb-2">
       <v-col cols="12">
         <v-card class="history-filter-card">
@@ -187,13 +198,6 @@
       :system="liveSystem"
       :history="resourceHistory.systemHistory.value"
       :range-hours="selectedHistoryRangeHours"
-    />
-    <DockerContainerResourceCharts
-      :overview="dockerOverview"
-      :history-by-container-id="resourceHistory.containerHistoryById.value"
-      :range-hours="selectedHistoryRangeHours"
-      :loading="dockerLoading"
-      :error="dockerError"
     />
 
     <!-- Storage Space Cards -->
@@ -341,10 +345,10 @@ import type { BackupStatus, DashboardStats, JobsSystemStatus, SystemStatus } fro
 import { computed, onMounted, ref, watch } from 'vue'
 import { statsApi } from '@/services/api'
 import { useNotifier } from '@/composables/useNotifier'
-import { useDockerContainerResources } from '@/composables/useDockerContainerResources'
 import { useResourceHistory } from '@/composables/useResourceHistory'
+import { useSystemHeapSnapshots } from '@/composables/useSystemHeapSnapshots'
 import { useSystemResources } from '@/composables/useSystemResources'
-import DockerContainerResourceCharts from '@/components/system/DockerContainerResourceCharts.vue'
+import SystemHeapPanel from '@/components/system/SystemHeapPanel.vue'
 import SystemResourceCharts from '@/components/system/SystemResourceCharts.vue'
 import { getBackupStatusColor as getStatusColor, getBackupStatusLabel as getStatusLabel } from '@/ui/backup'
 import { formatBytes, formatDateTimePtBR, formatFileSize } from '@/utils/format'
@@ -356,8 +360,16 @@ const stats = ref<DashboardStats | null>(null)
 
 // Atualizações em tempo real de CPU e RAM via SSE (~1s)
 const { systemResources } = useSystemResources()
-const { overview: dockerOverview, loading: dockerLoading, error: dockerError } =
-  useDockerContainerResources()
+const {
+  current: currentHeapSnapshot,
+  history: heapSnapshots,
+  loading: heapLoading,
+  error: heapError,
+  pollIntervalMs: heapPollIntervalMs,
+  retentionHours: heapRetentionHours,
+  refresh: refreshHeap,
+  clearHistory: clearHeapHistory,
+} = useSystemHeapSnapshots()
 const resourceHistory = useResourceHistory()
 const selectedHistoryRangeHours = ref(1)
 const historyRangeOptions = [
@@ -408,6 +420,10 @@ const schedulerCard = computed<SchedulerCardState>(() => {
   return buildSchedulerCardState(jobs)
 })
 
+const refreshingDashboard = computed(() =>
+  loading.value || heapLoading.value || resourceHistory.loading.value
+)
+
 async function loadStats() {
   loading.value = true
   try {
@@ -419,6 +435,14 @@ async function loadStats() {
   } finally {
     loading.value = false
   }
+}
+
+async function refreshDashboard() {
+  await Promise.all([
+    loadStats(),
+    loadResourceHistory(),
+    refreshHeap(),
+  ])
 }
 
 function formatDate(dateString: string): string {
@@ -502,18 +526,12 @@ function buildSchedulerCardState(jobs: JobsSystemStatus | null): SchedulerCardSt
 }
 
 onMounted(() => {
-  loadStats()
-  void loadResourceHistory()
+  void refreshDashboard()
 })
 
 watch(systemResources, (event) => {
   if (!event) return
   resourceHistory.appendSystemEvent(event)
-})
-
-watch(dockerOverview, (overview) => {
-  if (!overview) return
-  resourceHistory.appendContainerOverview(overview)
 })
 
 watch(selectedHistoryRangeHours, () => {

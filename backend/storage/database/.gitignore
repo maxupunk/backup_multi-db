@@ -1,5 +1,0 @@
-# Ignorar arquivos de banco de dados
-*.sqlite3
-
-# Manter a pasta mas ignorar conteúdo
-!.gitkeep

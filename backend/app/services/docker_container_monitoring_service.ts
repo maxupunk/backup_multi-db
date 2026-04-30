@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process'
 import { DockerEngineHttpClient } from '#services/docker_engine_http_client'
+import { ProcessOutputBuffer } from '#services/process_output_buffer'
 
 type CommandResult = {
   success: boolean
@@ -63,6 +64,7 @@ type DockerCliPsEntry = {
 type DockerCliStatsEntry = {
   ID?: string
   Name?: string
+  Container?: string
   CPUPerc?: string
   MemUsage?: string
   MemPerc?: string
@@ -104,7 +106,18 @@ export type DockerContainerResourceOverview = {
 }
 
 export class DockerContainerMonitoringService {
+  private static readonly COMMAND_STDOUT_CAPTURE_LIMIT_BYTES = 4 * 1024 * 1024
+  private static readonly COMMAND_STDERR_CAPTURE_LIMIT_BYTES = 256 * 1024
+  private static instanceRef: DockerContainerMonitoringService | null = null
   private readonly dockerHttpClient = new DockerEngineHttpClient()
+
+  static instance(): DockerContainerMonitoringService {
+    if (!this.instanceRef) {
+      this.instanceRef = new DockerContainerMonitoringService()
+    }
+
+    return this.instanceRef
+  }
 
   async getOverview(): Promise<DockerContainerResourceOverview> {
     const socketAvailable = this.dockerHttpClient.isSocketAvailable()
@@ -146,11 +159,40 @@ export class DockerContainerMonitoringService {
   private async getContainersUsingEngineSocket(): Promise<DockerContainerResourceMetrics[]> {
     const containers =
       await this.dockerHttpClient.getJson<DockerContainerListItem[]>('/containers/json')
+    const cliStatsEntries = await this.getCliStatsSnapshot()
+
+    if (cliStatsEntries) {
+      return this.mapContainersFromSocketWithCliStats(containers, cliStatsEntries)
+    }
+
     const mapped = await Promise.all(
       containers
         .map((container) => container.Id?.trim())
         .filter((id): id is string => Boolean(id))
         .map((containerId) => this.mapContainerFromSocket(containerId, containers))
+    )
+
+    return mapped.filter((item): item is DockerContainerResourceMetrics => item !== null)
+  }
+
+  private async mapContainersFromSocketWithCliStats(
+    containers: DockerContainerListItem[],
+    cliStatsEntries: DockerCliStatsEntry[]
+  ): Promise<DockerContainerResourceMetrics[]> {
+    const mapped = await Promise.all(
+      containers
+        .map((container) => container.Id?.trim())
+        .filter((id): id is string => Boolean(id))
+        .map(async (containerId) => {
+          const base = containers.find((container) => container.Id === containerId)
+          const cliStats = base ? this.findCliStatsEntry(containerId, base, cliStatsEntries) : null
+
+          if (!base || !cliStats) {
+            return this.mapContainerFromSocket(containerId, containers)
+          }
+
+          return this.mapContainerFromCliStats(base, cliStats)
+        })
     )
 
     return mapped.filter((item): item is DockerContainerResourceMetrics => item !== null)
@@ -194,9 +236,102 @@ export class DockerContainerMonitoringService {
     }
   }
 
-  private resolveContainerName(names: string[] | undefined, containerId: string): string {
+  private mapContainerFromCliStats(
+    base: DockerContainerListItem,
+    stats: DockerCliStatsEntry
+  ): DockerContainerResourceMetrics | null {
+    const containerId = base.Id?.trim()
+
+    if (!containerId) {
+      return null
+    }
+
+    const memUsage = this.parseUsagePair(stats.MemUsage)
+    const netUsage = this.parseUsagePair(stats.NetIO)
+    const blockUsage = this.parseUsagePair(stats.BlockIO)
+
+    return {
+      containerId,
+      containerName: this.resolveContainerName(base.Names, containerId, stats.Name),
+      projectName: this.resolveProjectName(base.Labels, base.Names, containerId),
+      imageName: base.Image?.trim() || 'N/A',
+      status: base.State?.trim() || base.Status?.trim() || 'unknown',
+      cpu: {
+        usagePercent: this.parsePercent(stats.CPUPerc),
+      },
+      memory: {
+        usageBytes: memUsage.first,
+        limitBytes: memUsage.second,
+        usagePercent: this.parsePercent(stats.MemPerc),
+      },
+      network: {
+        rxBytes: netUsage.first,
+        txBytes: netUsage.second,
+      },
+      blockIo: {
+        readBytes: blockUsage.first,
+        writeBytes: blockUsage.second,
+      },
+      pids: this.parseInteger(stats.PIDs),
+    }
+  }
+
+  private async getCliStatsSnapshot(): Promise<DockerCliStatsEntry[] | null> {
+    const statsResult = await this.runDockerCommand([
+      'stats',
+      '--no-stream',
+      '--format',
+      '{{json .}}',
+    ])
+
+    if (!statsResult.success) {
+      return null
+    }
+
+    return this.parseJsonLines<DockerCliStatsEntry>(statsResult.stdout)
+  }
+
+  private findCliStatsEntry(
+    containerId: string,
+    base: DockerContainerListItem,
+    statsEntries: DockerCliStatsEntry[]
+  ): DockerCliStatsEntry | null {
+    const possibleNames = new Set(
+      (base.Names ?? []).map((name) => name.replace(/^\//, '').trim()).filter(Boolean)
+    )
+
+    for (const statsEntry of statsEntries) {
+      const statsName = statsEntry.Name?.trim() || statsEntry.Container?.trim()
+      if (statsName && possibleNames.has(statsName)) {
+        return statsEntry
+      }
+    }
+
+    for (const statsEntry of statsEntries) {
+      const statsId = statsEntry.ID?.trim() || statsEntry.Container?.trim()
+      if (!statsId) {
+        continue
+      }
+
+      if (
+        containerId === statsId ||
+        containerId.startsWith(statsId) ||
+        statsId.startsWith(containerId)
+      ) {
+        return statsEntry
+      }
+    }
+
+    return null
+  }
+
+  private resolveContainerName(
+    names: string[] | undefined,
+    containerId: string,
+    fallbackName?: string
+  ): string {
     const preferred = names?.[0]?.replace(/^\//, '').trim()
-    return preferred || containerId.slice(0, 12)
+    return preferred || fallbackName?.trim() || containerId.slice(0, 12)
   }
 
   private resolveProjectName(
@@ -489,9 +624,19 @@ export class DockerContainerMonitoringService {
         stdio: ['ignore', 'pipe', 'pipe'],
       })
 
-      let stdout = ''
-      let stderr = ''
+      const stdoutBuffer = new ProcessOutputBuffer(
+        DockerContainerMonitoringService.COMMAND_STDOUT_CAPTURE_LIMIT_BYTES
+      )
+      const stderrBuffer = new ProcessOutputBuffer(
+        DockerContainerMonitoringService.COMMAND_STDERR_CAPTURE_LIMIT_BYTES
+      )
       let resolved = false
+
+      const buildResult = (success: boolean): CommandResult => ({
+        success,
+        stdout: stdoutBuffer.toString(),
+        stderr: stderrBuffer.toString(),
+      })
 
       const timeoutRef = setTimeout(() => {
         if (resolved) {
@@ -500,19 +645,15 @@ export class DockerContainerMonitoringService {
 
         resolved = true
         processRef.kill()
-        resolve({
-          success: false,
-          stdout,
-          stderr,
-        })
+        resolve(buildResult(false))
       }, timeoutMs)
 
       processRef.stdout.on('data', (chunk: Buffer) => {
-        stdout += chunk.toString()
+        stdoutBuffer.append(chunk)
       })
 
       processRef.stderr.on('data', (chunk: Buffer) => {
-        stderr += chunk.toString()
+        stderrBuffer.append(chunk)
       })
 
       processRef.on('error', () => {
@@ -522,11 +663,7 @@ export class DockerContainerMonitoringService {
 
         resolved = true
         clearTimeout(timeoutRef)
-        resolve({
-          success: false,
-          stdout,
-          stderr,
-        })
+        resolve(buildResult(false))
       })
 
       processRef.on('close', (code) => {
@@ -536,11 +673,7 @@ export class DockerContainerMonitoringService {
 
         resolved = true
         clearTimeout(timeoutRef)
-        resolve({
-          success: code === 0,
-          stdout,
-          stderr,
-        })
+        resolve(buildResult(code === 0))
       })
     })
   }

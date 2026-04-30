@@ -47,6 +47,7 @@ export type ScannedRoutes = {
     'backups.import': { paramsTuple?: []; params?: {} }
     'system.stats': { paramsTuple?: []; params?: {} }
     'system.status': { paramsTuple?: []; params?: {} }
+    'system.heap': { paramsTuple?: []; params?: {} }
     'system.container_resources': { paramsTuple?: []; params?: {} }
     'system.resources_history': { paramsTuple?: []; params?: {} }
     'audit_logs.index': { paramsTuple?: []; params?: {} }
@@ -101,6 +102,7 @@ export type ScannedRoutes = {
     'backups.download': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'system.stats': { paramsTuple?: []; params?: {} }
     'system.status': { paramsTuple?: []; params?: {} }
+    'system.heap': { paramsTuple?: []; params?: {} }
     'system.container_resources': { paramsTuple?: []; params?: {} }
     'system.resources_history': { paramsTuple?: []; params?: {} }
     'audit_logs.index': { paramsTuple?: []; params?: {} }
@@ -141,6 +143,7 @@ export type ScannedRoutes = {
     'backups.download': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'system.stats': { paramsTuple?: []; params?: {} }
     'system.status': { paramsTuple?: []; params?: {} }
+    'system.heap': { paramsTuple?: []; params?: {} }
     'system.container_resources': { paramsTuple?: []; params?: {} }
     'system.resources_history': { paramsTuple?: []; params?: {} }
     'audit_logs.index': { paramsTuple?: []; params?: {} }

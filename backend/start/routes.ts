@@ -17,6 +17,9 @@ const DockerManagerController = () => import('#controllers/docker_manager_contro
 import AutoSwagger from 'adonis-autoswagger'
 import swagger from '#config/swagger'
 
+const spaIndexPath = join(app.publicPath(), 'index.html')
+const spaIndexHtml = existsSync(spaIndexPath) ? readFileSync(spaIndexPath) : null
+
 /*
 |--------------------------------------------------------------------------
 | API Routes
@@ -130,6 +133,7 @@ router
 
         router.get('/stats', [SystemController, 'stats'])
         router.get('/system/status', [SystemController, 'status'])
+        router.get('/system/heap', [SystemController, 'heap'])
         router.get('/system/containers/resources', [SystemController, 'containerResources'])
         router.get('/system/resources/history', [SystemController, 'resourcesHistory'])
 
@@ -223,11 +227,8 @@ import transmit from '@adonisjs/transmit/services/main'
 transmit.registerRoutes()
 
 router.get('*', async ({ response }) => {
-  const indexPath = join(app.publicPath(), 'index.html')
-
-  if (existsSync(indexPath)) {
-    const html = readFileSync(indexPath, 'utf-8')
-    return response.header('Content-Type', 'text/html').send(html)
+  if (spaIndexHtml) {
+    return response.header('Content-Type', 'text/html').send(spaIndexHtml)
   }
 
   // Development mode - frontend is served by Vite

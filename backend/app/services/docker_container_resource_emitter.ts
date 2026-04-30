@@ -1,8 +1,7 @@
 import transmit from '@adonisjs/transmit/services/main'
 import logger from '@adonisjs/core/services/logger'
 import { NOTIFICATION_CHANNELS } from '#services/notification_service'
-import { DockerContainerMonitoringService } from '#services/docker_container_monitoring_service'
-import { ResourceMetricsHistoryService } from '#services/resource_metrics_history_service'
+import type { DockerContainerResourceOverview } from '#services/docker_container_monitoring_service'
 
 type BroadcastableValue =
   | { [key: string]: BroadcastableValue }
@@ -13,42 +12,12 @@ type BroadcastableValue =
   | BroadcastableValue[]
 
 /**
- * Emite métricas de recursos dos containers Docker via SSE.
+ * Responsabilidade única: converter métricas de containers Docker em payload
+ * SSE e publicar no canal de recursos dos containers.
  */
 export class DockerContainerResourceEmitter {
-  private static readonly INTERVAL_MS = 5_000
-  private static intervalHandle: ReturnType<typeof setInterval> | null = null
-  private static readonly monitoringService = new DockerContainerMonitoringService()
-
-  static start(): void {
-    if (this.intervalHandle !== null) {
-      logger.warn('[DockerContainerResourceEmitter] Ja esta em execucao, ignorando start()')
-      return
-    }
-
-    logger.info('[DockerContainerResourceEmitter] Iniciando broadcast de recursos dos containers')
-
-    this.intervalHandle = setInterval(() => {
-      void this.broadcastMetrics()
-    }, this.INTERVAL_MS)
-
-    void this.broadcastMetrics()
-  }
-
-  static stop(): void {
-    if (this.intervalHandle === null) {
-      return
-    }
-
-    clearInterval(this.intervalHandle)
-    this.intervalHandle = null
-    logger.info('[DockerContainerResourceEmitter] Broadcast de recursos encerrado')
-  }
-
-  private static async broadcastMetrics(): Promise<void> {
+  static broadcast(overview: DockerContainerResourceOverview): void {
     try {
-      const overview = await this.monitoringService.getOverview()
-
       const payload: { [key: string]: BroadcastableValue } = {
         dockerAvailable: overview.dockerAvailable,
         unavailableReason: overview.unavailableReason,
@@ -78,8 +47,6 @@ export class DockerContainerResourceEmitter {
           pids: container.pids,
         })),
       }
-
-      await ResourceMetricsHistoryService.recordContainerSnapshot(overview)
 
       transmit.broadcast(NOTIFICATION_CHANNELS.DOCKER_CONTAINER_RESOURCES, payload)
     } catch (error) {

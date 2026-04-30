@@ -1,18 +1,17 @@
 /**
  * Configura o Transmit (Server-Sent Events) e registra as rotas SSE.
- * Também envia notificação de sistema iniciado e inicia o broadcast de recursos.
+ * Também envia notificação de sistema iniciado e inicia o polling unificado de recursos.
  *
- * O broadcast de recursos (SystemResourceEmitter) só é iniciado quando o app
- * está rodando em contexto HTTP ('web'). Em ace commands (ex: migration:run),
- * getEnvironment() retorna 'console' e o setInterval não é criado, permitindo
- * que o processo termine normalmente após a execução do comando.
+ * O polling unificado de recursos só é iniciado quando o app está rodando em
+ * contexto HTTP ('web'). Em ace commands (ex: migration:run), getEnvironment()
+ * retorna 'console' e o setInterval não é criado, permitindo que o processo
+ * termine normalmente após a execução do comando.
  */
 
 import logger from '@adonisjs/core/services/logger'
 import app from '@adonisjs/core/services/app'
 import { NotificationService } from '#services/notification_service'
-import { DockerContainerResourceEmitter } from '#services/docker_container_resource_emitter'
-import { SystemResourceEmitter } from '#services/system_resource_emitter'
+import { ResourceMetricsPollingService } from '#services/resource_metrics_polling_service'
 
 // Apenas exibe o log (as rotas foram registradas em start/routes.ts)
 logger.info('[Transmit] Rotas SSE configuradas')
@@ -28,18 +27,16 @@ app.ready(() => {
   // Pequeno delay para garantir que o Transmit está totalmente pronto
   setTimeout(() => {
     NotificationService.systemStarted()
-    SystemResourceEmitter.start()
-    DockerContainerResourceEmitter.start()
+    ResourceMetricsPollingService.start()
   }, 1000)
 })
 
 // Configura hook de shutdown para notificar antes de encerrar (apenas em web)
-app.terminating(() => {
+app.terminating(async () => {
   if (app.getEnvironment() !== 'web') {
     return
   }
 
-  SystemResourceEmitter.stop()
-  DockerContainerResourceEmitter.stop()
+  await ResourceMetricsPollingService.stop()
   NotificationService.systemShutdown()
 })
