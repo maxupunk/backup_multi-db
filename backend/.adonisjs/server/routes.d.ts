@@ -50,6 +50,9 @@ export type ScannedRoutes = {
     'system.heap': { paramsTuple?: []; params?: {} }
     'system.container_resources': { paramsTuple?: []; params?: {} }
     'system.resources_history': { paramsTuple?: []; params?: {} }
+    'system.backup_retention_policy': { paramsTuple?: []; params?: {} }
+    'system.update_backup_retention_policy': { paramsTuple?: []; params?: {} }
+    'system.run_backup_retention': { paramsTuple?: []; params?: {} }
     'audit_logs.index': { paramsTuple?: []; params?: {} }
     'audit_logs.stats': { paramsTuple?: []; params?: {} }
     'audit_logs.show': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
@@ -105,6 +108,7 @@ export type ScannedRoutes = {
     'system.heap': { paramsTuple?: []; params?: {} }
     'system.container_resources': { paramsTuple?: []; params?: {} }
     'system.resources_history': { paramsTuple?: []; params?: {} }
+    'system.backup_retention_policy': { paramsTuple?: []; params?: {} }
     'audit_logs.index': { paramsTuple?: []; params?: {} }
     'audit_logs.stats': { paramsTuple?: []; params?: {} }
     'audit_logs.show': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
@@ -146,6 +150,7 @@ export type ScannedRoutes = {
     'system.heap': { paramsTuple?: []; params?: {} }
     'system.container_resources': { paramsTuple?: []; params?: {} }
     'system.resources_history': { paramsTuple?: []; params?: {} }
+    'system.backup_retention_policy': { paramsTuple?: []; params?: {} }
     'audit_logs.index': { paramsTuple?: []; params?: {} }
     'audit_logs.stats': { paramsTuple?: []; params?: {} }
     'audit_logs.show': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
@@ -178,6 +183,7 @@ export type ScannedRoutes = {
     'connections.backup': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'backups.restore': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'backups.import': { paramsTuple?: []; params?: {} }
+    'system.run_backup_retention': { paramsTuple?: []; params?: {} }
     'docker_manager.start_container': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'docker_manager.stop_container': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'docker_manager.restart_container': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
@@ -193,6 +199,7 @@ export type ScannedRoutes = {
     'connections.update': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'storage_destinations.update': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'storages.update': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'system.update_backup_retention_policy': { paramsTuple?: []; params?: {} }
   }
   PATCH: {
     'connections.update': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }

@@ -735,32 +735,10 @@ export class BackupService {
   }
 
   /**
-   * Determina o tipo de retenção baseado no momento atual.
-   * Usado para políticas de backup (GFS - Grandfather-Father-Son).
+   * Novos backups entram como hourly e o job de retenção os promove/deduplica
+   * de forma determinística com base na idade do backup.
    */
   private determineRetentionType(): RetentionType {
-    const now = DateTime.now()
-
-    // Último dia do ano -> backup anual
-    if (now.month === 12 && now.day === 31) {
-      return 'yearly'
-    }
-
-    // Último dia do mês -> backup mensal
-    if (now.day === now.daysInMonth) {
-      return 'monthly'
-    }
-
-    // Domingo -> backup semanal
-    if (now.weekday === 7) {
-      return 'weekly'
-    }
-
-    // Após 23h -> backup diário
-    if (now.hour >= 23) {
-      return 'daily'
-    }
-
     return 'hourly'
   }
 }

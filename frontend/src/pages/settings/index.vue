@@ -143,56 +143,171 @@
           </v-card-title>
 
           <v-card-text>
+            <v-progress-linear v-if="loadingRetentionPolicy" class="mb-4" color="warning" indeterminate rounded />
+
             <v-alert class="mb-4" density="compact" type="info" variant="tonal">
-              A política de retenção é aplicada automaticamente pelo sistema.
+              Durante o dia o sistema mantém 1 backup concluído por hora. Depois disso,
+              a retenção consolida os pontos de restauração por dia, semana, mês e ano.
             </v-alert>
 
-            <v-list density="compact">
-              <v-list-item>
-                <template #prepend>
-                  <v-chip class="mr-2" color="grey" label size="small">Horário</v-chip>
-                </template>
-                <v-list-item-title>
-                  Mantém baseado na frequência configurada
-                </v-list-item-title>
-              </v-list-item>
+            <v-form ref="retentionFormRef" @submit.prevent="saveRetentionPolicy">
+              <v-row>
+                <v-col cols="12" sm="6">
+                  <v-text-field
+                    v-model.number="retentionPolicy.daily"
+                    :disabled="loadingRetentionPolicy || savingRetentionPolicy || runningRetentionPolicy"
+                    :rules="[rules.required, rules.nonNegativeInteger]"
+                    label="Dias com 1 backup diário"
+                    prepend-inner-icon="mdi-calendar-today"
+                    type="number"
+                  />
+                </v-col>
 
-              <v-list-item>
-                <template #prepend>
-                  <v-chip class="mr-2" color="blue" label size="small">Diário</v-chip>
-                </template>
-                <v-list-item-title>
-                  Último backup de cada dia (7 dias)
-                </v-list-item-title>
-              </v-list-item>
+                <v-col cols="12" sm="6">
+                  <v-text-field
+                    v-model.number="retentionPolicy.weekly"
+                    :disabled="loadingRetentionPolicy || savingRetentionPolicy || runningRetentionPolicy"
+                    :rules="[rules.required, rules.nonNegativeInteger]"
+                    label="Semanas com 1 backup semanal"
+                    prepend-inner-icon="mdi-calendar-week"
+                    type="number"
+                  />
+                </v-col>
 
-              <v-list-item>
-                <template #prepend>
-                  <v-chip class="mr-2" color="purple" label size="small">Semanal</v-chip>
-                </template>
-                <v-list-item-title>
-                  Último backup de cada semana (4 semanas)
-                </v-list-item-title>
-              </v-list-item>
+                <v-col cols="12" sm="6">
+                  <v-text-field
+                    v-model.number="retentionPolicy.monthly"
+                    :disabled="loadingRetentionPolicy || savingRetentionPolicy || runningRetentionPolicy"
+                    :rules="[rules.required, rules.nonNegativeInteger]"
+                    label="Meses com 1 backup mensal"
+                    prepend-inner-icon="mdi-calendar-month"
+                    type="number"
+                  />
+                </v-col>
 
-              <v-list-item>
-                <template #prepend>
-                  <v-chip class="mr-2" color="orange" label size="small">Mensal</v-chip>
-                </template>
-                <v-list-item-title>
-                  Último backup de cada mês (12 meses)
-                </v-list-item-title>
-              </v-list-item>
+                <v-col cols="12" sm="6">
+                  <v-text-field
+                    v-model.number="retentionPolicy.yearly"
+                    :disabled="loadingRetentionPolicy || savingRetentionPolicy || runningRetentionPolicy"
+                    :rules="[rules.required, rules.nonNegativeInteger]"
+                    label="Anos com 1 backup anual"
+                    prepend-inner-icon="mdi-calendar-star"
+                    type="number"
+                  />
+                </v-col>
 
-              <v-list-item>
-                <template #prepend>
-                  <v-chip class="mr-2" color="red" label size="small">Anual</v-chip>
-                </template>
-                <v-list-item-title>
-                  Último backup de cada ano (5 anos)
-                </v-list-item-title>
-              </v-list-item>
-            </v-list>
+                <v-col cols="12">
+                  <v-text-field
+                    v-model="retentionPolicy.pruneCron"
+                    :disabled="loadingRetentionPolicy || savingRetentionPolicy || runningRetentionPolicy"
+                    :hint="`Padrão sugerido: ${retentionDefaults.pruneCron}`"
+                    :persistent-hint="true"
+                    :rules="[rules.required]"
+                    label="Cron do prune automático"
+                    placeholder="0 2 * * *"
+                    prepend-inner-icon="mdi-clock-outline"
+                  />
+                </v-col>
+              </v-row>
+
+              <div class="d-flex flex-wrap ga-2 mt-2">
+                <v-chip color="grey" label size="small" variant="tonal">
+                  Atual: 1 backup concluído por hora no dia corrente
+                </v-chip>
+                <v-chip color="info" label size="small" variant="tonal">
+                  Prune automático: {{ retentionPolicy.pruneCron || retentionDefaults.pruneCron }}
+                </v-chip>
+              </div>
+            </v-form>
+
+            <v-divider class="my-4" />
+
+            <div class="d-flex flex-wrap ga-3">
+              <v-btn
+                color="warning"
+                :loading="savingRetentionPolicy"
+                prepend-icon="mdi-content-save"
+                variant="flat"
+                @click="saveRetentionPolicy"
+              >
+                Salvar política
+              </v-btn>
+
+              <v-btn
+                color="secondary"
+                :loading="runningRetentionPolicy"
+                prepend-icon="mdi-broom"
+                variant="tonal"
+                @click="runRetentionNow"
+              >
+                Executar prune agora
+              </v-btn>
+            </div>
+
+            <template v-if="lastRetentionRun">
+              <v-divider class="my-4" />
+
+              <div class="text-subtitle-2 font-weight-medium mb-3">
+                Resumo da última execução manual
+              </div>
+
+              <div class="d-flex flex-wrap ga-2 mb-4">
+                <v-chip color="error" label size="small" variant="tonal">
+                  {{ lastRetentionRun.deleted }} removidos
+                </v-chip>
+                <v-chip color="primary" label size="small" variant="tonal">
+                  {{ lastRetentionRun.promoted }} reclassificados
+                </v-chip>
+                <v-chip color="success" label size="small" variant="tonal">
+                  {{ lastRetentionRun.protected }} protegidos
+                </v-chip>
+              </div>
+
+              <v-alert
+                v-if="lastRetentionRun.errors.length > 0"
+                class="mb-4"
+                density="comfortable"
+                type="warning"
+                variant="tonal"
+              >
+                <div class="font-weight-medium mb-2">Ocorreram erros durante o prune</div>
+                <div v-for="errorMessage in lastRetentionRun.errors" :key="errorMessage" class="text-body-2">
+                  {{ errorMessage }}
+                </div>
+              </v-alert>
+
+              <v-alert
+                v-else-if="lastRetentionRun.deletedBackups.length === 0"
+                density="comfortable"
+                type="success"
+                variant="tonal"
+              >
+                Nenhum backup precisou ser removido nesta execução.
+              </v-alert>
+
+              <v-list v-else class="bg-transparent" density="compact" lines="two">
+                <v-list-item
+                  v-for="deletedBackup in lastRetentionRun.deletedBackups"
+                  :key="deletedBackup.id"
+                  :subtitle="deletedBackup.fileName || 'Arquivo sem nome registrado'"
+                >
+                  <template #prepend>
+                    <v-icon color="error" icon="mdi-delete-clock-outline" />
+                  </template>
+
+                  <v-list-item-title>
+                    {{ deletedBackup.databaseName }}
+                  </v-list-item-title>
+
+                  <template #append>
+                    <div class="text-right text-caption text-medium-emphasis">
+                      <div>{{ formatRetentionType(deletedBackup.retentionType) }}</div>
+                      <div>{{ deletedBackup.createdAt ? formatDateTimePtBR(deletedBackup.createdAt) : 'Data indisponível' }}</div>
+                    </div>
+                  </template>
+                </v-list-item>
+              </v-list>
+            </template>
           </v-card-text>
         </v-card>
 
@@ -416,7 +531,15 @@
 </template>
 
 <script lang="ts" setup>
-import type { StorageDestination, StorageDestinationType, StorageSpaceInfo, SystemStatus } from '@/types/api'
+import type {
+  BackupRetentionRunResult,
+  RetentionType,
+  StorageDestination,
+  StorageDestinationType,
+  StorageSpaceInfo,
+  SystemStatus,
+  UpdateBackupRetentionPolicyPayload,
+} from '@/types/api'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useTheme } from 'vuetify'
 import { ApiError, healthCheck, storageDestinationsApi, systemApi } from '@/services/api'
@@ -424,7 +547,7 @@ import { useDisplay } from 'vuetify'
 import { useDebouncedFn } from '@/composables/useDebouncedFn'
 import { useNotifier } from '@/composables/useNotifier'
 import SystemInfoCard from '@/components/system/SystemInfoCard.vue'
-import { formatBytes } from '@/utils/format'
+import { formatBytes, formatDateTimePtBR } from '@/utils/format'
 
 const theme = useTheme()
 const { mdAndUp } = useDisplay()
@@ -435,6 +558,11 @@ const apiStatus = ref<'online' | 'offline'>('offline')
 const apiLatency = ref<number | null>(null)
 const checkingApi = ref(false)
 const systemStatus = ref<SystemStatus | null>(null)
+const loadingRetentionPolicy = ref(false)
+const savingRetentionPolicy = ref(false)
+const runningRetentionPolicy = ref(false)
+const retentionFormRef = ref()
+const lastRetentionRun = ref<BackupRetentionRunResult | null>(null)
 
 const storageDestinations = ref<StorageDestination[]>([])
 const loadingDestinations = ref(false)
@@ -449,6 +577,18 @@ const destinationFormRef = ref()
 
 const settings = reactive({
   theme: 'dark' as 'light' | 'dark' | 'system',
+})
+
+const retentionDefaults = reactive({
+  pruneCron: '0 2 * * *',
+})
+
+const retentionPolicy = reactive<UpdateBackupRetentionPolicyPayload>({
+  daily: 7,
+  weekly: 4,
+  monthly: 12,
+  yearly: 5,
+  pruneCron: retentionDefaults.pruneCron,
 })
 
 const destinationFilters = reactive({
@@ -542,6 +682,12 @@ const rules = {
     if (Number.isNaN(value)) return 'Porta inválida'
     return (value > 0 && value <= 65_535) || 'Porta inválida'
   },
+  nonNegativeInteger: (v: unknown) => {
+    const value = typeof v === 'number' ? v : Number(v)
+    if (Number.isNaN(value)) return 'Informe um número válido'
+    if (value < 0) return 'O valor não pode ser negativo'
+    return Number.isInteger(value) || 'O valor deve ser inteiro'
+  },
 }
 
 function applyTheme() {
@@ -582,6 +728,93 @@ function formatDestinationType(type: StorageDestinationType): string {
     sftp: 'SFTP',
   }
   return map[type] ?? type
+}
+
+function formatRetentionType(type: RetentionType): string {
+  const labels: Record<RetentionType, string> = {
+    hourly: 'Horário',
+    daily: 'Diário',
+    weekly: 'Semanal',
+    monthly: 'Mensal',
+    yearly: 'Anual',
+  }
+
+  return labels[type] ?? type
+}
+
+async function loadRetentionPolicy() {
+  loadingRetentionPolicy.value = true
+  try {
+    const response = await systemApi.retentionPolicy()
+    const policy = response.data
+
+    if (!policy) {
+      return
+    }
+
+    retentionPolicy.daily = policy.daily
+    retentionPolicy.weekly = policy.weekly
+    retentionPolicy.monthly = policy.monthly
+    retentionPolicy.yearly = policy.yearly
+    retentionPolicy.pruneCron = policy.pruneCron
+    retentionDefaults.pruneCron = policy.defaultPruneCron
+  } catch {
+    notify('Erro ao carregar política de retenção', 'error')
+  } finally {
+    loadingRetentionPolicy.value = false
+  }
+}
+
+async function saveRetentionPolicy() {
+  const validationResult = await retentionFormRef.value?.validate?.()
+  if (validationResult && 'valid' in validationResult && validationResult.valid === false) return
+
+  savingRetentionPolicy.value = true
+  try {
+    const response = await systemApi.updateRetentionPolicy({ ...retentionPolicy })
+    const policy = response.data
+
+    if (policy) {
+      retentionPolicy.daily = policy.daily
+      retentionPolicy.weekly = policy.weekly
+      retentionPolicy.monthly = policy.monthly
+      retentionPolicy.yearly = policy.yearly
+      retentionPolicy.pruneCron = policy.pruneCron
+      retentionDefaults.pruneCron = policy.defaultPruneCron
+    }
+
+    notify('Política de retenção atualizada com sucesso', 'success')
+  } catch (error: unknown) {
+    if (error instanceof ApiError) {
+      notify(error.message || 'Erro ao atualizar política de retenção', 'error')
+    } else {
+      notify('Erro ao atualizar política de retenção', 'error')
+    }
+  } finally {
+    savingRetentionPolicy.value = false
+  }
+}
+
+async function runRetentionNow() {
+  runningRetentionPolicy.value = true
+  try {
+    const response = await systemApi.runRetentionNow()
+    lastRetentionRun.value = response.data ?? null
+
+    if ((response.data?.errors.length ?? 0) > 0) {
+      notify('Prune executado com alertas', 'warning')
+    } else {
+      notify('Prune executado com sucesso', 'success')
+    }
+  } catch (error: unknown) {
+    if (error instanceof ApiError) {
+      notify(error.message || 'Erro ao executar prune manual', 'error')
+    } else {
+      notify('Erro ao executar prune manual', 'error')
+    }
+  } finally {
+    runningRetentionPolicy.value = false
+  }
 }
 
 async function loadDestinations() {
@@ -902,6 +1135,7 @@ onMounted(() => {
   checkApi()
 
   loadDestinations()
+  loadRetentionPolicy()
 })
 </script>
 

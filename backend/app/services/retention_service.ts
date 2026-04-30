@@ -1,16 +1,31 @@
-import { DateTime } from 'luxon'
 import Backup from '#models/backup'
-import env from '#start/env'
+import {
+  BackupRetentionPlanner,
+  type BackupRetentionConfig,
+} from '#services/backup_retention_planner'
 import { StorageDestinationService } from '#services/storage_destination_service'
 
 /**
  * Configurações de retenção (em unidades)
  */
-interface RetentionConfig {
-  daily: number // dias
-  weekly: number // semanas
-  monthly: number // meses
-  yearly: number // anos
+export interface RetentionConfig extends BackupRetentionConfig {}
+
+export interface DeletedBackupSummary {
+  id: number
+  connectionId: number | null
+  connectionDatabaseId: number | null
+  databaseName: string
+  fileName: string | null
+  retentionType: Backup['retentionType']
+  createdAt: string | null
+}
+
+export interface RetentionExecutionResult {
+  deleted: number
+  promoted: number
+  protected: number
+  errors: string[]
+  deletedBackups: DeletedBackupSummary[]
 }
 
 /**
@@ -18,59 +33,36 @@ interface RetentionConfig {
  */
 export class RetentionService {
   private readonly config: RetentionConfig
+  private readonly planner: BackupRetentionPlanner
 
-  constructor() {
-    this.config = {
-      daily: env.get('RETENTION_DAILY', 7),
-      weekly: env.get('RETENTION_WEEKLY', 4),
-      monthly: env.get('RETENTION_MONTHLY', 12),
-      yearly: env.get('RETENTION_YEARLY', 5),
-    }
+  constructor(config: RetentionConfig) {
+    this.config = config
+
+    this.planner = new BackupRetentionPlanner(this.config)
   }
 
   /**
    * Executa a lógica de pruning (limpeza) de backups antigos
    */
-  async pruneBackups(): Promise<{
-    deleted: number
-    promoted: number
-    protected: number
-    errors: string[]
-  }> {
+  async pruneBackups(): Promise<RetentionExecutionResult> {
     const errors: string[] = []
+    const deletedBackups: DeletedBackupSummary[] = []
     let deleted = 0
     let promoted = 0
     let protectedCount = 0
 
     try {
-      // 1. Promover backups para níveis superiores de retenção
-      const promotionResult = await this.promoteBackups()
-      promoted = promotionResult.promoted
+      const backups = await this.loadPrunableBackups()
+      const plan = this.planner.plan(backups)
 
-      // 2. Deletar backups hourly antigos
-      const hourlyResult = await this.cleanupHourlyBackups()
-      deleted += hourlyResult.deleted
-      errors.push(...hourlyResult.errors)
+      promoted = await this.syncRetentionTypes(backups, plan.retained)
 
-      // 3. Deletar backups daily antigos
-      const dailyResult = await this.cleanupDailyBackups()
-      deleted += dailyResult.deleted
-      errors.push(...dailyResult.errors)
-
-      // 4. Deletar backups weekly antigos
-      const weeklyResult = await this.cleanupWeeklyBackups()
-      deleted += weeklyResult.deleted
-      errors.push(...weeklyResult.errors)
-
-      // 5. Deletar backups monthly antigos
-      const monthlyResult = await this.cleanupMonthlyBackups()
-      deleted += monthlyResult.deleted
-      errors.push(...monthlyResult.errors)
-
-      // 6. Deletar backups yearly antigos
-      const yearlyResult = await this.cleanupYearlyBackups()
-      deleted += yearlyResult.deleted
-      errors.push(...yearlyResult.errors)
+      const backupsToDeleteIds = new Set(plan.toDelete)
+      const backupsToDelete = backups.filter((backup) => backupsToDeleteIds.has(backup.id))
+      const deletionResult = await this.deleteBackups(backupsToDelete)
+      deleted += deletionResult.deleted
+      errors.push(...deletionResult.errors)
+      deletedBackups.push(...deletionResult.deletedBackups)
 
       // Contar backups protegidos
       const protectedResult = await Backup.query()
@@ -79,214 +71,63 @@ export class RetentionService {
         .first()
       protectedCount = Number(protectedResult?.$extras.total ?? 0)
 
-      return { deleted, promoted, protected: protectedCount, errors }
+      return { deleted, promoted, protected: protectedCount, errors, deletedBackups }
     } catch (error) {
       errors.push(error instanceof Error ? error.message : 'Erro desconhecido no pruning')
-      return { deleted, promoted, protected: protectedCount, errors }
+      return { deleted, promoted, protected: protectedCount, errors, deletedBackups }
     }
   }
 
   /**
-   * Promove backups para níveis superiores de retenção
+   * Busca backups que podem participar do pruning automático.
    */
-  private async promoteBackups(): Promise<{ promoted: number }> {
-    let promoted = 0
-
-    const now = DateTime.now()
-
-    // Promover para yearly (último backup de dezembro)
-    if (now.month === 12 && now.day === 31) {
-      const lastBackupsOfYear = await this.getLastBackupsOfPeriod('year')
-      for (const backup of lastBackupsOfYear) {
-        if (backup.retentionType !== 'yearly') {
-          backup.promoteRetention('yearly')
-          await backup.save()
-          promoted++
-        }
-      }
-    }
-
-    // Promover para monthly (último backup do mês)
-    if (now.day === now.daysInMonth) {
-      const lastBackupsOfMonth = await this.getLastBackupsOfPeriod('month')
-      for (const backup of lastBackupsOfMonth) {
-        if (backup.retentionType !== 'monthly' && backup.retentionType !== 'yearly') {
-          backup.promoteRetention('monthly')
-          await backup.save()
-          promoted++
-        }
-      }
-    }
-
-    // Promover para weekly (domingo)
-    if (now.weekday === 7) {
-      const lastBackupsOfWeek = await this.getLastBackupsOfPeriod('week')
-      for (const backup of lastBackupsOfWeek) {
-        if (
-          backup.retentionType !== 'weekly' &&
-          backup.retentionType !== 'monthly' &&
-          backup.retentionType !== 'yearly'
-        ) {
-          backup.promoteRetention('weekly')
-          await backup.save()
-          promoted++
-        }
-      }
-    }
-
-    // Promover para daily (fim do dia - 23h)
-    if (now.hour >= 23) {
-      const lastBackupsOfDay = await this.getLastBackupsOfPeriod('day')
-      for (const backup of lastBackupsOfDay) {
-        if (backup.retentionType === 'hourly' && backup.status === 'completed') {
-          backup.promoteRetention('daily')
-          await backup.save()
-          promoted++
-        }
-      }
-    }
-
-    return { promoted }
-  }
-
-  /**
-   * Obtém os últimos backups de um período por conexão
-   */
-  private async getLastBackupsOfPeriod(
-    period: 'day' | 'week' | 'month' | 'year'
-  ): Promise<Backup[]> {
-    const now = DateTime.now()
-    let startDate: DateTime
-
-    switch (period) {
-      case 'day':
-        startDate = now.startOf('day')
-        break
-      case 'week':
-        startDate = now.startOf('week')
-        break
-      case 'month':
-        startDate = now.startOf('month')
-        break
-      case 'year':
-        startDate = now.startOf('year')
-        break
-    }
-
-    // Buscar último backup bem-sucedido de cada conexão no período
-    const backups = await Backup.query()
-      .where('status', 'completed')
-      .where('createdAt', '>=', startDate.toISO()!)
+  private async loadPrunableBackups(): Promise<Backup[]> {
+    return await Backup.query()
+      .where('protected', false)
+      .whereNotIn('status', ['pending', 'running'])
       .orderBy('createdAt', 'desc')
+  }
 
-    // Agrupar por connectionId e manter apenas o mais recente de cada
-    const lastByConnection = new Map<number, Backup>()
+  /**
+   * Sincroniza o tipo de retenção persistido com o plano calculado em memória.
+   */
+  private async syncRetentionTypes(
+    backups: Backup[],
+    retainedById: Map<number, Backup['retentionType']>
+  ): Promise<number> {
+    let changed = 0
+
     for (const backup of backups) {
-      if (backup.connectionId === null) {
+      const plannedRetention = retainedById.get(backup.id)
+
+      if (!plannedRetention || backup.retentionType === plannedRetention) {
         continue
       }
-      if (!lastByConnection.has(backup.connectionId)) {
-        lastByConnection.set(backup.connectionId, backup)
-      }
+
+      backup.retentionType = plannedRetention
+      await backup.save()
+      changed++
     }
 
-    return Array.from(lastByConnection.values())
-  }
-
-  /**
-   * Limpa backups hourly antigos (mantém apenas do dia atual)
-   */
-  private async cleanupHourlyBackups(): Promise<{
-    deleted: number
-    errors: string[]
-  }> {
-    const today = DateTime.now().startOf('day')
-
-    const oldHourlyBackups = await Backup.query()
-      .where('retentionType', 'hourly')
-      .where('createdAt', '<', today.toSQL())
-      .where('protected', false)
-
-    return this.deleteBackups(oldHourlyBackups)
-  }
-
-  /**
-   * Limpa backups daily antigos
-   */
-  private async cleanupDailyBackups(): Promise<{
-    deleted: number
-    errors: string[]
-  }> {
-    const cutoffDate = DateTime.now().minus({ days: this.config.daily }).startOf('day')
-
-    const oldDailyBackups = await Backup.query()
-      .where('retentionType', 'daily')
-      .where('createdAt', '<', cutoffDate.toSQL())
-      .where('protected', false)
-
-    return this.deleteBackups(oldDailyBackups)
-  }
-
-  /**
-   * Limpa backups weekly antigos
-   */
-  private async cleanupWeeklyBackups(): Promise<{
-    deleted: number
-    errors: string[]
-  }> {
-    const cutoffDate = DateTime.now().minus({ weeks: this.config.weekly }).startOf('week')
-
-    const oldWeeklyBackups = await Backup.query()
-      .where('retentionType', 'weekly')
-      .where('createdAt', '<', cutoffDate.toSQL())
-      .where('protected', false)
-
-    return this.deleteBackups(oldWeeklyBackups)
-  }
-
-  /**
-   * Limpa backups monthly antigos
-   */
-  private async cleanupMonthlyBackups(): Promise<{
-    deleted: number
-    errors: string[]
-  }> {
-    const cutoffDate = DateTime.now().minus({ months: this.config.monthly }).startOf('month')
-
-    const oldMonthlyBackups = await Backup.query()
-      .where('retentionType', 'monthly')
-      .where('createdAt', '<', cutoffDate.toSQL())
-      .where('protected', false)
-
-    return this.deleteBackups(oldMonthlyBackups)
-  }
-
-  /**
-   * Limpa backups yearly antigos
-   */
-  private async cleanupYearlyBackups(): Promise<{
-    deleted: number
-    errors: string[]
-  }> {
-    const cutoffDate = DateTime.now().minus({ years: this.config.yearly }).startOf('year')
-
-    const oldYearlyBackups = await Backup.query()
-      .where('retentionType', 'yearly')
-      .where('createdAt', '<', cutoffDate.toSQL())
-      .where('protected', false)
-
-    return this.deleteBackups(oldYearlyBackups)
+    return changed
   }
 
   /**
    * Deleta uma lista de backups (banco + arquivo físico)
    */
-  private async deleteBackups(backups: Backup[]): Promise<{ deleted: number; errors: string[] }> {
+  private async deleteBackups(backups: Backup[]): Promise<{
+    deleted: number
+    errors: string[]
+    deletedBackups: DeletedBackupSummary[]
+  }> {
     let deleted = 0
     const errors: string[] = []
+    const deletedBackups: DeletedBackupSummary[] = []
 
     for (const backup of backups) {
       try {
+        const summary = this.serializeDeletedBackup(backup)
+
         // Deletar arquivo físico
         if (backup.filePath) {
           const destination = await StorageDestinationService.resolveDestinationForBackup(backup)
@@ -296,6 +137,7 @@ export class RetentionService {
         // Deletar registro do banco
         await backup.delete()
         deleted++
+        deletedBackups.push(summary)
       } catch (error) {
         errors.push(
           `Erro ao deletar backup ${backup.id}: ${error instanceof Error ? error.message : 'Erro desconhecido'}`
@@ -303,7 +145,19 @@ export class RetentionService {
       }
     }
 
-    return { deleted, errors }
+    return { deleted, errors, deletedBackups }
+  }
+
+  private serializeDeletedBackup(backup: Backup): DeletedBackupSummary {
+    return {
+      id: backup.id,
+      connectionId: backup.connectionId,
+      connectionDatabaseId: backup.connectionDatabaseId,
+      databaseName: backup.databaseName,
+      fileName: backup.fileName,
+      retentionType: backup.retentionType,
+      createdAt: backup.createdAt?.toISO() ?? null,
+    }
   }
 
   /**

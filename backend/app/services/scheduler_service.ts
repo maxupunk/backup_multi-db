@@ -1,7 +1,11 @@
 import cron from 'node-cron'
 import Connection, { type ScheduleFrequency } from '#models/connection'
 import { BackupService } from '#services/backup_service'
-import { RetentionService } from '#services/retention_service'
+import {
+  BackupRetentionPolicyService,
+  DEFAULT_RETENTION_PRUNE_CRON,
+} from '#services/backup_retention_policy_service'
+import { RetentionService, type RetentionExecutionResult } from '#services/retention_service'
 import logger from '@adonisjs/core/services/logger'
 import env from '#start/env'
 
@@ -21,13 +25,13 @@ export class SchedulerService {
   private jobs: Map<number, ScheduledJob> = new Map()
   private retentionTask: cron.ScheduledTask | null = null
   private backupService: BackupService
-  private retentionService: RetentionService
+  private retentionPolicyService: BackupRetentionPolicyService
   private isRunning = false
   private timezone = env.get('TZ', 'America/Sao_Paulo')
 
   constructor() {
     this.backupService = new BackupService()
-    this.retentionService = new RetentionService()
+    this.retentionPolicyService = new BackupRetentionPolicyService()
   }
 
   /**
@@ -45,7 +49,7 @@ export class SchedulerService {
     await this.loadScheduledConnections()
 
     // Agendar job de retenção (executa diariamente às 2h da manhã)
-    this.scheduleRetentionJob()
+    await this.scheduleRetentionJob()
 
     this.isRunning = true
     logger.info('Serviço de agendamento iniciado com sucesso')
@@ -217,10 +221,19 @@ export class SchedulerService {
   /**
    * Agenda o job de limpeza de backups (retenção)
    */
-  private scheduleRetentionJob(): void {
-    // Executa diariamente às 2h da manhã
+  private async scheduleRetentionJob(): Promise<void> {
+    const policy = await this.retentionPolicyService.getPolicy()
+    const cronExpression = this.resolveRetentionCron(policy.pruneCron)
+
+    if (cronExpression !== policy.pruneCron) {
+      logger.warn(
+        `Expressão de prune inválida: "${policy.pruneCron}". ` +
+          `Usando padrão "${DEFAULT_RETENTION_PRUNE_CRON}".`
+      )
+    }
+
     this.retentionTask = cron.schedule(
-      '0 2 * * *',
+      cronExpression,
       async () => {
         await this.executeRetentionJob()
       },
@@ -229,7 +242,7 @@ export class SchedulerService {
       }
     )
 
-    logger.info('Job de retenção agendado para executar diariamente às 2h')
+    logger.info(`Job de retenção agendado com cron "${cronExpression}"`)
   }
 
   /**
@@ -239,7 +252,8 @@ export class SchedulerService {
     try {
       logger.info('Executando job de retenção de backups...')
 
-      const result = await this.retentionService.pruneBackups()
+      const retentionService = await this.createRetentionService()
+      const result = await retentionService.pruneBackups()
 
       logger.info(
         `Job de retenção concluído: ${result.deleted} backups deletados, ${result.promoted} promovidos, ${result.protected} protegidos`
@@ -251,6 +265,29 @@ export class SchedulerService {
     } catch (error) {
       logger.error('Erro ao executar job de retenção:', error)
     }
+  }
+
+  async refreshRetentionJob(): Promise<void> {
+    if (this.retentionTask) {
+      this.retentionTask.stop()
+      this.retentionTask = null
+    }
+
+    if (!this.isRunning) {
+      return
+    }
+
+    await this.scheduleRetentionJob()
+  }
+
+  private async createRetentionService(): Promise<RetentionService> {
+    const policy = await this.retentionPolicyService.getPolicy()
+
+    return new RetentionService(policy)
+  }
+
+  private resolveRetentionCron(expression: string): string {
+    return cron.validate(expression) ? expression : DEFAULT_RETENTION_PRUNE_CRON
   }
 
   /**
@@ -291,14 +328,10 @@ export class SchedulerService {
   /**
    * Executa manualmente o job de retenção
    */
-  async runRetentionNow(): Promise<{
-    deleted: number
-    promoted: number
-    protected: number
-    errors: string[]
-  }> {
+  async runRetentionNow(): Promise<RetentionExecutionResult> {
     logger.info('Executando job de retenção manualmente...')
-    return await this.retentionService.pruneBackups()
+    const retentionService = await this.createRetentionService()
+    return await retentionService.pruneBackups()
   }
 }
 

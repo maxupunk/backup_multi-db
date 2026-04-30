@@ -52,4 +52,5 @@ export default await Env.create(new URL('../../', import.meta.url), {
   RETENTION_WEEKLY: Env.schema.number.optional(),
   RETENTION_MONTHLY: Env.schema.number.optional(),
   RETENTION_YEARLY: Env.schema.number.optional(),
+  RETENTION_PRUNE_CRON: Env.schema.string.optional(),
 })

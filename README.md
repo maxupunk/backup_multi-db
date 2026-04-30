@@ -157,11 +157,13 @@ O sistema implementa uma política de retenção Grandfather-Father-Son modifica
 
 | Período       | Retenção                                 |
 | ------------- | ---------------------------------------- |
-| Durante o dia | Baseado na frequência (1h, 6h, 12h, 24h) |
+| Durante o dia | Mantém 1 backup concluído por hora       |
 | Fim do dia    | Último backup do dia                     |
 | Fim da semana | Último backup da semana                  |
 | Fim do mês    | Último backup do mês                     |
 | Fim do ano    | Último backup do ano                     |
+
+A política de retenção é gerenciada em runtime pela interface de configurações ou pela API do sistema.
 
 ## 🛠️ Scripts Disponíveis
 

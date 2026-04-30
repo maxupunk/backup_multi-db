@@ -2,13 +2,18 @@ import type { HttpContext } from '@adonisjs/core/http'
 import { DateTime } from 'luxon'
 import Backup from '#models/backup'
 import Connection from '#models/connection'
+import { AuditService } from '#services/audit_service'
+import { BackupRetentionPolicyService } from '#services/backup_retention_policy_service'
 import { DockerContainerMonitoringService } from '#services/docker_container_monitoring_service'
+import { getScheduler } from '#services/scheduler_service'
 import { ResourceMetricsHistoryService } from '#services/resource_metrics_history_service'
 import { SystemMonitoringService } from '#services/system_monitoring_service'
 import { StorageSpaceService } from '#services/storage_space_service'
+import { updateBackupRetentionPolicyValidator } from '#validators/system_validator'
 
 export default class SystemController {
   private readonly dockerContainerMonitoringService = DockerContainerMonitoringService.instance()
+  private readonly backupRetentionPolicyService = new BackupRetentionPolicyService()
 
   async stats({ response }: HttpContext) {
     const today = DateTime.now().startOf('day')
@@ -86,5 +91,61 @@ export default class SystemController {
       success: true,
       data: history,
     })
+  }
+
+  async backupRetentionPolicy({ response }: HttpContext) {
+    const policy = await this.backupRetentionPolicyService.getPolicy()
+
+    return response.ok({
+      success: true,
+      data: this.serializeBackupRetentionPolicy(policy),
+    })
+  }
+
+  async updateBackupRetentionPolicy(ctx: HttpContext) {
+    const { request, response } = ctx
+    const payload = await request.validateUsing(updateBackupRetentionPolicyValidator)
+
+    if (!this.backupRetentionPolicyService.isValidPruneCron(payload.pruneCron)) {
+      return response.unprocessableEntity({
+        success: false,
+        message: 'Expressão cron inválida para o prune automático',
+      })
+    }
+
+    const { policy, changes } = await this.backupRetentionPolicyService.updatePolicy(payload)
+
+    if (Object.keys(changes).length > 0) {
+      await AuditService.logSettingsUpdated(changes, ctx)
+    }
+
+    await getScheduler().refreshRetentionJob()
+
+    return response.ok({
+      success: true,
+      message: 'Política de retenção atualizada com sucesso',
+      data: this.serializeBackupRetentionPolicy(policy),
+    })
+  }
+
+  async runBackupRetention({ response }: HttpContext) {
+    const result = await getScheduler().runRetentionNow()
+
+    return response.ok({
+      success: true,
+      message: 'Prune de backups executado com sucesso',
+      data: result,
+    })
+  }
+
+  private serializeBackupRetentionPolicy(
+    policy: Awaited<ReturnType<BackupRetentionPolicyService['getPolicy']>>
+  ) {
+    const defaultPolicy = this.backupRetentionPolicyService.getDefaultPolicy()
+
+    return {
+      ...policy,
+      defaultPruneCron: defaultPolicy.pruneCron,
+    }
   }
 }

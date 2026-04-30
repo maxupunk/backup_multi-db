@@ -382,6 +382,36 @@ export interface SystemStatus {
   jobs: JobsSystemStatus
 }
 
+export interface UpdateBackupRetentionPolicyPayload {
+  daily: number
+  weekly: number
+  monthly: number
+  yearly: number
+  pruneCron: string
+}
+
+export interface BackupRetentionPolicySettings extends UpdateBackupRetentionPolicyPayload {
+  defaultPruneCron: string
+}
+
+export interface DeletedBackupSummary {
+  id: number
+  connectionId: number | null
+  connectionDatabaseId: number | null
+  databaseName: string
+  fileName: string | null
+  retentionType: RetentionType
+  createdAt: string | null
+}
+
+export interface BackupRetentionRunResult {
+  deleted: number
+  promoted: number
+  protected: number
+  errors: string[]
+  deletedBackups: DeletedBackupSummary[]
+}
+
 export interface SystemHeapSnapshot {
   timestamp: string
   rssBytes: number

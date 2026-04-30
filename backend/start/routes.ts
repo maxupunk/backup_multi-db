@@ -136,6 +136,13 @@ router
         router.get('/system/heap', [SystemController, 'heap'])
         router.get('/system/containers/resources', [SystemController, 'containerResources'])
         router.get('/system/resources/history', [SystemController, 'resourcesHistory'])
+        router.get('/system/backup-retention', [SystemController, 'backupRetentionPolicy'])
+        router
+          .put('/system/backup-retention', [SystemController, 'updateBackupRetentionPolicy'])
+          .use(middleware.rateLimit({ limiter: 'strict' }))
+        router
+          .post('/system/backup-retention/run', [SystemController, 'runBackupRetention'])
+          .use(middleware.rateLimit({ limiter: 'strict' }))
 
         // ==================== Audit Logs ====================
         router.get('audit-logs', [AuditLogsController, 'index'])

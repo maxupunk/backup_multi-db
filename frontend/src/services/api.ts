@@ -11,6 +11,8 @@ import type {
   AuditStats,
   AuditStatus,
   Backup,
+  BackupRetentionPolicySettings,
+  BackupRetentionRunResult,
   BackupResult,
   BrowseResult,
   Connection,
@@ -36,6 +38,7 @@ import type {
   StorageSpaceInfo,
   SystemHeapSnapshot,
   SystemStatus,
+  UpdateBackupRetentionPolicyPayload,
   UpdateConnectionPayload,
   UpdateStorageDestinationPayload,
   UpdateStoragePayload,
@@ -497,6 +500,25 @@ export const statsApi = {
 export const systemApi = {
   async status (): Promise<ApiResponse<SystemStatus>> {
     return request<ApiResponse<SystemStatus>>('/system/status')
+  },
+
+  async retentionPolicy (): Promise<ApiResponse<BackupRetentionPolicySettings>> {
+    return request<ApiResponse<BackupRetentionPolicySettings>>('/system/backup-retention')
+  },
+
+  async updateRetentionPolicy (
+    payload: UpdateBackupRetentionPolicyPayload,
+  ): Promise<ApiResponse<BackupRetentionPolicySettings>> {
+    return request<ApiResponse<BackupRetentionPolicySettings>>('/system/backup-retention', {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    })
+  },
+
+  async runRetentionNow (): Promise<ApiResponse<BackupRetentionRunResult>> {
+    return request<ApiResponse<BackupRetentionRunResult>>('/system/backup-retention/run', {
+      method: 'POST',
+    })
   },
 
   async heap (): Promise<ApiResponse<SystemHeapSnapshot>> {
