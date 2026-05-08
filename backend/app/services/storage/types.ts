@@ -1,6 +1,16 @@
+import type { StorageProvider } from '#models/storage_destination'
+
 /**
  * Objeto retornado na listagem de um bucket/storage
  */
+export interface BucketObjectReplica {
+  locationType: 'local' | 'remote'
+  storageId: number | null
+  storageName: string
+  provider: StorageProvider
+  path: string
+}
+
 export interface BucketObject {
   key: string
   name: string
@@ -8,6 +18,7 @@ export interface BucketObject {
   lastModified: string | null
   isDirectory: boolean
   etag?: string
+  replicas?: BucketObjectReplica[]
 }
 
 /**

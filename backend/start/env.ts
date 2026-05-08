@@ -41,6 +41,7 @@ export default await Env.create(new URL('../../', import.meta.url), {
   |--------------------------------------------------------------------------
   */
   BACKUP_STORAGE_PATH: Env.schema.string.optional(),
+  BACKUP_DELETE_LOCAL_AFTER_REMOTE_UPLOAD: Env.schema.boolean.optional(),
   SQLITE_DATABASE_PATH: Env.schema.string.optional(),
 
   /*

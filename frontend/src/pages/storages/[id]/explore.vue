@@ -34,6 +34,27 @@
             <v-list-item :subtitle="selectedObject.lastModified ? formatDateTimePtBR(selectedObject.lastModified) : '-'" title="Última modificação" />
             <v-list-item v-if="selectedObject.etag" :subtitle="selectedObject.etag" title="ETag" />
           </v-list>
+
+          <template v-if="selectedObject.replicas?.length">
+            <v-divider class="my-3" />
+            <div class="text-subtitle-2 mb-2">Cópias relacionadas</div>
+
+            <v-list density="compact">
+              <v-list-item
+                v-for="replica in selectedObject.replicas"
+                :key="`${replica.locationType}-${replica.storageId ?? 'local'}-${replica.path}`"
+                :subtitle="replica.path"
+                :title="getReplicaTitle(replica)"
+              >
+                <template #prepend>
+                  <v-icon
+                    :color="replica.locationType === 'local' ? 'success' : 'info'"
+                    :icon="replica.locationType === 'local' ? 'mdi-harddisk' : 'mdi-cloud-check'"
+                  />
+                </template>
+              </v-list-item>
+            </v-list>
+          </template>
         </v-card-text>
         <v-card-actions>
           <v-spacer />
@@ -45,7 +66,7 @@
 </template>
 
 <script lang="ts" setup>
-import type { BucketObject, Storage } from '@/types/api'
+import type { BucketObject, BucketObjectReplica, Storage } from '@/types/api'
 import { onMounted, onUnmounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { useDisplay } from 'vuetify'
@@ -66,6 +87,12 @@ const selectedObject = ref<BucketObject | null>(null)
 function showObjectDetails (obj: BucketObject) {
   selectedObject.value = obj
   detailsDialog.value = true
+}
+
+function getReplicaTitle (replica: BucketObjectReplica) {
+  return replica.locationType === 'local'
+    ? 'Cópia local disponível'
+    : `Copiado para ${replica.storageName}`
 }
 
 onMounted(async () => {

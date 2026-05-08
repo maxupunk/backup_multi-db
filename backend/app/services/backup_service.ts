@@ -9,11 +9,13 @@ import logger from '@adonisjs/core/services/logger'
 import { getBackupStoragePath } from '#config/storage_paths'
 import type Connection from '#models/connection'
 import type ConnectionDatabase from '#models/connection_database'
+import type StorageDestination from '#models/storage_destination'
 import Backup, { type BackupTrigger, type RetentionType } from '#models/backup'
 import { StorageDestinationService } from '#services/storage_destination_service'
 import { StorageSpaceService } from '#services/storage_space_service'
 import { NotificationService } from '#services/notification_service'
 import { BackupProgressEmitter } from '#services/backup_progress_emitter'
+import env from '#start/env'
 
 /**
  * Resultado da execução de um backup individual
@@ -344,10 +346,52 @@ export class BackupService {
         result.filePath!,
         result.localFullPath!
       )
+
+      await this.deleteLocalCopyAfterRemoteUpload(destination, result)
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido no upload'
       result.success = false
       result.error = errorMessage
+    }
+  }
+
+  private shouldDeleteLocalCopyAfterRemoteUpload(destination: StorageDestination): boolean {
+    if (destination.type === 'local') {
+      return false
+    }
+
+    return env.get('BACKUP_DELETE_LOCAL_AFTER_REMOTE_UPLOAD') ?? false
+  }
+
+  private async deleteLocalCopyAfterRemoteUpload(
+    destination: StorageDestination,
+    result: BackupResult
+  ): Promise<void> {
+    if (
+      !this.shouldDeleteLocalCopyAfterRemoteUpload(destination) ||
+      !result.filePath ||
+      !result.localFullPath
+    ) {
+      return
+    }
+
+    try {
+      await StorageDestinationService.deleteLocalFile(result.localFullPath)
+
+      logger.info(
+        `[Backup] Cópia local removida após upload remoto para "${destination.name}" - Arquivo: ${result.filePath}`
+      )
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Erro desconhecido ao remover cópia local'
+
+      logger.warn(
+        `[Backup] Upload remoto concluído, mas a cópia local não foi removida - Arquivo: ${result.filePath}, Erro: ${errorMessage}`
+      )
+
+      result.storageWarning = result.storageWarning
+        ? `${result.storageWarning} | ${errorMessage}`
+        : errorMessage
     }
   }
 

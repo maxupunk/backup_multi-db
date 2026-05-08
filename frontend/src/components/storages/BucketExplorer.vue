@@ -67,16 +67,31 @@
       @click:row="handleRowClick"
     >
       <template #item.name="{ item }">
-        <div class="d-flex align-center cursor-pointer">
-          <v-icon
-            class="mr-2"
-            :color="item.isDirectory ? 'warning' : 'grey'"
-            :icon="getFileIcon(item.name, item.isDirectory)"
-            size="small"
-          />
-          <span :class="item.isDirectory ? 'font-weight-medium' : ''">
-            {{ item.name }}
-          </span>
+        <div class="d-flex flex-column py-1">
+          <div class="d-flex align-center cursor-pointer">
+            <v-icon
+              class="mr-2"
+              :color="item.isDirectory ? 'warning' : 'grey'"
+              :icon="getFileIcon(item.name, item.isDirectory)"
+              size="small"
+            />
+            <span :class="item.isDirectory ? 'font-weight-medium' : ''">
+              {{ item.name }}
+            </span>
+          </div>
+
+          <div v-if="item.replicas?.length" class="d-flex flex-wrap ga-1 mt-1">
+            <v-chip
+              v-for="replica in item.replicas"
+              :key="`${replica.locationType}-${replica.storageId ?? 'local'}-${replica.path}`"
+              :color="getReplicaColor(replica)"
+              size="x-small"
+              variant="tonal"
+            >
+              <v-icon start :icon="getReplicaIcon(replica)" />
+              {{ getReplicaLabel(replica) }}
+            </v-chip>
+          </div>
         </div>
       </template>
 
@@ -152,7 +167,7 @@
 </template>
 
 <script lang="ts" setup>
-import type { BucketObject } from '@/types/api'
+import type { BucketObject, BucketObjectReplica } from '@/types/api'
 import { computed, ref, watch } from 'vue'
 import { useDisplay } from 'vuetify'
 import { ApiError } from '@/services/api'
@@ -194,6 +209,20 @@ function handleRowClick (_event: Event, row: { item: BucketObject }) {
   if (row.item.isDirectory) {
     explorerStore.navigateTo(row.item.key)
   }
+}
+
+function getReplicaLabel (replica: BucketObjectReplica) {
+  return replica.locationType === 'local'
+    ? 'Cópia local'
+    : `Em ${replica.storageName}`
+}
+
+function getReplicaIcon (replica: BucketObjectReplica) {
+  return replica.locationType === 'local' ? 'mdi-harddisk' : 'mdi-cloud-check'
+}
+
+function getReplicaColor (replica: BucketObjectReplica) {
+  return replica.locationType === 'local' ? 'success' : 'info'
 }
 
 function openDeleteDialog (item: BucketObject) {

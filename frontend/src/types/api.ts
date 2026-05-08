@@ -623,6 +623,14 @@ export interface Storage extends StorageDestination {
   provider: StorageProvider
 }
 
+export interface BucketObjectReplica {
+  locationType: 'local' | 'remote'
+  storageId: number | null
+  storageName: string
+  provider: StorageProvider
+  path: string
+}
+
 export interface BucketObject {
   key: string
   name: string
@@ -630,6 +638,7 @@ export interface BucketObject {
   lastModified: string | null
   isDirectory: boolean
   etag?: string
+  replicas?: BucketObjectReplica[]
 }
 
 export type CopyJobStatus = 'pending' | 'running' | 'completed' | 'failed'

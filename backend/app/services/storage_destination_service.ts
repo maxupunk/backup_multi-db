@@ -182,6 +182,20 @@ export class StorageDestinationService {
     return join(this.getLocalBasePath(destination), relativePath)
   }
 
+  static async deleteLocalFile(fullPath: string): Promise<void> {
+    if (existsSync(fullPath)) {
+      await unlink(fullPath)
+    }
+  }
+
+  static async deleteLocalBackupFile(
+    relativePath: string,
+    destination: StorageDestination | null = null
+  ): Promise<void> {
+    const localPath = this.getLocalFullPath(destination, relativePath)
+    await this.deleteLocalFile(localPath)
+  }
+
   static ensureLocalDirectory(fullPath: string): void {
     const dir = dirname(fullPath)
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
@@ -296,8 +310,7 @@ export class StorageDestinationService {
     destination: StorageDestination | null,
     relativePath: string
   ): Promise<void> {
-    const localPath = this.getLocalFullPath(destination, relativePath)
-    if (existsSync(localPath)) await unlink(localPath)
+    await this.deleteLocalBackupFile(relativePath, destination)
 
     if (!destination) return
 
