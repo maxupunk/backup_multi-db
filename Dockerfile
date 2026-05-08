@@ -15,13 +15,15 @@
 # Stage: base
 # Imagem base com dependências do SO necessárias em todos os stages.
 # python3 + build-essential são necessários para compilar better-sqlite3.
-# corepack habilita pnpm sem instalação extra.
+# pnpm é fixado para manter compatibilidade com o lockfile atual.
 # -----------------------------------------------------------------------------
-FROM node:25.8.1-trixie AS base
+ARG NODE_IMAGE=node:26.0.0-trixie-slim
+
+FROM ${NODE_IMAGE} AS base
 
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
-RUN npm install -g pnpm
+RUN npm install -g pnpm@9.15.9
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates \
@@ -48,7 +50,7 @@ WORKDIR /app
 # Stage: frontend-builder
 # Compila o frontend Vue/Vite. Roda em paralelo com o pipeline do backend.
 # -----------------------------------------------------------------------------
-FROM node:25.8.1-trixie AS frontend-builder
+FROM ${NODE_IMAGE} AS frontend-builder
 
 WORKDIR /app-frontend
 
@@ -114,7 +116,7 @@ RUN mkdir -p /app/storage/backups /app/storage/database /app/logs /storage/backu
 EXPOSE 3333
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
-    CMD node -e "fetch('http://localhost:3333/health').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"
+    CMD node -e "fetch('http://localhost:3333/api/health').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"
 
 ENTRYPOINT ["/docker-entrypoint.sh"]
 

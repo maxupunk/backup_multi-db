@@ -22,7 +22,7 @@
 
 services:
   frontend-builder:
-    image: node:25.8.1-trixie
+    image: node:26.0.0-trixie-slim
     working_dir: /app
     volumes:
       - ./frontend:/app
@@ -69,7 +69,7 @@ services:
           'CMD',
           'node',
           '-e',
-          "fetch('http://localhost:3333/health').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))",
+          "fetch('http://localhost:3333/api/health').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))",
         ]
       interval: 30s
       timeout: 10s
