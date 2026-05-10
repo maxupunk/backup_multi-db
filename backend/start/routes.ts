@@ -157,6 +157,8 @@ router
         // ==================== Docker Manager ====================
         router
           .group(() => {
+            router.get('status', [DockerManagerController, 'status'])
+
             // Containers
             router.get('containers', [DockerManagerController, 'listContainers'])
             router.get('containers/:id', [DockerManagerController, 'inspectContainer'])

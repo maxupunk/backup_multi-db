@@ -23,6 +23,19 @@ export default class DockerManagerController {
   }
 
   // ================================================================
+  // Status
+  // ================================================================
+
+  /**
+   * GET /api/docker/status
+   * Retorna apenas a disponibilidade do Docker Engine.
+   */
+  async status({ response }: HttpContext) {
+    const status = this.service.getStatus()
+    return response.ok({ success: true, available: status.available, data: status })
+  }
+
+  // ================================================================
   // Containers
   // ================================================================
 

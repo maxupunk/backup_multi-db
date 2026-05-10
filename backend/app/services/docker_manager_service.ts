@@ -59,6 +59,10 @@ export class DockerManagerService {
     return this.client.isSocketAvailable()
   }
 
+  getStatus(): { available: boolean } {
+    return { available: this.isAvailable() }
+  }
+
   // ================================================================
   // Containers
   // ================================================================

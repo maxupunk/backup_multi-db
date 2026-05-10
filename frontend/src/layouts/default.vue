@@ -102,7 +102,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useNotificationStore } from '@/stores/notification'
 import NotificationToast from '@/components/NotificationToast.vue'
 import RestoreProgressOverlay from '@/components/RestoreProgressOverlay.vue'
-import { dockerContainersApi } from '@/services/dockerService'
+import { dockerStatusApi } from '@/services/dockerService'
 
 const theme = useTheme()
 const { mdAndUp } = useDisplay()
@@ -136,10 +136,9 @@ const dockerUnavailable = ref(false)
 
 async function checkDockerAvailability() {
   try {
-    await dockerContainersApi.getGroups()
+    dockerUnavailable.value = !(await dockerStatusApi.isAvailable())
+  } catch {
     dockerUnavailable.value = false
-  } catch (err) {
-    dockerUnavailable.value = (err as Error).message === 'DOCKER_UNAVAILABLE'
   }
 }
 

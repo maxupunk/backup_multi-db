@@ -13,6 +13,7 @@ const isInsideContainer = existsSync('/.dockerenv')
 test.group('Docker Manager — Auth', () => {
   test('todas as rotas Docker requerem autenticação', async ({ client }) => {
     const routes = [
+      { method: 'get', path: '/api/docker/status' },
       { method: 'get', path: '/api/docker/containers' },
       { method: 'get', path: '/api/docker/volumes' },
       { method: 'get', path: '/api/docker/networks' },
@@ -72,6 +73,20 @@ test.group('Docker Manager — Indisponível (sem socket)', (group) => {
 
     response.assertStatus(200)
     response.assertBodyContains({ success: true, available: false })
+  })
+
+  test('GET /api/docker/status retorna 200 com available=false quando socket ausente', async ({
+    client,
+  }) => {
+    if (dockerAvailable) return
+
+    const token = await User.accessTokens.create(user)
+    const response = await client
+      .get('/api/docker/status')
+      .header('Authorization', `Bearer ${token.value!.release()}`)
+
+    response.assertStatus(200)
+    response.assertBodyContains({ success: true, available: false, data: { available: false } })
   })
 
   test('GET /api/docker/volumes retorna 200 com available=false quando socket ausente', async ({
@@ -139,6 +154,20 @@ test.group('Docker Manager — Socket disponível', (group) => {
 
     response.assertStatus(200)
     response.assertBodyContains({ success: true, available: true })
+  })
+
+  test('GET /api/docker/status retorna 200 com available=true quando socket está disponível', async ({
+    client,
+  }) => {
+    if (!dockerAvailable) return
+
+    const token = await User.accessTokens.create(user)
+    const response = await client
+      .get('/api/docker/status')
+      .header('Authorization', `Bearer ${token.value!.release()}`)
+
+    response.assertStatus(200)
+    response.assertBodyContains({ success: true, available: true, data: { available: true } })
   })
 
   test('GET /api/docker/volumes retorna 200 com lista de volumes', async ({ client }) => {

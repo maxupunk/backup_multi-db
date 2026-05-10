@@ -110,6 +110,21 @@ export const dockerContainersApi = {
   },
 }
 
+export const dockerStatusApi = {
+  async isAvailable(): Promise<boolean> {
+    try {
+      const status = await apiFetch<{ available: boolean }>(`${BASE}/status`)
+      return status.available
+    } catch (error) {
+      if ((error as Error).message === 'DOCKER_UNAVAILABLE') {
+        return false
+      }
+
+      throw error
+    }
+  },
+}
+
 // ============================================================
 // Volumes
 // ============================================================
