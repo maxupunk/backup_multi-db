@@ -3,6 +3,8 @@ import type {
   DockerActionResult,
   DockerContainerDetail,
   DockerContainerGroup,
+  DockerDiagnosticJob,
+  DockerDiagnosticStartPayload,
   DockerImageDetail,
   DockerImageSummary,
   DockerLogEntry,
@@ -193,6 +195,19 @@ export const dockerNetworksApi = {
       `${BASE}/networks/${encodeURIComponent(networkId)}/disconnect`,
       { method: 'POST', body: JSON.stringify({ containerId, force }) }
     )
+  },
+}
+
+export const dockerDiagnosticsApi = {
+  start(payload: DockerDiagnosticStartPayload): Promise<DockerDiagnosticJob> {
+    return apiFetch<DockerDiagnosticJob>(`${BASE}/diagnostics`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    })
+  },
+
+  getJob(jobId: string): Promise<DockerDiagnosticJob> {
+    return apiFetch<DockerDiagnosticJob>(`${BASE}/diagnostics/${encodeURIComponent(jobId)}`)
   },
 }
 

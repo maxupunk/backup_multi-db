@@ -29,6 +29,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates \
         curl \
         gnupg \
+        iputils-ping \
         rclone \
         && install -d /usr/share/postgresql-common/pgdg \
         && curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \

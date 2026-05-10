@@ -63,6 +63,8 @@ export const NOTIFICATION_CHANNELS = {
   SYSTEM_RESOURCES: 'notifications/system-resources',
   /** Canal de métricas de recursos dos containers Docker em tempo real */
   DOCKER_CONTAINER_RESOURCES: 'notifications/docker-container-resources',
+  /** Canal de diagnosticos Docker (prefixo — usar com /:jobId) */
+  DOCKER_DIAGNOSTICS: 'notifications/docker-diagnostics',
   /** Canal de progresso de cópia entre storages (prefixo — usar com /:jobId) */
   STORAGE_COPY: 'notifications/storage-copy',
   /** Canal de progresso de archive de storage (prefixo — usar com /:jobId) */

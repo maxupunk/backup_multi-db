@@ -14,6 +14,7 @@ const StorageDestinationsController = () => import('#controllers/storage_destina
 const StoragesController = () => import('#controllers/storages_controller')
 const SystemController = () => import('#controllers/system_controller')
 const DockerManagerController = () => import('#controllers/docker_manager_controller')
+const DockerDiagnosticsController = () => import('#controllers/docker_diagnostics_controller')
 import AutoSwagger from 'adonis-autoswagger'
 import swagger from '#config/swagger'
 
@@ -204,6 +205,12 @@ router
                 'disconnectContainerFromNetwork',
               ])
               .use(middleware.rateLimit({ limiter: 'strict' }))
+
+            // Diagnostics
+            router
+              .post('diagnostics', [DockerDiagnosticsController, 'start'])
+              .use(middleware.rateLimit({ limiter: 'strict' }))
+            router.get('diagnostics/:jobId', [DockerDiagnosticsController, 'show'])
 
             // Images — a rota /prune deve vir antes de /:id
             router

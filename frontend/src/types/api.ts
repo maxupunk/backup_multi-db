@@ -838,6 +838,50 @@ export interface DockerNetworkDetail extends DockerNetworkSummary {
   options: Record<string, string>
 }
 
+export type DockerDiagnosticTool = 'ping' | 'port_scan' | 'curl'
+
+export type DockerDiagnosticStatus = 'pending' | 'running' | 'completed' | 'failed'
+
+export interface DockerDiagnosticJob {
+  id: string
+  tool: DockerDiagnosticTool
+  status: DockerDiagnosticStatus
+  target: string
+  port: number | null
+  count: number | null
+  timeoutMs: number | null
+  startedAt: string
+  completedAt: string | null
+  outputLines: string[]
+  summary: string | null
+  error: string | null
+  portOpen: boolean | null
+  latencyMs: number | null
+}
+
+export interface DockerDiagnosticStartPayload {
+  tool: DockerDiagnosticTool
+  target: string
+  port?: number
+  count?: number
+  timeoutMs?: number
+}
+
+export interface DockerDiagnosticTargetOption {
+  label: string
+  value: string
+}
+
+export interface DockerDiagnosticPreset {
+  tool?: DockerDiagnosticTool
+  target?: string
+  port?: number | null
+  count?: number | null
+  timeoutMs?: number | null
+  contextLabel?: string
+  suggestedTargets?: DockerDiagnosticTargetOption[]
+}
+
 export interface DockerImageSummary {
   id: string
   parentId: string

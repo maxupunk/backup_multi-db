@@ -4,6 +4,16 @@
       <v-card-title class="d-flex align-center pa-4">
         <v-icon class="mr-2" icon="mdi-graph-outline" />
         {{ detail?.name }}
+        <v-spacer />
+        <v-btn
+          color="primary"
+          prepend-icon="mdi-stethoscope"
+          size="small"
+          variant="tonal"
+          @click="openDiagnostic()"
+        >
+          Diagnóstico
+        </v-btn>
       </v-card-title>
       <v-divider />
 
@@ -29,6 +39,7 @@
                 <th>Nome</th>
                 <th>IPv4</th>
                 <th>MAC</th>
+                <th class="text-right">Ações</th>
               </tr>
             </thead>
             <tbody>
@@ -36,6 +47,20 @@
                 <td class="text-caption">{{ c.name }}</td>
                 <td class="text-caption text-monospace">{{ c.ipv4Address }}</td>
                 <td class="text-caption text-monospace">{{ c.macAddress }}</td>
+                <td class="text-right">
+                  <v-tooltip text="Abrir diagnóstico com alvo do container">
+                    <template #activator="{ props: tooltipProps }">
+                      <v-btn
+                        v-bind="tooltipProps"
+                        density="compact"
+                        icon="mdi-pulse"
+                        size="x-small"
+                        variant="text"
+                        @click="openDiagnostic(c)"
+                      />
+                    </template>
+                  </v-tooltip>
+                </td>
               </tr>
             </tbody>
           </v-table>
@@ -48,14 +73,66 @@
       </v-card-actions>
     </v-card>
   </v-dialog>
+
+  <DockerDiagnosticDialog v-model="diagnosticDialog" :preset="diagnosticPreset" />
 </template>
 
 <script lang="ts" setup>
-import { computed } from 'vue'
-import type { DockerNetworkDetail } from '@/types/api'
+import { computed, ref } from 'vue'
+import DockerDiagnosticDialog from '@/components/docker/DockerDiagnosticDialog.vue'
+import type {
+  DockerDiagnosticPreset,
+  DockerDiagnosticTargetOption,
+  DockerNetworkContainer,
+  DockerNetworkDetail,
+} from '@/types/api'
 
 const model = defineModel<boolean>({ default: false })
 const props = defineProps<{ detail: DockerNetworkDetail | null }>()
 
 const containerEntries = computed(() => Object.values(props.detail?.containers ?? {}))
+const diagnosticDialog = ref(false)
+const diagnosticPreset = ref<DockerDiagnosticPreset | null>(null)
+
+function normalizeIpv4Address(value: string): string {
+  return value.split('/')[0] ?? value
+}
+
+function buildTargetOptions(container?: DockerNetworkContainer): DockerDiagnosticTargetOption[] {
+  if (!container) {
+    return []
+  }
+
+  const options: DockerDiagnosticTargetOption[] = []
+  const normalizedIp = normalizeIpv4Address(container.ipv4Address)
+
+  if (container.name) {
+    options.push({
+      label: `Domínio: ${container.name}`,
+      value: container.name,
+    })
+  }
+
+  if (normalizedIp) {
+    options.push({
+      label: `IP: ${normalizedIp}`,
+      value: normalizedIp,
+    })
+  }
+
+  return options
+}
+
+function openDiagnostic(container?: DockerNetworkContainer) {
+  const suggestedTargets = buildTargetOptions(container)
+
+  diagnosticPreset.value = {
+    tool: 'ping',
+    target: suggestedTargets[0]?.value ?? '',
+    contextLabel: container?.name ?? props.detail?.name ?? 'Rede Docker',
+    suggestedTargets,
+  }
+
+  diagnosticDialog.value = true
+}
 </script>

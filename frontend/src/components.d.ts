@@ -28,6 +28,7 @@ declare module 'vue' {
     DockerActionConfirmDialog: typeof import('./components/docker/DockerActionConfirmDialog.vue')['default']
     DockerContainerResourceCard: typeof import('./components/system/DockerContainerResourceCard.vue')['default']
     DockerContainerResourceCharts: typeof import('./components/system/DockerContainerResourceCharts.vue')['default']
+    DockerDiagnosticDialog: typeof import('./components/docker/DockerDiagnosticDialog.vue')['default']
     DockerUnavailableBanner: typeof import('./components/docker/DockerUnavailableBanner.vue')['default']
     FileDropZone: typeof import('./components/backups/FileDropZone.vue')['default']
     HostSelectorField: typeof import('./components/connections/HostSelectorField.vue')['default']
