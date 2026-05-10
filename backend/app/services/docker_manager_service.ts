@@ -330,7 +330,22 @@ export class DockerManagerService {
 
   async listNetworks(): Promise<DockerNetworkSummary[]> {
     const raw = await this.client.getJson<RawDockerNetworkItem[]>('/networks')
-    return raw.map((n) => this.#mapNetworkSummary(n))
+
+    const detailedNetworks = await Promise.all(
+      raw.map(async (network) => {
+        if (!network.Id) return network
+
+        try {
+          return await this.client.getJson<RawDockerNetworkItem>(
+            `/networks/${encodeURIComponent(network.Id)}`
+          )
+        } catch {
+          return network
+        }
+      })
+    )
+
+    return detailedNetworks.map((network) => this.#mapNetworkSummary(network))
   }
 
   async inspectNetwork(id: string): Promise<DockerNetworkDetail> {
@@ -569,6 +584,7 @@ export class DockerManagerService {
         })),
       },
       internal: n.Internal ?? false,
+      connectedContainers: Object.keys(n.Containers ?? {}).length,
       labels: n.Labels ?? {},
       created: n.Created ?? '',
     }

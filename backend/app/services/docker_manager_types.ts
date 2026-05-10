@@ -117,6 +117,7 @@ export interface DockerNetworkSummary {
     config: Array<{ subnet?: string; gateway?: string }>
   }
   internal: boolean
+  connectedContainers: number
   labels: Record<string, string>
   created: string
 }

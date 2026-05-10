@@ -402,6 +402,66 @@ test.group('Docker Manager — Volume em Uso', (group) => {
   })
 })
 
+test.group('Docker Manager — Networks summary', () => {
+  test('listNetworks usa inspect da rede para contar containers conectados', async ({ assert }) => {
+    const networkList = [
+      {
+        Id: 'network-1',
+        Name: 'sgcv4_system-network',
+        Driver: 'bridge',
+        Scope: 'local',
+        IPAM: { Driver: 'default', Config: [] },
+        Internal: false,
+        Labels: {},
+        Created: '2026-05-10T00:00:00.000000000Z',
+      },
+      {
+        Id: 'network-2',
+        Name: 'empty-network',
+        Driver: 'bridge',
+        Scope: 'local',
+        IPAM: { Driver: 'default', Config: [] },
+        Internal: false,
+        Labels: {},
+        Created: '2026-05-10T00:00:00.000000000Z',
+      },
+    ]
+
+    const mockClient = {
+      isSocketAvailable: () => true,
+      getJson: async (path: string) => {
+        if (path === '/networks') return networkList
+
+        if (path === '/networks/network-1') {
+          return {
+            ...networkList[0],
+            Containers: {
+              'container-1': { Name: 'app' },
+              'container-2': { Name: 'db' },
+            },
+          }
+        }
+
+        if (path === '/networks/network-2') {
+          return {
+            ...networkList[1],
+            Containers: {},
+          }
+        }
+
+        throw new Error(`Unexpected path: ${path}`)
+      },
+    }
+
+    const service = new DockerManagerService(mockClient as never)
+    const networks = await service.listNetworks()
+
+    assert.equal(networks.length, 2)
+    assert.equal(networks[0]?.connectedContainers, 2)
+    assert.equal(networks[1]?.connectedContainers, 0)
+  })
+})
+
 // ================================================================
 // Novas rotas — Validação de entrada
 // ================================================================

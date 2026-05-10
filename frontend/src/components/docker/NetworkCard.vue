@@ -42,5 +42,5 @@ const props = defineProps<{ network: DockerNetworkSummary }>()
 const emit = defineEmits<{ (e: 'detail', n: DockerNetworkSummary): void }>()
 
 const subnet = computed(() => props.network.ipam.config[0]?.subnet ?? null)
-const containerCount = computed(() => 0)
+const containerCount = computed(() => props.network.connectedContainers)
 </script>
