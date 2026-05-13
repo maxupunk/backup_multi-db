@@ -13,10 +13,21 @@ export class ContainerPortResolver {
       return port.containerPort === expectedPort
     }
 
+    const filteredPorts = container.ports.filter(portFilter)
+
+    // A porta interna do container sempre existe para trafego na mesma rede Docker,
+    // mesmo quando a mesma porta tambem foi publicada externamente no host.
+    const internalOptions = filteredPorts.map((port) => ({
+      containerPort: port.containerPort,
+      hostPort: port.containerPort,
+      protocol: port.protocol,
+      display: `${port.containerPort}/${port.protocol} (interna — mesma rede Docker)`,
+      isExternal: false,
+    }))
+
     // Portas publicadas no host (hostPort definido)
-    const externalOptions = container.ports
+    const externalOptions = filteredPorts
       .filter((port) => port.hostPort !== null)
-      .filter(portFilter)
       .map((port) => ({
         containerPort: port.containerPort,
         hostPort: port.hostPort as number,
@@ -25,17 +36,7 @@ export class ContainerPortResolver {
         isExternal: true,
       }))
 
-    // Portas apenas expostas internamente (sem mapeamento de host)
-    const exposedOnlyPorts = container.ports.filter((port) => port.hostPort === null)
-    const internalOptions = exposedOnlyPorts.filter(portFilter).map((port) => ({
-      containerPort: port.containerPort,
-      hostPort: port.containerPort, // usa a porta interna do container para conectar na mesma rede
-      protocol: port.protocol,
-      display: `${port.containerPort}/${port.protocol} (interna — mesma rede Docker)`,
-      isExternal: false,
-    }))
-
-    const all: DockerPortOption[] = [...externalOptions, ...internalOptions]
+    const all: DockerPortOption[] = [...internalOptions, ...externalOptions]
 
     const unique = new Map<string, DockerPortOption>()
     for (const option of all) {
@@ -44,8 +45,14 @@ export class ContainerPortResolver {
     }
 
     return [...unique.values()].sort((a, b) => {
-      // Externas primeiro, depois por porta
-      if (a.isExternal !== b.isExternal) return a.isExternal ? -1 : 1
+      if (a.containerPort !== b.containerPort) {
+        return a.containerPort - b.containerPort
+      }
+
+      if (a.isExternal !== b.isExternal) {
+        return a.isExternal ? 1 : -1
+      }
+
       return a.hostPort - b.hostPort
     })
   }

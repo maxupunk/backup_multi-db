@@ -420,17 +420,8 @@ function onDockerSuggestionSelected(suggestion: DockerHostSuggestion | null) {
     form.type = suggestion.databaseTypeHint
   }
 
-  const firstPortOption = suggestion.portOptions[0]
-  if (suggestion.portOptions.length === 1 && firstPortOption) {
-    form.port = firstPortOption.hostPort
-    return
-  }
-
-  if (suggestion.portOptions.length > 1) {
-    const hasCurrentPortInOptions = suggestion.portOptions.some((option) => option.hostPort === form.port)
-    if (!hasCurrentPortInOptions && firstPortOption) {
-      form.port = firstPortOption.hostPort
-    }
+  if (suggestion.recommendedPort !== null) {
+    form.port = suggestion.recommendedPort
   }
 }
 

@@ -120,6 +120,7 @@ export interface DockerHostSuggestion {
   hostResolutionSource: DockerHostResolutionSource
   networkNames: string[]
   portOptions: DockerPortOption[]
+  recommendedPort: number | null
   hasExternalPort: boolean
   connectivityWarning: string | null
 }

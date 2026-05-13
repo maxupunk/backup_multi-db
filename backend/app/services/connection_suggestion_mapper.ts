@@ -2,6 +2,7 @@ import type {
   DockerContainerDescriptor,
   DockerHostSuggestion,
 } from '#services/docker_discovery_types'
+import { type ConnectionPortSelectionResolver } from '#services/connection_port_selection_resolver'
 import { type ContainerPortResolver } from '#services/container_port_resolver'
 import { type NetworkReachabilityResolver } from '#services/network_reachability_resolver'
 
@@ -13,7 +14,8 @@ export interface MapperContext {
 export class ConnectionSuggestionMapper {
   constructor(
     private readonly networkResolver: NetworkReachabilityResolver,
-    private readonly portResolver: ContainerPortResolver
+    private readonly portResolver: ContainerPortResolver,
+    private readonly portSelectionResolver: ConnectionPortSelectionResolver
   ) {}
 
   map(containers: DockerContainerDescriptor[], context: MapperContext): DockerHostSuggestion[] {
@@ -25,10 +27,10 @@ export class ConnectionSuggestionMapper {
           context.dockerHostIp
         )
         const allPortOptions = this.portResolver.resolve(container)
-        // Quando não está na mesma rede, portas internas são inacessíveis — filtrá-las
-        const portOptions = hostResolution.sameNetwork
-          ? allPortOptions
-          : allPortOptions.filter((opt) => opt.isExternal)
+        const { portOptions, recommendedPort } = this.portSelectionResolver.resolve(
+          allPortOptions,
+          hostResolution.sameNetwork
+        )
         const hasExternalPort = allPortOptions.some((opt) => opt.isExternal)
         const connectivityWarning =
           !hostResolution.sameNetwork && !hasExternalPort
@@ -44,6 +46,7 @@ export class ConnectionSuggestionMapper {
           hostResolutionSource: hostResolution.hostResolutionSource,
           networkNames: container.networks.map((network) => network.networkName),
           portOptions,
+          recommendedPort,
           hasExternalPort,
           connectivityWarning,
         }

@@ -17,6 +17,7 @@ import { DockerEnvironmentService } from '#services/docker_environment_service'
 import { DockerContainerDiscoveryService } from '#services/docker_container_discovery_service'
 import { NetworkReachabilityResolver } from '#services/network_reachability_resolver'
 import { ContainerPortResolver } from '#services/container_port_resolver'
+import { ConnectionPortSelectionResolver } from '#services/connection_port_selection_resolver'
 import { ConnectionSuggestionMapper } from '#services/connection_suggestion_mapper'
 import { getScheduler } from '#services/scheduler_service'
 
@@ -699,7 +700,8 @@ export default class ConnectionsController {
       const containers = await discoveryService.listEligibleContainers()
       const mapper = new ConnectionSuggestionMapper(
         new NetworkReachabilityResolver(),
-        new ContainerPortResolver()
+        new ContainerPortResolver(),
+        new ConnectionPortSelectionResolver()
       )
       const hosts = mapper.map(containers, {
         backendNetworkIds: environment.backendNetworkIds,
