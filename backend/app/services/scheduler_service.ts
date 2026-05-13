@@ -1,4 +1,5 @@
 import cron from 'node-cron'
+import db from '@adonisjs/lucid/services/db'
 import Connection, { type ScheduleFrequency } from '#models/connection'
 import { BackupService } from '#services/backup_service'
 import {
@@ -22,8 +23,11 @@ interface ScheduledJob {
  * Serviço de agendamento de backups automáticos
  */
 export class SchedulerService {
+  private static readonly WAL_CHECKPOINT_CRON = '0 * * * *'
+
   private jobs: Map<number, ScheduledJob> = new Map()
   private retentionTask: cron.ScheduledTask | null = null
+  private walCheckpointTask: cron.ScheduledTask | null = null
   private backupService: BackupService
   private retentionPolicyService: BackupRetentionPolicyService
   private isRunning = false
@@ -50,6 +54,9 @@ export class SchedulerService {
 
     // Agendar job de retenção (executa diariamente às 2h da manhã)
     await this.scheduleRetentionJob()
+
+    // Agendar checkpoint do WAL do SQLite (a cada hora)
+    this.scheduleWalCheckpointJob()
 
     this.isRunning = true
     logger.info('Serviço de agendamento iniciado com sucesso')
@@ -78,6 +85,13 @@ export class SchedulerService {
       this.retentionTask.stop()
       this.retentionTask = null
       logger.info('Job de retenção parado')
+    }
+
+    // Parar job de checkpoint do WAL
+    if (this.walCheckpointTask) {
+      this.walCheckpointTask.stop()
+      this.walCheckpointTask = null
+      logger.info('Job de WAL checkpoint parado')
     }
 
     this.isRunning = false
@@ -284,6 +298,26 @@ export class SchedulerService {
     const policy = await this.retentionPolicyService.getPolicy()
 
     return new RetentionService(policy)
+  }
+
+  private scheduleWalCheckpointJob(): void {
+    this.walCheckpointTask = cron.schedule(
+      SchedulerService.WAL_CHECKPOINT_CRON,
+      () => {
+        void this.executeWalCheckpointJob()
+      },
+      { timezone: this.timezone }
+    )
+    logger.info(`Job de WAL checkpoint agendado com cron "${SchedulerService.WAL_CHECKPOINT_CRON}"`)
+  }
+
+  private async executeWalCheckpointJob(): Promise<void> {
+    try {
+      await db.rawQuery('PRAGMA wal_checkpoint(TRUNCATE)')
+      logger.info('[WAL checkpoint] TRUNCATE executado com sucesso')
+    } catch (error) {
+      logger.error({ err: error }, '[WAL checkpoint] Falha ao executar PRAGMA wal_checkpoint')
+    }
   }
 
   private resolveRetentionCron(expression: string): string {

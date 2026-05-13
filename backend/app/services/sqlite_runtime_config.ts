@@ -3,7 +3,11 @@ type SqliteConnectionLike = {
   exec?: (statement: string) => unknown
 }
 
-const DISK_SQLITE_PRAGMAS = ['journal_mode = WAL', 'synchronous = NORMAL'] as const
+const DISK_SQLITE_PRAGMAS = [
+  'journal_mode = WAL',
+  'synchronous = NORMAL',
+  'cache_size = -4096',
+] as const
 
 export function applySqliteRuntimePragmas(
   connection: SqliteConnectionLike,

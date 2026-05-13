@@ -48,7 +48,7 @@ echo -e "${GREEN}✅ Migrations executadas com sucesso!${NC}"
 # Determinar modo de execução
 if [ "$NODE_ENV" = "production" ]; then
     echo -e "${GREEN}🏭 Iniciando em modo PRODUÇÃO com Node.js...${NC}"
-    exec node bin/server.js
+    exec node --max-old-space-size=200 bin/server.js
 else
     echo -e "${YELLOW}🔧 Iniciando em modo DESENVOLVIMENTO com HMR...${NC}"
     exec node ace serve --hmr

@@ -88,7 +88,10 @@
   },
   "prettier": "@adonisjs/prettier-config",
   "pnpm": {
-    "onlyBuiltDependencies": ["better-sqlite3", "@swc/core"],
+    "onlyBuiltDependencies": [
+      "better-sqlite3",
+      "@swc/core"
+    ],
     "overrides": {
       "lodash": "^4.18.1",
       "lodash-es": "^4.18.1",

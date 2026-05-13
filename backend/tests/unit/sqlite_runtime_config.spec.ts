@@ -18,7 +18,11 @@ test.group('SQLite runtime config', () => {
       'storage/database/app.sqlite3'
     )
 
-    assert.deepEqual(statements, ['journal_mode = WAL', 'synchronous = NORMAL'])
+    assert.deepEqual(statements, [
+      'journal_mode = WAL',
+      'synchronous = NORMAL',
+      'cache_size = -4096',
+    ])
   })
 
   test('skips WAL pragmas for in-memory databases', ({ assert }) => {
@@ -48,7 +52,9 @@ test.group('SQLite runtime config', () => {
       'storage/database/app.sqlite3'
     )
 
-    assert.deepEqual(executed, ['PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;'])
+    assert.deepEqual(executed, [
+      'PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA cache_size = -4096;',
+    ])
   })
 
   test('afterCreate hook forwards connection after applying pragmas', ({ assert }) => {
@@ -69,6 +75,10 @@ test.group('SQLite runtime config', () => {
 
     assert.isNull(callbackError)
     assert.strictEqual(callbackConnection, connection)
-    assert.deepEqual(statements, ['journal_mode = WAL', 'synchronous = NORMAL'])
+    assert.deepEqual(statements, [
+      'journal_mode = WAL',
+      'synchronous = NORMAL',
+      'cache_size = -4096',
+    ])
   })
 })
