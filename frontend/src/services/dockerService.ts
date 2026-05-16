@@ -42,6 +42,50 @@ async function apiFetch<T>(url: string, options: RequestInit = {}): Promise<T> {
   return data.data as T
 }
 
+function buildDockerLogsQuery(params: DockerLogsParams = {}): string {
+  const qs = new URLSearchParams()
+
+  if (params.tail !== undefined) qs.set('tail', String(params.tail))
+  if (params.since !== undefined) qs.set('since', String(params.since))
+  if (params.until !== undefined) qs.set('until', String(params.until))
+  if (params.timestamps) qs.set('timestamps', 'true')
+
+  const query = qs.toString()
+  return query ? `?${query}` : ''
+}
+
+function fetchContainerLogs(id: string, params: DockerLogsParams = {}): Promise<DockerLogEntry[]> {
+  return apiFetch<DockerLogEntry[]>(
+    `${BASE}/containers/${encodeURIComponent(id)}/logs${buildDockerLogsQuery(params)}`
+  )
+}
+
+function downloadBlob(blob: Blob, filename: string) {
+  const href = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = href
+  anchor.download = filename
+  document.body.appendChild(anchor)
+  anchor.click()
+  anchor.remove()
+  URL.revokeObjectURL(href)
+}
+
+function serializeDockerLogs(entries: DockerLogEntry[]): string {
+  const lines = entries.map((entry) => {
+    const timestamp = entry.timestamp ? `[${entry.timestamp}] ` : ''
+    return `${timestamp}${entry.stream}: ${entry.message}`
+  })
+
+  return lines.length > 0 ? `${lines.join('\n')}\n` : ''
+}
+
+function buildDockerLogsFilename(id: string): string {
+  const safeId = id.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 32) || 'container'
+  const stamp = new Date().toISOString().replace(/[.:]/g, '-')
+  return `container-${safeId}-logs-${stamp}.log`
+}
+
 /** Inicia download do browser sem precisar parsear JSON */
 function downloadViaAnchor(url: string, filename: string) {
   const token = localStorage.getItem('token')
@@ -101,13 +145,18 @@ export const dockerContainersApi = {
   },
 
   getLogs(id: string, params: DockerLogsParams = {}): Promise<DockerLogEntry[]> {
-    const qs = new URLSearchParams()
-    if (params.tail !== undefined) qs.set('tail', String(params.tail))
-    if (params.since !== undefined) qs.set('since', String(params.since))
-    if (params.timestamps) qs.set('timestamps', 'true')
-    const query = qs.toString() ? `?${qs.toString()}` : ''
-    return apiFetch<DockerLogEntry[]>(
-      `${BASE}/containers/${encodeURIComponent(id)}/logs${query}`
+    return fetchContainerLogs(id, params)
+  },
+
+  async downloadAllLogs(id: string, filename = buildDockerLogsFilename(id)): Promise<void> {
+    const entries = await fetchContainerLogs(id, {
+      tail: 'all',
+      timestamps: true,
+    })
+
+    downloadBlob(
+      new Blob([serializeDockerLogs(entries)], { type: 'text/plain;charset=utf-8' }),
+      filename
     )
   },
 }

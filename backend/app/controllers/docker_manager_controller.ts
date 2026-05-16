@@ -15,6 +15,24 @@ import { StorageDestinationService } from '#services/storage_destination_service
 
 const UNAVAILABLE = { success: true, available: false, data: [] } as const
 
+function parseTail(value: string | number | undefined): number | 'all' {
+  if (value === 'all') {
+    return 'all'
+  }
+
+  const parsed = Number(value)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 200
+}
+
+function parseUnixTimestamp(value: string | number | undefined): number | undefined {
+  if (value === undefined || value === null || value === '') {
+    return undefined
+  }
+
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : undefined
+}
+
 export default class DockerManagerController {
   private readonly service: DockerManagerService
 
@@ -84,20 +102,30 @@ export default class DockerManagerController {
 
   /**
    * GET /api/docker/containers/:id/logs
-   * Query params: tail (number|'all'), since (unix timestamp), timestamps (bool)
+   * Query params: tail (number|'all'), since/until (unix timestamp), timestamps (bool)
    */
   async containerLogs({ params, request, response }: HttpContext) {
     const tailParam = request.input('tail', '200')
     const sinceParam = request.input('since')
+    const untilParam = request.input('until')
     const timestampsParam = request.input('timestamps', 'false')
 
-    const tail = tailParam === 'all' ? ('all' as const) : Number(tailParam) || 200
-    const since = sinceParam ? Number(sinceParam) : undefined
+    const tail = parseTail(tailParam)
+    const since = parseUnixTimestamp(sinceParam)
+    const until = parseUnixTimestamp(untilParam)
     const timestamps = timestampsParam === 'true' || timestampsParam === '1'
+
+    if (since !== undefined && until !== undefined && since > until) {
+      return response.badRequest({
+        success: false,
+        message: 'O parâmetro since deve ser menor ou igual ao parâmetro until.',
+      })
+    }
 
     const entries = await this.service.getContainerLogs(params.id as string, {
       tail,
       since,
+      until,
       timestamps,
     })
 

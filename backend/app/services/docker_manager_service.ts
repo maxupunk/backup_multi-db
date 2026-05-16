@@ -112,6 +112,10 @@ export class DockerManagerService {
       params.set('since', String(options.since))
     }
 
+    if (options.until !== undefined) {
+      params.set('until', String(options.until))
+    }
+
     if (options.timestamps) {
       params.set('timestamps', '1')
     }
@@ -151,7 +155,7 @@ export class DockerManagerService {
           if (!message) continue
 
           // Parse timestamp if present (RFC3339 format prepended by Docker)
-          let timestamp = new Date().toISOString()
+          let timestamp = ''
           let text = message
 
           if (options.timestamps) {

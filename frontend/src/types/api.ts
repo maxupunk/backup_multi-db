@@ -933,6 +933,7 @@ export interface DockerPruneResult {
 export interface DockerLogsParams {
   tail?: number | 'all'
   since?: number
+  until?: number
   timestamps?: boolean
 }
 

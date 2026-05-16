@@ -171,6 +171,7 @@ export interface DockerLogEntry {
 export interface DockerLogsOptions {
   tail?: number | 'all'
   since?: number
+  until?: number
   timestamps?: boolean
   follow?: boolean
 }
