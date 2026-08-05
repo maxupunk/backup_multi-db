@@ -432,6 +432,7 @@
     { title: 'Conexão', value: 'connection' },
     { title: 'Backup', value: 'backup' },
     { title: 'Configurações', value: 'settings' },
+    { title: 'Diagnóstico', value: 'diagnostics' },
   ]
 
   const allActionOptions = [
@@ -446,6 +447,8 @@
     { title: 'Backup Baixado', value: 'backup.downloaded', entity: 'backup' },
     { title: 'Backup Importado', value: 'backup.imported', entity: 'backup' },
     { title: 'Configurações Atualizadas', value: 'settings.updated', entity: 'settings' },
+    { title: 'Diagnóstico Baixado', value: 'diagnostics.downloaded', entity: 'diagnostics' },
+    { title: 'Diagnóstico Removido', value: 'diagnostics.deleted', entity: 'diagnostics' },
   ]
 
   const filteredActionOptions = computed(() => {
@@ -517,6 +520,7 @@
       connection: 'purple',
       backup: 'blue',
       settings: 'orange',
+      diagnostics: 'red',
     }
     return colors[entityType] ?? 'grey'
   }
@@ -526,6 +530,7 @@
       connection: 'Conexão',
       backup: 'Backup',
       settings: 'Config',
+      diagnostics: 'Diagnóstico',
     }
     return labels[entityType] ?? entityType
   }

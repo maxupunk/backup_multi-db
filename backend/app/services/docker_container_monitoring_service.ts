@@ -110,6 +110,8 @@ export class DockerContainerMonitoringService {
   private static readonly COMMAND_STDERR_CAPTURE_LIMIT_BYTES = 256 * 1024
   private static instanceRef: DockerContainerMonitoringService | null = null
   private readonly dockerHttpClient = new DockerEngineHttpClient()
+  /** Nome e labels por container id — imutaveis enquanto o container existir. */
+  private readonly inspectCache = new Map<string, DockerInspectContainerItem>()
 
   static instance(): DockerContainerMonitoringService {
     if (!this.instanceRef) {
@@ -501,29 +503,71 @@ export class DockerContainerMonitoringService {
       .filter((container): container is DockerContainerResourceMetrics => container !== null)
   }
 
+  /**
+   * Resolve nome e labels dos containers, com cache por id.
+   *
+   * Estes campos sao imutaveis durante a vida do container, mas o ciclo de
+   * polling roda um `docker inspect` com TODOS os ids e faz `JSON.parse` do
+   * array inteiro a cada iteracao — o retorno do inspect e volumoso (config
+   * completa, mounts, network settings) so para extrair dois campos.
+   *
+   * O cache e podado com a lista corrente: container que sumiu perde a entrada,
+   * entao o Map nao cresce conforme containers sao recriados.
+   */
   private async inspectContainersUsingCli(
     containerIds: string[]
   ): Promise<Map<string, DockerInspectContainerItem>> {
     if (!containerIds.length) {
+      this.inspectCache.clear()
       return new Map()
     }
 
-    const inspectResult = await this.runDockerCommand(['inspect', ...containerIds])
+    this.pruneInspectCache(containerIds)
 
-    if (!inspectResult.success) {
-      return new Map()
+    const missingIds = containerIds.filter((id) => !this.inspectCache.has(id))
+
+    if (missingIds.length) {
+      const inspectResult = await this.runDockerCommand(['inspect', ...missingIds])
+
+      if (inspectResult.success) {
+        try {
+          const entries = JSON.parse(inspectResult.stdout) as DockerInspectContainerItem[]
+
+          for (const entry of entries) {
+            const id = entry.Id?.trim()
+            if (id) {
+              this.inspectCache.set(id, entry)
+            }
+          }
+        } catch {
+          // Saida inesperada do docker inspect: segue sem metadados, como antes.
+        }
+      }
     }
 
-    try {
-      const entries = JSON.parse(inspectResult.stdout) as DockerInspectContainerItem[]
+    const resolved = new Map<string, DockerInspectContainerItem>()
 
-      return new Map(
-        entries
-          .map((entry) => [entry.Id?.trim() || '', entry] as const)
-          .filter(([id]) => Boolean(id))
-      )
-    } catch {
-      return new Map()
+    for (const id of containerIds) {
+      const entry = this.inspectCache.get(id)
+      if (entry) {
+        resolved.set(id, entry)
+      }
+    }
+
+    return resolved
+  }
+
+  private pruneInspectCache(currentIds: string[]): void {
+    if (this.inspectCache.size === 0) {
+      return
+    }
+
+    const alive = new Set(currentIds)
+
+    for (const id of this.inspectCache.keys()) {
+      if (!alive.has(id)) {
+        this.inspectCache.delete(id)
+      }
     }
   }
 

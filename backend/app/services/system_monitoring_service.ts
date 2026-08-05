@@ -1,5 +1,6 @@
 import os from 'node:os'
 import { setTimeout as delay } from 'node:timers/promises'
+import { ContainerMemoryProbe, type MemoryMetricsSource } from '#services/container_memory_probe'
 import { getScheduler } from '#services/scheduler_service'
 
 type CpuSnapshot = {
@@ -24,6 +25,10 @@ export type MemoryResourceMetrics = {
   usedBytes: number
   freeBytes: number
   usagePercent: number
+  /** Origem do numero: cgroup (dentro de container) ou os.* (fora). */
+  source: MemoryMetricsSource
+  /** `true` quando ha limite de container efetivo aplicado. */
+  containerLimited: boolean
 }
 
 export type SystemResourceMetrics = {
@@ -40,19 +45,6 @@ export type SystemOverview = {
   uptimeSeconds: number
   resources: SystemResourceMetrics
   jobs: JobsStatusResponse
-}
-
-export type SystemHeapSnapshot = {
-  timestamp: string
-  rssBytes: number
-  heapTotalBytes: number
-  heapUsedBytes: number
-  heapUsagePercent: number
-  externalBytes: number
-  arrayBuffersBytes: number
-  activeHandles: number
-  activeRequests: number
-  uptimeSeconds: number
 }
 
 export class SystemMonitoringService {
@@ -85,25 +77,6 @@ export class SystemMonitoringService {
     this.cachedAt = now
 
     return overview
-  }
-
-  static getHeapSnapshot(): SystemHeapSnapshot {
-    const memoryUsage = process.memoryUsage()
-    const heapUsagePercent =
-      memoryUsage.heapTotal > 0 ? (memoryUsage.heapUsed / memoryUsage.heapTotal) * 100 : 0
-
-    return {
-      timestamp: new Date().toISOString(),
-      rssBytes: memoryUsage.rss,
-      heapTotalBytes: memoryUsage.heapTotal,
-      heapUsedBytes: memoryUsage.heapUsed,
-      heapUsagePercent: this.roundPercent(heapUsagePercent),
-      externalBytes: memoryUsage.external,
-      arrayBuffersBytes: memoryUsage.arrayBuffers,
-      activeHandles: this.getActiveHandlesCount(),
-      activeRequests: this.getActiveRequestsCount(),
-      uptimeSeconds: Math.floor(process.uptime()),
-    }
   }
 
   private static getJobsStatus(): JobsStatusResponse {
@@ -144,17 +117,21 @@ export class SystemMonitoringService {
     }
   }
 
+  /**
+   * Usa o limite de cgroup quando o processo roda em container — `os.totalmem()`
+   * reportaria a RAM do host, que nao tem relacao com o que o OOM killer enxerga.
+   */
   private static async getMemoryMetrics(): Promise<MemoryResourceMetrics> {
-    const totalBytes = os.totalmem()
-    const freeBytes = os.freemem()
-    const usedBytes = totalBytes - freeBytes
-    const rawUsage = totalBytes > 0 ? (usedBytes / totalBytes) * 100 : 0
+    const reading = ContainerMemoryProbe.read()
+    const rawUsage = reading.totalBytes > 0 ? (reading.usedBytes / reading.totalBytes) * 100 : 0
 
     return {
-      totalBytes,
-      usedBytes,
-      freeBytes,
+      totalBytes: reading.totalBytes,
+      usedBytes: reading.usedBytes,
+      freeBytes: reading.freeBytes,
       usagePercent: this.roundPercent(rawUsage),
+      source: reading.source,
+      containerLimited: reading.containerLimited,
     }
   }
 
@@ -175,21 +152,5 @@ export class SystemMonitoringService {
 
   private static roundPercent(value: number): number {
     return Math.min(100, Math.max(0, Math.round(value * 100) / 100))
-  }
-
-  private static getActiveHandlesCount(): number {
-    const processWithInternals = process as NodeJS.Process & {
-      _getActiveHandles?: () => unknown[]
-    }
-
-    return processWithInternals._getActiveHandles?.().length ?? 0
-  }
-
-  private static getActiveRequestsCount(): number {
-    const processWithInternals = process as NodeJS.Process & {
-      _getActiveRequests?: () => unknown[]
-    }
-
-    return processWithInternals._getActiveRequests?.().length ?? 0
   }
 }

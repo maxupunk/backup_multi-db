@@ -35,11 +35,18 @@ const bodyParserConfig = defineConfig({
    */
   multipart: {
     /**
-     * Enabling auto process allows bodyparser middleware to
-     * move all uploaded files inside the tmp folder of your
-     * operating system
+     * Auto-processamento restrito à ÚNICA rota que aceita upload.
+     *
+     * Com `autoProcess: true`, qualquer rota POST/PUT/PATCH/DELETE que
+     * recebesse `multipart/form-data` teria o corpo gravado no diretório
+     * temporário do sistema até o limite abaixo — 500 MB por requisição, em
+     * rotas que nunca deveriam receber arquivo. Se o `/tmp` do container for
+     * montado como tmpfs, esse conteúdo vai direto para a RAM.
+     *
+     * As demais rotas continuam recebendo `request.multipart` e podem
+     * processar manualmente, se algum dia precisarem.
      */
-    autoProcess: true,
+    autoProcess: ['/api/backups/import'],
     convertEmptyStringsToNull: true,
     processManually: [],
 
@@ -47,6 +54,7 @@ const bodyParserConfig = defineConfig({
      * Maximum limit of data to parse including all files
      * and fields.
      * Aumentado para suportar importação de arquivos de backup grandes.
+     * Só se aplica à rota listada em `autoProcess`.
      */
     limit: '500mb',
     types: ['multipart/form-data'],

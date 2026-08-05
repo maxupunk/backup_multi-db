@@ -104,15 +104,17 @@ ENV PORT=3333
 COPY --from=build /app/build ./
 COPY --from=build /app/package.json /app/pnpm-lock.yaml ./
 COPY backend/docker-entrypoint.sh /docker-entrypoint.sh
+COPY backend/docker-memory.sh /docker-memory.sh
 
-RUN sed -i 's/\r$//' /docker-entrypoint.sh \
+RUN sed -i 's/\r$//' /docker-entrypoint.sh /docker-memory.sh \
     && chmod +x /docker-entrypoint.sh
 
 # Instalar apenas dependências de produção (recompila módulos nativos)
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile --prod
 
-# Diretórios de dados e logs
-RUN mkdir -p /app/storage/backups /app/storage/database /app/logs /storage/backups /storage/database
+# Diretórios de dados, logs e artefatos de diagnóstico (heap snapshots)
+RUN mkdir -p /app/storage/backups /app/storage/database /app/logs \
+        /storage/backups /storage/database /storage/diagnostics
 
 EXPOSE 3333
 
@@ -146,10 +148,12 @@ ENV PORT=3333
 COPY backend/ .
 
 COPY backend/docker-entrypoint.sh /docker-entrypoint.sh
-RUN sed -i 's/\r$//' /docker-entrypoint.sh \
+COPY backend/docker-memory.sh /docker-memory.sh
+RUN sed -i 's/\r$//' /docker-entrypoint.sh /docker-memory.sh \
     && chmod +x /docker-entrypoint.sh
 
-RUN mkdir -p /app/storage/backups /app/storage/database /storage/backups /storage/database
+RUN mkdir -p /app/storage/backups /app/storage/database \
+        /storage/backups /storage/database /storage/diagnostics
 
 EXPOSE 3333
 

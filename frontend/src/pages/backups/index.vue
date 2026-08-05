@@ -416,13 +416,13 @@
 
 <script lang="ts" setup>
 import type { Backup, BackupStatus, Connection, RetentionType } from '@/types/api'
-import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useDisplay } from 'vuetify'
 import { backupsApi, connectionsApi } from '@/services/api'
 import { useNotifier } from '@/composables/useNotifier'
+import { useNotificationListener } from '@/composables/useNotificationListener'
 import RestoreDialog from '@/components/backups/RestoreDialog.vue'
 import ImportBackupDialog from '@/components/backups/ImportBackupDialog.vue'
-import { useNotificationStore } from '@/stores/notification'
 import {
   backupStatusOptions,
   getBackupStatusColor as getStatusColor,
@@ -433,7 +433,6 @@ import { getDatabaseColor } from '@/ui/database'
 import { formatDateTimePtBR as formatDate, formatDuration, formatFileSize } from '@/utils/format'
 
 const notify = useNotifier()
-const notificationStore = useNotificationStore()
 const { smAndUp, mdAndUp } = useDisplay()
 
 const loading = ref(false)
@@ -601,19 +600,12 @@ function handleBackupNotification() {
   }, 500)
 }
 
+// Atualiza a lista quando um backup termina e quando uma restauração termina
+// (restaurações criam safety backups). O desregistro é automático no unmount.
+useNotificationListener(['backup', 'restore'], handleBackupNotification)
+
 onMounted(() => {
   loadConnections()
   loadBackups()
-
-  // Registra listener para atualizar lista quando backup terminar
-  notificationStore.onNotification('backup', handleBackupNotification)
-  // Também atualizar quando restauração terminar (cria safety backups)
-  notificationStore.onNotification('restore', handleBackupNotification)
-})
-
-onUnmounted(() => {
-  // Remove listeners para evitar memory leaks
-  notificationStore.offNotification('backup', handleBackupNotification)
-  notificationStore.offNotification('restore', handleBackupNotification)
 })
 </script>

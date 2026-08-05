@@ -262,6 +262,41 @@ export class AuditService {
     )
   }
 
+  // ==================== Métodos de Diagnóstico ====================
+
+  /**
+   * Registra download de artefato de diagnóstico.
+   *
+   * Um heap snapshot contém todo o heap do processo — senhas descriptografadas,
+   * credenciais de storage e tokens. O download precisa deixar rastro de quem
+   * levou o arquivo e quando.
+   */
+  static async logDiagnosticsDownloaded(fileName: string, ctx?: HttpContext): Promise<AuditLog> {
+    return this.log(
+      {
+        action: 'diagnostics.downloaded',
+        entityType: 'diagnostics',
+        entityId: null,
+        entityName: fileName,
+        description: `Artefato de diagnóstico "${fileName}" foi baixado`,
+      },
+      ctx
+    )
+  }
+
+  static async logDiagnosticsDeleted(fileName: string, ctx?: HttpContext): Promise<AuditLog> {
+    return this.log(
+      {
+        action: 'diagnostics.deleted',
+        entityType: 'diagnostics',
+        entityId: null,
+        entityName: fileName,
+        description: `Artefato de diagnóstico "${fileName}" foi removido`,
+      },
+      ctx
+    )
+  }
+
   // ==================== Métodos de Configurações ====================
 
   /**

@@ -135,17 +135,6 @@
       </v-col>
     </v-row>
 
-    <SystemHeapPanel
-      :current="currentHeapSnapshot"
-      :snapshots="heapSnapshots"
-      :loading="heapLoading"
-      :error="heapError"
-      :poll-interval-ms="heapPollIntervalMs"
-      :retention-hours="heapRetentionHours"
-      @refresh="refreshHeap"
-      @clear-history="clearHeapHistory"
-    />
-
     <v-row class="mb-2">
       <v-col cols="12">
         <v-card class="history-filter-card">
@@ -346,9 +335,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { statsApi } from '@/services/api'
 import { useNotifier } from '@/composables/useNotifier'
 import { useResourceHistory } from '@/composables/useResourceHistory'
-import { useSystemHeapSnapshots } from '@/composables/useSystemHeapSnapshots'
 import { useSystemResources } from '@/composables/useSystemResources'
-import SystemHeapPanel from '@/components/system/SystemHeapPanel.vue'
 import SystemResourceCharts from '@/components/system/SystemResourceCharts.vue'
 import { getBackupStatusColor as getStatusColor, getBackupStatusLabel as getStatusLabel } from '@/ui/backup'
 import { formatBytes, formatDateTimePtBR, formatFileSize } from '@/utils/format'
@@ -360,16 +347,6 @@ const stats = ref<DashboardStats | null>(null)
 
 // Atualizações em tempo real de CPU e RAM via SSE (~1s)
 const { systemResources } = useSystemResources()
-const {
-  current: currentHeapSnapshot,
-  history: heapSnapshots,
-  loading: heapLoading,
-  error: heapError,
-  pollIntervalMs: heapPollIntervalMs,
-  retentionHours: heapRetentionHours,
-  refresh: refreshHeap,
-  clearHistory: clearHeapHistory,
-} = useSystemHeapSnapshots()
 const resourceHistory = useResourceHistory()
 const selectedHistoryRangeHours = ref(1)
 const historyRangeOptions = [
@@ -421,7 +398,7 @@ const schedulerCard = computed<SchedulerCardState>(() => {
 })
 
 const refreshingDashboard = computed(() =>
-  loading.value || heapLoading.value || resourceHistory.loading.value
+  loading.value || resourceHistory.loading.value
 )
 
 async function loadStats() {
@@ -441,7 +418,6 @@ async function refreshDashboard() {
   await Promise.all([
     loadStats(),
     loadResourceHistory(),
-    refreshHeap(),
   ])
 }
 

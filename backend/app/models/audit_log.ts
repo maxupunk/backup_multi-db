@@ -16,11 +16,13 @@ export type AuditAction =
   | 'backup.downloaded'
   | 'backup.imported'
   | 'settings.updated'
+  | 'diagnostics.downloaded'
+  | 'diagnostics.deleted'
 
 /**
  * Tipos de entidades que podem ser auditadas
  */
-export type AuditEntityType = 'connection' | 'backup' | 'settings'
+export type AuditEntityType = 'connection' | 'backup' | 'settings' | 'diagnostics'
 
 /**
  * Status do resultado da ação
@@ -98,6 +100,8 @@ export default class AuditLog extends BaseModel {
       'backup.downloaded': 'Backup baixado',
       'backup.imported': 'Backup importado',
       'settings.updated': 'Configurações atualizadas',
+      'diagnostics.downloaded': 'Artefato de diagnóstico baixado',
+      'diagnostics.deleted': 'Artefato de diagnóstico removido',
     }
     return descriptions[action]
   }
@@ -118,6 +122,8 @@ export default class AuditLog extends BaseModel {
       'backup.downloaded': 'mdi-download',
       'backup.imported': 'mdi-database-import',
       'settings.updated': 'mdi-cog',
+      'diagnostics.downloaded': 'mdi-stethoscope',
+      'diagnostics.deleted': 'mdi-delete-sweep',
     }
     return icons[action]
   }

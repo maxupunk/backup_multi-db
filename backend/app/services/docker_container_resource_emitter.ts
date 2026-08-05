@@ -1,6 +1,7 @@
 import transmit from '@adonisjs/transmit/services/main'
 import logger from '@adonisjs/core/services/logger'
 import { NOTIFICATION_CHANNELS } from '#services/notification_service'
+import { hasSubscribers } from '#services/sse_subscribers'
 import type { DockerContainerResourceOverview } from '#services/docker_container_monitoring_service'
 
 type BroadcastableValue =
@@ -17,6 +18,12 @@ type BroadcastableValue =
  */
 export class DockerContainerResourceEmitter {
   static broadcast(overview: DockerContainerResourceOverview): void {
+    // O payload de containers é o mais caro do ciclo (um objeto aninhado por
+    // container). Sem assinantes, nem é montado.
+    if (!hasSubscribers(NOTIFICATION_CHANNELS.DOCKER_CONTAINER_RESOURCES)) {
+      return
+    }
+
     try {
       const payload: { [key: string]: BroadcastableValue } = {
         dockerAvailable: overview.dockerAvailable,

@@ -135,7 +135,15 @@ router
 
         router.get('/stats', [SystemController, 'stats'])
         router.get('/system/status', [SystemController, 'status'])
-        router.get('/system/heap', [SystemController, 'heap'])
+
+        // Artefatos de diagnóstico (heap snapshots) — somente administradores.
+        router.get('/system/diagnostics', [SystemController, 'diagnostics'])
+        router
+          .get('/system/diagnostics/:name/download', [SystemController, 'downloadDiagnostic'])
+          .use(middleware.rateLimit({ limiter: 'strict' }))
+        router
+          .delete('/system/diagnostics/:name', [SystemController, 'destroyDiagnostic'])
+          .use(middleware.rateLimit({ limiter: 'strict' }))
         router.get('/system/containers/resources', [SystemController, 'containerResources'])
         router.get('/system/resources/history', [SystemController, 'resourcesHistory'])
         router.get('/system/backup-retention', [SystemController, 'backupRetentionPolicy'])

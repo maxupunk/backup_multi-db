@@ -1,9 +1,22 @@
 import { test } from '@japa/runner'
 
+import dbConfig from '#config/database'
 import {
   applySqliteRuntimePragmas,
   createSqliteAfterCreateHook,
 } from '#services/sqlite_runtime_config'
+
+test.group('SQLite connection pool', () => {
+  test('pool e limitado a uma unica conexao', ({ assert }) => {
+    const pool = (dbConfig.connections.sqlite as any).pool
+
+    // `cache_size = -4096` custa 4 MB de page cache POR conexao; o pool default
+    // do knex (max 10) multiplicaria isso sem ganho — better-sqlite3 e sincrono.
+    assert.equal(pool.min, 1)
+    assert.equal(pool.max, 1)
+    assert.isFunction(pool.afterCreate)
+  })
+})
 
 test.group('SQLite runtime config', () => {
   test('applies WAL pragmas through pragma() for disk-backed databases', ({ assert }) => {

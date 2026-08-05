@@ -1,4 +1,5 @@
 import { type Readable } from 'node:stream'
+import type { Archiver, EntryData } from 'archiver'
 import { createWriteStream, createReadStream } from 'node:fs'
 import { unlink } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -15,6 +16,8 @@ const ARCHIVE_TTL_MS = 15 * 60 * 1000 // 15 min
 const JOB_CLEANUP_TTL_MS = 60 * 60 * 1000 // 1h
 const RETENTION_SWEEP_INTERVAL_MS = 60 * 1000
 const MAX_RETAINED_ARCHIVE_JOBS = 50
+/** Intervalo mínimo entre eventos SSE de progresso por arquivo processado. */
+const PROGRESS_THROTTLE_MS = 500
 
 /**
  * Serviço de geração de archives (tar.gz) de storages.
@@ -85,34 +88,10 @@ export class BucketArchiveService {
       job.status = 'building'
       this.emitProgress(job)
 
-      // 1. Listar todos os arquivos recursivamente
-      const allFiles = await this.listAllFiles(storage, path ?? '')
-      job.totalFiles = allFiles.length
-      this.emitProgress(job)
-
-      if (allFiles.length === 0) {
-        // Arquivo vazio: cria tar.gz vazio em disco
-        const tmpFile = join(tmpdir(), `${job.id}.tar.gz`)
-        const archiverEmpty = await import('archiver')
-        const emptyArchive = archiverEmpty.default('tar', { gzip: true })
-        const emptyWs = createWriteStream(tmpFile)
-        emptyArchive.pipe(emptyWs)
-        await new Promise<void>((resolve, reject) => {
-          emptyWs.on('finish', resolve)
-          emptyWs.on('error', reject)
-          emptyArchive.on('error', reject)
-          emptyArchive.finalize()
-        })
-        this.tmpFiles.set(job.id, tmpFile)
-        job.status = 'ready'
-        job.completedAt = new Date().toISOString()
-        job.expiresAt = new Date(Date.now() + ARCHIVE_TTL_MS).toISOString()
-        this.emitProgress(job)
-        this.scheduleExpiration(job.id)
-        return
-      }
-
-      // 2. Criar arquivo temporário em disco para evitar backpressure
+      // 1. Criar arquivo temporário em disco para evitar backpressure.
+      //
+      // Um bucket vazio não é mais um caso especial: o laço simplesmente não
+      // executa e o `finalize()` produz o mesmo tar.gz vazio de antes.
       const tmpFile = join(tmpdir(), `${job.id}.tar.gz`)
       const archiver = await import('archiver')
       const archive = archiver.default('tar', { gzip: true, gzipOptions: { level: 6 } })
@@ -130,12 +109,28 @@ export class BucketArchiveService {
 
       archive.pipe(writeStream)
 
-      // 3. Para cada arquivo, baixar e adicionar ao archive
+      // 2. Para cada arquivo descoberto, baixar e adicionar ao archive.
+      //
+      // A listagem é consumida página a página (`iterateFiles`), sem materializar
+      // o bucket inteiro: num bucket de 100k objetos o array de metadados sozinho
+      // já custava dezenas de MB retidos durante todo o job.
+      //
+      // Um arquivo por vez, aguardando o archiver consumir a entrada antes de
+      // abrir o próximo download. `archive.append()` apenas enfileira e retorna,
+      // então abrir todos os downloads em sequência deixaria N respostas HTTP
+      // abertas simultaneamente — o pico de memória (e de sockets) cresceria com
+      // o número de objetos do bucket. O archiver processa uma entrada por vez
+      // de qualquer forma; serializar aqui não custa throughput de compressão.
       const config = storage.getDecryptedConfig()
       if (!config) throw new Error('Configuração do storage inválida')
 
-      for (const file of allFiles) {
+      let lastProgressEmitAt = 0
+      let discoveredFiles = 0
+
+      for await (const file of this.iterateFiles(storage, path ?? '')) {
         if (job.status !== 'building') break
+
+        discoveredFiles++
 
         try {
           const downloadResult = await StorageDestinationService.getDownloadStream(
@@ -143,17 +138,26 @@ export class BucketArchiveService {
             file.key
           )
 
-          archive.append(downloadResult.stream as Readable, {
-            name: file.key,
-          })
+          await this.appendEntry(archive, downloadResult.stream as Readable, file.key)
 
           job.processedFiles++
-          this.emitProgress(job)
+
+          const now = Date.now()
+          if (now - lastProgressEmitAt >= PROGRESS_THROTTLE_MS) {
+            lastProgressEmitAt = now
+            this.emitProgress(job)
+          }
         } catch (err: any) {
           logger.warn(`[BucketArchive] Falha ao baixar ${file.key}: ${err.message}`)
           // Continua com os próximos arquivos
         }
       }
+
+      // O total só é conhecido ao fim da varredura. Até aqui `totalFiles` fica
+      // null e a UI mostra barra indeterminada com "N / ?" — honesto, porque o
+      // número real de objetos não é sabido antes de percorrer todas as páginas.
+      job.totalFiles = discoveredFiles
+      this.emitProgress(job)
 
       // 4. Finalizar e aguardar o writeStream terminar de escrever em disco
       // Usar o evento 'finish' do writeStream (não archive.finalize()) evita
@@ -179,11 +183,60 @@ export class BucketArchiveService {
     }
   }
 
-  private static async listAllFiles(
+  /**
+   * Enfileira uma entrada no archive e só resolve quando ela termina de ser
+   * escrita — é o que mantém apenas um download aberto por vez.
+   *
+   * Em caso de falha o stream de origem é destruído explicitamente: sem isso o
+   * socket da resposta HTTP ficaria pendurado até o GC, segurando os buffers
+   * que este método existe para evitar.
+   */
+  private static appendEntry(archive: Archiver, source: Readable, name: string): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      const cleanup = (): void => {
+        archive.off('entry', onEntry)
+        archive.off('error', onError)
+        source.off('error', onSourceError)
+      }
+
+      // Só existe uma entrada em voo, então qualquer 'entry' é a nossa.
+      const onEntry = (_entry: EntryData): void => {
+        cleanup()
+        resolve()
+      }
+
+      const onError = (err: Error): void => {
+        cleanup()
+        source.destroy()
+        reject(err)
+      }
+
+      const onSourceError = (err: Error): void => {
+        cleanup()
+        source.destroy()
+        reject(err)
+      }
+
+      archive.on('entry', onEntry)
+      archive.on('error', onError)
+      source.on('error', onSourceError)
+
+      archive.append(source, { name })
+    })
+  }
+
+  /**
+   * Percorre o storage recursivamente entregando um arquivo por vez.
+   *
+   * Acumular a listagem inteira antes de comprimir fazia a memória crescer com
+   * o tamanho do bucket. Aqui só a página corrente (até 1000 entradas) e a pilha
+   * de diretórios pendentes ficam em memória — a pilha é limitada pela
+   * profundidade/largura da árvore de pastas, não pelo número de arquivos.
+   */
+  private static async *iterateFiles(
     storage: StorageDestination,
     path: string
-  ): Promise<BucketObject[]> {
-    const allFiles: BucketObject[] = []
+  ): AsyncGenerator<BucketObject> {
     const stack = [path]
 
     while (stack.length > 0) {
@@ -200,15 +253,13 @@ export class BucketArchiveService {
           if (obj.isDirectory) {
             stack.push(obj.key)
           } else {
-            allFiles.push(obj)
+            yield obj
           }
         }
 
         cursor = result.nextCursor ?? undefined
       } while (cursor)
     }
-
-    return allFiles
   }
 
   private static scheduleExpiration(jobId: string): void {

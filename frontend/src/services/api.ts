@@ -37,7 +37,7 @@ import type {
   StorageDestination,
   StorageProvider,
   StorageSpaceInfo,
-  SystemHeapSnapshot,
+  DiagnosticsListing,
   SystemStatus,
   UpdateBackupRetentionPolicyPayload,
   UpdateConnectionPayload,
@@ -522,8 +522,49 @@ export const systemApi = {
     })
   },
 
-  async heap (): Promise<ApiResponse<SystemHeapSnapshot>> {
-    return request<ApiResponse<SystemHeapSnapshot>>('/system/heap')
+  async diagnostics (): Promise<ApiResponse<DiagnosticsListing>> {
+    return request<ApiResponse<DiagnosticsListing>>('/system/diagnostics')
+  },
+
+  /**
+   * Baixa um artefato de diagnóstico.
+   *
+   * Usa fetch direto (e não o helper `request`) porque a resposta é binária e
+   * pode ter centenas de MB — um heap snapshot tem o tamanho do heap do processo.
+   */
+  async downloadDiagnostic (name: string): Promise<void> {
+    const url = `${API_BASE}/system/diagnostics/${encodeURIComponent(name)}/download`
+    const token = localStorage.getItem('token')
+
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    })
+
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}))
+      throw new ApiError(extractErrorMessage(data), response.status, data)
+    }
+
+    const blob = await response.blob()
+    const blobUrl = window.URL.createObjectURL(blob)
+
+    const link = document.createElement('a')
+    link.href = blobUrl
+    link.download = name
+    document.body.append(link)
+    link.click()
+
+    link.remove()
+    window.URL.revokeObjectURL(blobUrl)
+  },
+
+  async deleteDiagnostic (name: string): Promise<ApiResponse<null>> {
+    return request<ApiResponse<null>>(`/system/diagnostics/${encodeURIComponent(name)}`, {
+      method: 'DELETE',
+    })
   },
 
   async containerResources (): Promise<ApiResponse<DockerContainerResourceOverview>> {

@@ -25,6 +25,8 @@ services:
       TZ: ${TZ:-America/Sao_Paulo}
       BACKUP_STORAGE_PATH: /storage/backups
       SQLITE_DATABASE_PATH: /storage/database/app.sqlite3
+      NODE_MAX_OLD_SPACE_MB: ${NODE_MAX_OLD_SPACE_MB:-}
+      DIAGNOSTICS_PATH: /storage/diagnostics
       RETENTION_DAILY: ${RETENTION_DAILY:-7}
       RETENTION_WEEKLY: ${RETENTION_WEEKLY:-4}
       RETENTION_MONTHLY: ${RETENTION_MONTHLY:-12}
@@ -32,6 +34,7 @@ services:
     volumes:
       - backup_data:/storage/backups
       - database_data:/storage/database
+      - diagnostics_data:/storage/diagnostics
       - /var/run/docker.sock:/var/run/docker.sock
     healthcheck:
       test:
@@ -50,7 +53,8 @@ services:
         limits:
           memory: 512M
         reservations:
-          memory: 256M
+          # Alinhado ao RSS ocioso real medido após o MEMORY_ROADMAP.md (F0–F3).
+          memory: 128M
 
 networks:
   system-network:
@@ -59,3 +63,4 @@ networks:
 volumes:
   backup_data:
   database_data:
+  diagnostics_data:

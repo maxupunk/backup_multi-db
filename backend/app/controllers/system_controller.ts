@@ -4,6 +4,7 @@ import Backup from '#models/backup'
 import Connection from '#models/connection'
 import { AuditService } from '#services/audit_service'
 import { BackupRetentionPolicyService } from '#services/backup_retention_policy_service'
+import { DiagnosticsFileService } from '#services/diagnostics_file_service'
 import { DockerContainerMonitoringService } from '#services/docker_container_monitoring_service'
 import { getScheduler } from '#services/scheduler_service'
 import { ResourceMetricsHistoryService } from '#services/resource_metrics_history_service'
@@ -66,10 +67,91 @@ export default class SystemController {
     })
   }
 
-  async heap({ response }: HttpContext) {
+  /**
+   * Artefatos de diagnóstico gravados em DIAGNOSTICS_PATH.
+   *
+   * Restrito a administradores: um heap snapshot contém o heap inteiro do
+   * processo — senhas de banco descriptografadas, credenciais de storage,
+   * tokens de sessão e a chave de criptografia da aplicação. É material mais
+   * sensível que um arquivo de backup.
+   */
+  private ensureAdmin({ auth, response }: HttpContext): boolean {
+    if (auth.user?.isAdmin) {
+      return true
+    }
+
+    response.forbidden({
+      success: false,
+      message: 'Apenas administradores podem acessar artefatos de diagnóstico.',
+    })
+
+    return false
+  }
+
+  async diagnostics(ctx: HttpContext) {
+    if (!this.ensureAdmin(ctx)) {
+      return
+    }
+
+    const files = await DiagnosticsFileService.list()
+
+    return ctx.response.ok({
+      success: true,
+      data: {
+        directory: DiagnosticsFileService.getDirectory(),
+        directoryExists: DiagnosticsFileService.directoryExists(),
+        files,
+      },
+    })
+  }
+
+  async downloadDiagnostic(ctx: HttpContext) {
+    if (!this.ensureAdmin(ctx)) {
+      return
+    }
+
+    const { params, response } = ctx
+    const fileName = String(params.name ?? '')
+    const absolutePath = DiagnosticsFileService.resolvePath(fileName)
+
+    if (!absolutePath) {
+      return response.notFound({
+        success: false,
+        message: 'Artefato de diagnóstico não encontrado',
+      })
+    }
+
+    await AuditService.logDiagnosticsDownloaded(fileName, ctx)
+
+    response.header('Content-Type', 'application/octet-stream')
+    response.header('Content-Disposition', `attachment; filename="${fileName}"`)
+    response.header('Content-Length', String(await DiagnosticsFileService.getSize(absolutePath)))
+
+    return response.stream(DiagnosticsFileService.createReadStream(absolutePath))
+  }
+
+  async destroyDiagnostic(ctx: HttpContext) {
+    if (!this.ensureAdmin(ctx)) {
+      return
+    }
+
+    const { params, response } = ctx
+    const fileName = String(params.name ?? '')
+    const absolutePath = DiagnosticsFileService.resolvePath(fileName)
+
+    if (!absolutePath) {
+      return response.notFound({
+        success: false,
+        message: 'Artefato de diagnóstico não encontrado',
+      })
+    }
+
+    await DiagnosticsFileService.remove(absolutePath)
+    await AuditService.logDiagnosticsDeleted(fileName, ctx)
+
     return response.ok({
       success: true,
-      data: SystemMonitoringService.getHeapSnapshot(),
+      message: 'Artefato de diagnóstico removido',
     })
   }
 

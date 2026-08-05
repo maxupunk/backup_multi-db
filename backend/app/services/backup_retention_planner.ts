@@ -16,7 +16,11 @@ export interface BackupRetentionCandidate {
   createdAt: DateTime
   status: BackupStatus
   retentionType: RetentionType
-  metadata: BackupMetadata | null
+  /**
+   * Opcional: o planejamento nao depende dos metadados. Manter obrigatorio
+   * forcaria o carregamento da coluna JSON so para descarta-la.
+   */
+  metadata?: BackupMetadata | null
 }
 
 export interface BackupRetentionPlan {

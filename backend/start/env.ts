@@ -54,4 +54,11 @@ export default await Env.create(new URL('../../', import.meta.url), {
   RETENTION_MONTHLY: Env.schema.number.optional(),
   RETENTION_YEARLY: Env.schema.number.optional(),
   RETENTION_PRUNE_CRON: Env.schema.string.optional(),
+
+  /*
+  |--------------------------------------------------------------------------
+  | Retenção de logs de auditoria (em dias; 0 desliga a poda)
+  |--------------------------------------------------------------------------
+  */
+  AUDIT_RETENTION_DAYS: Env.schema.number.optional(),
 })

@@ -1,6 +1,7 @@
 import cron from 'node-cron'
 import db from '@adonisjs/lucid/services/db'
 import Connection, { type ScheduleFrequency } from '#models/connection'
+import { AuditRetentionService } from '#services/audit_retention_service'
 import { BackupService } from '#services/backup_service'
 import {
   BackupRetentionPolicyService,
@@ -278,6 +279,14 @@ export class SchedulerService {
       }
     } catch (error) {
       logger.error('Erro ao executar job de retenção:', error)
+    }
+
+    // Poda da auditoria vai junto: mesma janela diária, falha isolada para não
+    // derrubar o resultado do pruning de backups.
+    try {
+      await AuditRetentionService.prune()
+    } catch (error) {
+      logger.error({ err: error }, 'Erro ao podar logs de auditoria')
     }
   }
 

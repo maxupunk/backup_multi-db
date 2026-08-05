@@ -3,6 +3,7 @@ import logger from '@adonisjs/core/services/logger'
 import transmit from '@adonisjs/transmit/services/main'
 import type StorageDestination from '#models/storage_destination'
 import type { StorageDestinationConfig, StorageProvider } from '#models/storage_destination'
+import { ProcessOutputBuffer } from '#services/process_output_buffer'
 import type { CopyJob, CopyJobResult, CopyOptions } from './types.js'
 
 const COPY_CHANNEL_PREFIX = 'notifications/storage-copy'
@@ -17,6 +18,9 @@ const MAX_RETAINED_COPY_JOBS = 50
  * Jobs são mantidos em memória com TTL de 24h.
  */
 export class BucketCopyService {
+  /** Teto de captura do stderr do rclone — o resto e' truncado. */
+  private static readonly RCLONE_STDERR_CAPTURE_LIMIT_BYTES = 256 * 1024
+
   private static jobs = new Map<string, CopyJob>()
   private static jobProcesses = new Map<string, ReturnType<typeof spawn>>()
   private static cleanupSchedule = new Map<string, number>()
@@ -272,7 +276,11 @@ export class BucketCopyService {
   ): Promise<CopyJobResult> {
     return new Promise((resolve, reject) => {
       const startTime = Date.now()
-      let stderrBuffer = ''
+      // Uma copia longa emite progresso continuamente; acumular tudo numa string
+      // fazia o buffer crescer durante toda a duracao do job.
+      const stderrBuffer = new ProcessOutputBuffer(
+        BucketCopyService.RCLONE_STDERR_CAPTURE_LIMIT_BYTES
+      )
 
       const proc = spawn('rclone', args, {
         env: { ...process.env, ...env },
@@ -302,9 +310,14 @@ export class BucketCopyService {
           this.emitProgress(job)
         }
 
-        for (const line of redacted.split('\n').filter(Boolean)) {
-          logger.debug(`[BucketCopy:${job.id}] ${line.trim()}`)
+        // Em producao (LOG_LEVEL=info) o debug e' descartado, mas o split/trim
+        // por linha continuaria rodando a cada chunk do rclone.
+        if (logger.isLevelEnabled('debug')) {
+          for (const line of redacted.split('\n').filter(Boolean)) {
+            logger.debug(`[BucketCopy:${job.id}] ${line.trim()}`)
+          }
         }
+
         return text
       }
 
@@ -312,7 +325,7 @@ export class BucketCopyService {
 
       proc.stderr?.on('data', (data: Buffer) => {
         const text = parseRcloneOutput(data)
-        stderrBuffer += text
+        stderrBuffer.append(text)
       })
 
       proc.on('close', (code) => {
@@ -327,7 +340,7 @@ export class BucketCopyService {
             duration,
           })
         } else {
-          const redactedError = this.redactCredentials(stderrBuffer.trim())
+          const redactedError = this.redactCredentials(stderrBuffer.toString().trim())
           reject(new Error(`rclone finalizou com código ${code}: ${redactedError}`))
         }
       })

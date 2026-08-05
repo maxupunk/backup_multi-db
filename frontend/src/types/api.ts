@@ -360,11 +360,17 @@ export interface CpuResourceMetrics {
   model: string
 }
 
+export type MemoryMetricsSource = 'cgroup-v2' | 'cgroup-v1' | 'os'
+
 export interface MemoryResourceMetrics {
   totalBytes: number
   usedBytes: number
   freeBytes: number
   usagePercent: number
+  /** Origem do número: cgroup (dentro de container) ou os.* (fora). */
+  source: MemoryMetricsSource
+  /** `true` quando há limite de container efetivo aplicado. */
+  containerLimited: boolean
 }
 
 export interface SystemResourceMetrics {
@@ -413,17 +419,17 @@ export interface BackupRetentionRunResult {
   deletedBackups: DeletedBackupSummary[]
 }
 
-export interface SystemHeapSnapshot {
-  timestamp: string
-  rssBytes: number
-  heapTotalBytes: number
-  heapUsedBytes: number
-  heapUsagePercent: number
-  externalBytes: number
-  arrayBuffersBytes: number
-  activeHandles: number
-  activeRequests: number
-  uptimeSeconds: number
+export interface DiagnosticFile {
+  name: string
+  sizeBytes: number
+  createdAt: string
+  modifiedAt: string
+}
+
+export interface DiagnosticsListing {
+  directory: string
+  directoryExists: boolean
+  files: DiagnosticFile[]
 }
 
 export interface DockerContainerResourceMetrics {
@@ -559,11 +565,13 @@ export type AuditAction
     | 'backup.downloaded'
     | 'backup.imported'
     | 'settings.updated'
+    | 'diagnostics.downloaded'
+    | 'diagnostics.deleted'
 
 /**
  * Tipos de entidades auditáveis
  */
-export type AuditEntityType = 'connection' | 'backup' | 'settings'
+export type AuditEntityType = 'connection' | 'backup' | 'settings' | 'diagnostics'
 
 /**
  * Status de resultado da ação

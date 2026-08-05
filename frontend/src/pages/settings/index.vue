@@ -311,6 +311,98 @@
           </v-card-text>
         </v-card>
 
+        <!-- Diagnósticos (somente administradores) -->
+        <v-card v-if="isAdmin" class="mb-4">
+          <v-card-title class="d-flex align-center justify-space-between">
+            <div class="d-flex align-center">
+              <v-icon class="mr-2" color="error" icon="mdi-stethoscope" />
+              Artefatos de Diagnóstico
+            </div>
+
+            <v-btn
+              :loading="loadingDiagnostics"
+              size="small"
+              variant="text"
+              @click="loadDiagnostics"
+            >
+              <v-icon icon="mdi-refresh" />
+            </v-btn>
+          </v-card-title>
+
+          <v-card-text>
+            <v-alert class="mb-4" density="compact" type="warning" variant="tonal">
+              <strong>Trate estes arquivos como segredo.</strong>
+              Um heap snapshot é um despejo da memória do processo: contém senhas de banco
+              descriptografadas, credenciais de armazenamento, tokens de sessão e a chave de
+              criptografia da aplicação. Baixe apenas para diagnóstico e apague em seguida.
+              Todo download fica registrado na auditoria.
+            </v-alert>
+
+            <div class="text-caption text-medium-emphasis mb-3">
+              Diretório: <code>{{ diagnostics?.directory ?? '—' }}</code>
+            </div>
+
+            <v-progress-linear v-if="loadingDiagnostics" class="mb-4" color="error" indeterminate rounded />
+
+            <v-alert
+              v-else-if="!diagnostics?.directoryExists"
+              density="compact"
+              type="info"
+              variant="tonal"
+            >
+              O diretório de diagnósticos ainda não existe. Ele é criado quando o container sobe.
+            </v-alert>
+
+            <v-alert
+              v-else-if="!diagnostics?.files.length"
+              density="compact"
+              type="success"
+              variant="tonal"
+            >
+              Nenhum artefato registrado — é o estado esperado. Um heap snapshot só é gravado
+              automaticamente quando o processo se aproxima do limite de memória.
+            </v-alert>
+
+            <v-list v-else class="pa-0" density="comfortable">
+              <v-list-item
+                v-for="file in diagnostics.files"
+                :key="file.name"
+                class="px-0"
+                :subtitle="`${formatBytes(file.sizeBytes)} · ${formatDateTimePtBR(file.modifiedAt)}`"
+                :title="file.name"
+              >
+                <template #prepend>
+                  <v-icon class="mr-3" color="error" icon="mdi-file-alert-outline" />
+                </template>
+
+                <template #append>
+                  <v-btn
+                    class="mr-1"
+                    :loading="downloadingDiagnostic === file.name"
+                    size="small"
+                    variant="text"
+                    @click="downloadDiagnostic(file)"
+                  >
+                    <v-icon icon="mdi-download" />
+                    <v-tooltip activator="parent" location="top">Baixar</v-tooltip>
+                  </v-btn>
+
+                  <v-btn
+                    color="error"
+                    :loading="deletingDiagnostic === file.name"
+                    size="small"
+                    variant="text"
+                    @click="confirmDeleteDiagnostic(file)"
+                  >
+                    <v-icon icon="mdi-delete" />
+                    <v-tooltip activator="parent" location="top">Excluir</v-tooltip>
+                  </v-btn>
+                </template>
+              </v-list-item>
+            </v-list>
+          </v-card-text>
+        </v-card>
+
         <!-- About -->
         <v-card>
           <v-card-title class="d-flex align-center">
@@ -527,12 +619,43 @@
         </v-card-actions>
       </v-card>
     </v-dialog>
+
+    <v-dialog v-model="deleteDiagnosticDialog" max-width="460">
+      <v-card>
+        <v-card-title class="d-flex align-center">
+          <v-icon class="mr-2" color="error" icon="mdi-alert" />
+          Excluir Artefato de Diagnóstico
+        </v-card-title>
+
+        <v-card-text>
+          Excluir <strong>{{ diagnosticToDelete?.name }}</strong> permanentemente?
+          <div class="text-caption text-medium-emphasis mt-2">
+            Recomendado após concluir a análise — o arquivo contém dados sensíveis do processo.
+          </div>
+        </v-card-text>
+
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="deleteDiagnosticDialog = false">Cancelar</v-btn>
+          <v-btn
+            color="error"
+            :loading="deletingDiagnostic !== null"
+            variant="flat"
+            @click="deleteDiagnostic"
+          >
+            Excluir
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </div>
 </template>
 
 <script lang="ts" setup>
 import type {
   BackupRetentionRunResult,
+  DiagnosticFile,
+  DiagnosticsListing,
   RetentionType,
   StorageDestination,
   StorageDestinationType,
@@ -546,12 +669,18 @@ import { ApiError, healthCheck, storageDestinationsApi, systemApi } from '@/serv
 import { useDisplay } from 'vuetify'
 import { useDebouncedFn } from '@/composables/useDebouncedFn'
 import { useNotifier } from '@/composables/useNotifier'
+import { useAuthStore } from '@/stores/auth'
 import SystemInfoCard from '@/components/system/SystemInfoCard.vue'
 import { formatBytes, formatDateTimePtBR } from '@/utils/format'
 
 const theme = useTheme()
 const { mdAndUp } = useDisplay()
 const notify = useNotifier()
+const authStore = useAuthStore()
+
+// O backend também barra não administradores (403); aqui é só para não exibir
+// um card que o usuário não pode usar.
+const isAdmin = computed(() => authStore.user?.isAdmin === true)
 const DEFAULT_LOCAL_STORAGE_BASE_PATH = '/storage/backups'
 
 const apiStatus = ref<'online' | 'offline'>('offline')
@@ -569,6 +698,13 @@ const loadingDestinations = ref(false)
 const destinationDialog = ref(false)
 const savingDestination = ref(false)
 const deleteDestinationDialog = ref(false)
+
+const diagnostics = ref<DiagnosticsListing | null>(null)
+const loadingDiagnostics = ref(false)
+const downloadingDiagnostic = ref<string | null>(null)
+const deletingDiagnostic = ref<string | null>(null)
+const deleteDiagnosticDialog = ref(false)
+const diagnosticToDelete = ref<DiagnosticFile | null>(null)
 const deletingDestination = ref(false)
 const editingDestinationId = ref<number | null>(null)
 const destinationToDelete = ref<StorageDestination | null>(null)
@@ -1102,6 +1238,57 @@ async function saveDestination() {
   }
 }
 
+// ==================== Artefatos de diagnóstico ====================
+
+async function loadDiagnostics() {
+  if (!isAdmin.value) return
+
+  loadingDiagnostics.value = true
+  try {
+    const response = await systemApi.diagnostics()
+    diagnostics.value = response.data ?? null
+  } catch (error) {
+    notify(error instanceof ApiError ? error.message : 'Erro ao listar diagnósticos', 'error')
+  } finally {
+    loadingDiagnostics.value = false
+  }
+}
+
+async function downloadDiagnostic(file: DiagnosticFile) {
+  downloadingDiagnostic.value = file.name
+  try {
+    await systemApi.downloadDiagnostic(file.name)
+    notify(`Download de "${file.name}" iniciado`, 'success')
+  } catch (error) {
+    notify(error instanceof ApiError ? error.message : 'Erro ao baixar o artefato', 'error')
+  } finally {
+    downloadingDiagnostic.value = null
+  }
+}
+
+function confirmDeleteDiagnostic(file: DiagnosticFile) {
+  diagnosticToDelete.value = file
+  deleteDiagnosticDialog.value = true
+}
+
+async function deleteDiagnostic() {
+  const file = diagnosticToDelete.value
+  if (!file) return
+
+  deletingDiagnostic.value = file.name
+  try {
+    await systemApi.deleteDiagnostic(file.name)
+    notify(`"${file.name}" removido`, 'success')
+    deleteDiagnosticDialog.value = false
+    diagnosticToDelete.value = null
+    await loadDiagnostics()
+  } catch (error) {
+    notify(error instanceof ApiError ? error.message : 'Erro ao remover o artefato', 'error')
+  } finally {
+    deletingDiagnostic.value = null
+  }
+}
+
 function confirmDeleteDestination(destination: StorageDestination) {
   destinationToDelete.value = destination
   deleteDestinationDialog.value = true
@@ -1136,6 +1323,7 @@ onMounted(() => {
 
   loadDestinations()
   loadRetentionPolicy()
+  loadDiagnostics()
 })
 </script>
 

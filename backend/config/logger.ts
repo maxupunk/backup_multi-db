@@ -15,7 +15,9 @@ const loggerConfig = defineConfig({
       enabled: true,
       name: env.get('APP_NAME'),
       level: resolveLogLevel(env.get('NODE_ENV'), env.get('LOG_LEVEL')),
-      desination: app.inProduction ? destination(1) : undefined,
+      // `destination` substitui o alias `desination`, marcado como deprecado
+      // no @adonisjs/logger. Ambos funcionam; este é o nome atual.
+      destination: app.inProduction ? destination(1) : undefined,
       transport: app.inProduction
         ? undefined
         : {

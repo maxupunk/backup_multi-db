@@ -1,9 +1,10 @@
-import { spawn, type ChildProcess } from 'node:child_process'
+import { spawn } from 'node:child_process'
 import { createWriteStream, existsSync, mkdirSync, statSync } from 'node:fs'
 import { createHash, type Hash } from 'node:crypto'
-import { createGzip, type Gzip } from 'node:zlib'
+import { createGzip } from 'node:zlib'
 import { join } from 'node:path'
-import type { Readable } from 'node:stream'
+import { Transform } from 'node:stream'
+import { pipeline } from 'node:stream/promises'
 import { DateTime } from 'luxon'
 import logger from '@adonisjs/core/services/logger'
 import { getBackupStoragePath } from '#config/storage_paths'
@@ -15,6 +16,8 @@ import { StorageDestinationService } from '#services/storage_destination_service
 import { StorageSpaceService } from '#services/storage_space_service'
 import { NotificationService } from '#services/notification_service'
 import { BackupProgressEmitter } from '#services/backup_progress_emitter'
+import { waitForChildProcessExit } from '#services/child_process_exit'
+import { ProcessOutputBuffer } from '#services/process_output_buffer'
 import env from '#start/env'
 
 /**
@@ -67,6 +70,9 @@ export const ALL_DATABASES_MARKER = '*'
  * Suporta backup completo usando pg_dumpall e mysqldump --all-databases.
  */
 export class BackupService {
+  /** Teto de captura do stderr do dump — o resto é truncado. */
+  private static readonly PROCESS_STDERR_CAPTURE_LIMIT_BYTES = 256 * 1024
+
   private readonly storagePath: string
 
   constructor() {
@@ -620,136 +626,106 @@ export class BackupService {
   }
 
   /**
-   * Executa o processo de dump e gerencia os streams
+   * Executa o processo de dump e gerencia os streams.
+   *
+   * O encadeamento usa `pipeline()` para propagar backpressure de ponta a ponta:
+   * quando o disco ou o gzip ficam para trás, o stdout do dump é pausado. Escrever
+   * no gzip ignorando o retorno de `write()` (implementação anterior) deixava a
+   * fila interna crescer sem teto sempre que o dump produzisse mais rápido do que
+   * o disco absorvesse — o pico de heap acompanhava o tamanho do banco.
+   *
+   * Como efeito colateral, `pipeline()` destrói toda a cadeia em caso de erro,
+   * evitando descritores e buffers pendurados.
    */
-  private executeDumpProcess(
+  private async executeDumpProcess(
     config: DumpConfig,
     fullPath: string,
     relativePath: string,
     fileName: string,
     emitter?: BackupProgressEmitter
   ): Promise<BackupResult> {
-    return new Promise((resolve) => {
-      const dumpProcess = spawn(config.command, config.args, {
-        env: config.env,
-        stdio: ['ignore', 'pipe', 'pipe'],
-      })
-
-      const gzip = createGzip()
-      const outputStream = createWriteStream(fullPath)
-      const hash = createHash('sha256')
-      let stderrData = ''
-
-      // Configurar streams
-      this.setupStreams(
-        dumpProcess,
-        gzip,
-        outputStream,
-        hash,
-        (data) => {
-          stderrData += data
-        },
-        emitter
-      )
-
-      // Configurar handlers de eventos
-      this.setupEventHandlers(
-        dumpProcess,
-        gzip,
-        outputStream,
-        hash,
-        { fullPath, relativePath, fileName, stderrData: () => stderrData, command: config.command },
-        resolve
-      )
-    })
-  }
-
-  /**
-   * Configura os streams de dados (stdout -> gzip -> arquivo)
-   */
-  private setupStreams(
-    dumpProcess: ChildProcess,
-    gzip: Gzip,
-    outputStream: ReturnType<typeof createWriteStream>,
-    hash: Hash,
-    onStderr: (data: string) => void,
-    emitter?: BackupProgressEmitter
-  ): void {
-    const stdout = dumpProcess.stdout as Readable
-    const stderr = dumpProcess.stderr as Readable
-    let bytesWritten = 0
-
-    // Processar dados do stdout: calcular hash e comprimir
-    stdout.on('data', (data: Buffer) => {
-      hash.update(data)
-      gzip.write(data)
+    const dumpProcess = spawn(config.command, config.args, {
+      env: config.env,
+      stdio: ['ignore', 'pipe', 'pipe'],
     })
 
-    // Finalizar gzip quando stdout terminar
-    stdout.on('end', () => {
-      gzip.end()
+    const hash = createHash('sha256')
+    const stderrBuffer = new ProcessOutputBuffer(BackupService.PROCESS_STDERR_CAPTURE_LIMIT_BYTES)
+
+    dumpProcess.stderr?.on('data', (chunk: Buffer) => {
+      stderrBuffer.append(chunk)
     })
 
-    // Conectar gzip ao arquivo de saída, contando bytes comprimidos
-    gzip.on('data', (chunk: Buffer) => {
-      bytesWritten += chunk.length
-      emitter?.progress(bytesWritten)
-    })
-    gzip.pipe(outputStream)
+    // Registrado antes do pipeline para não perder o evento de saída.
+    const exitPromise = waitForChildProcessExit(dumpProcess)
 
-    // Capturar erros do stderr
-    stderr.on('data', (data: Buffer) => {
-      onStderr(data.toString())
-    })
-  }
+    let streamError: Error | null = null
 
-  /**
-   * Configura os handlers de eventos para resolver a Promise
-   */
-  private setupEventHandlers(
-    dumpProcess: ChildProcess,
-    gzip: Gzip,
-    outputStream: ReturnType<typeof createWriteStream>,
-    hash: Hash,
-    context: {
-      fullPath: string
-      relativePath: string
-      fileName: string
-      stderrData: () => string
-      command: string
-    },
-    resolve: (result: BackupResult) => void
-  ): void {
-    // Erro ao iniciar o processo
-    dumpProcess.on('error', (error) => {
-      resolve({
+    if (dumpProcess.stdout) {
+      try {
+        await pipeline(
+          dumpProcess.stdout,
+          // Checksum sobre os bytes NÃO comprimidos, como antes da refatoração.
+          this.createHashTransform(hash),
+          createGzip(),
+          // Progresso em bytes comprimidos, como antes da refatoração.
+          this.createProgressTransform(emitter),
+          createWriteStream(fullPath)
+        )
+      } catch (error) {
+        streamError = error instanceof Error ? error : new Error(String(error))
+      }
+    }
+
+    const exit = await exitPromise
+
+    // Binário ausente / não executável: o erro do spawn explica melhor que o stream.
+    if (exit.error) {
+      return {
         success: false,
         error:
-          `Falha ao executar ${context.command}: ${error.message}. ` +
+          `Falha ao executar ${config.command}: ${exit.error.message}. ` +
           'Verifique se o binário está instalado e no PATH.',
-      })
-    })
-
-    // Arquivo finalizado - verificar resultado
-    outputStream.on('finish', () => {
-      if (dumpProcess.exitCode === 0) {
-        resolve(this.buildSuccessResult(context, hash))
-      } else if (dumpProcess.exitCode !== null) {
-        resolve({
-          success: false,
-          error: context.stderrData() || `Processo terminou com código ${dumpProcess.exitCode}`,
-          exitCode: dumpProcess.exitCode,
-        })
       }
-    })
+    }
 
-    // Erros nos streams
-    outputStream.on('error', (error) => {
-      resolve({ success: false, error: `Erro ao escrever arquivo: ${error.message}` })
-    })
+    if (streamError) {
+      return {
+        success: false,
+        error: `Erro ao gravar o arquivo de backup: ${streamError.message}`,
+        exitCode: exit.exitCode ?? undefined,
+      }
+    }
 
-    gzip.on('error', (error) => {
-      resolve({ success: false, error: `Erro na compressão: ${error.message}` })
+    if (exit.exitCode !== 0) {
+      return {
+        success: false,
+        error: stderrBuffer.toString() || `Processo terminou com código ${exit.exitCode}`,
+        exitCode: exit.exitCode ?? undefined,
+      }
+    }
+
+    return this.buildSuccessResult({ fullPath, relativePath, fileName }, hash)
+  }
+
+  private createHashTransform(hash: Hash): Transform {
+    return new Transform({
+      transform(chunk: Buffer, _encoding, callback) {
+        hash.update(chunk)
+        callback(null, chunk)
+      },
+    })
+  }
+
+  private createProgressTransform(emitter?: BackupProgressEmitter): Transform {
+    let bytesWritten = 0
+
+    return new Transform({
+      transform(chunk: Buffer, _encoding, callback) {
+        bytesWritten += chunk.length
+        emitter?.progress(bytesWritten)
+        callback(null, chunk)
+      },
     })
   }
 

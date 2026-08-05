@@ -1,3 +1,4 @@
+import type { MemoryMetricsSource } from '@/types/api'
 import { onMounted, onUnmounted, ref, type Ref } from 'vue'
 import { transmit } from '@/plugins/transmit'
 
@@ -15,6 +16,10 @@ export interface SystemResourcesEvent {
     usedBytes: number
     freeBytes: number
     usagePercent: number
+    /** Origem do número: cgroup (dentro de container) ou os.* (fora). */
+    source: MemoryMetricsSource
+    /** `true` quando há limite de container efetivo aplicado. */
+    containerLimited: boolean
   }
   timestamp: string
 }

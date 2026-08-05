@@ -26,11 +26,15 @@ test.group('Performance quick wins', () => {
   test('production logger avoids worker transport configuration', ({ assert }) => {
     const appLogger = loggerConfig.loggers.app
 
-    if (appLogger.desination) {
+    if (appLogger.destination) {
       assert.isUndefined(appLogger.transport)
       return
     }
 
     assert.isDefined(appLogger.transport)
+  })
+
+  test('logger nao usa mais o alias deprecado "desination"', ({ assert }) => {
+    assert.isUndefined((loggerConfig.loggers.app as any).desination)
   })
 })

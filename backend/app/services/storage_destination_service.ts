@@ -108,7 +108,13 @@ export class StorageDestinationService {
     return fallback ?? null
   }
 
-  static async resolveDestinationForBackup(backup: Backup): Promise<StorageDestination | null> {
+  /**
+   * Aceita qualquer objeto que carregue o id do destino — nao exige o modelo
+   * Lucid completo, para que chamadores possam trabalhar com projecoes enxutas.
+   */
+  static async resolveDestinationForBackup(
+    backup: Pick<Backup, 'storageDestinationId'>
+  ): Promise<StorageDestination | null> {
     if (!backup.storageDestinationId) return null
     return StorageDestination.find(backup.storageDestinationId)
   }

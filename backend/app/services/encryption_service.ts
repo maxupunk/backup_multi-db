@@ -15,8 +15,19 @@ export class EncryptionService {
   /**
    * Obtém a chave de criptografia do ambiente.
    * A chave deve ser um hex string de 64 caracteres (32 bytes).
+   *
+   * O Buffer derivado é memoizado: `Buffer.from(hex)` rodava a cada encrypt e a
+   * cada decrypt, e há caminhos que descriptografam centenas de vezes por
+   * request. Não há exposição nova — a chave já vive em `process.env` durante
+   * toda a vida do processo.
    */
+  private static cachedKey: Buffer | null = null
+
   private static getKey(): Buffer {
+    if (this.cachedKey) {
+      return this.cachedKey
+    }
+
     const keyHex = env.get('DB_ENCRYPTION_KEY')
 
     if (!keyHex || keyHex.length !== 64) {
@@ -26,7 +37,9 @@ export class EncryptionService {
       )
     }
 
-    return Buffer.from(keyHex, 'hex')
+    this.cachedKey = Buffer.from(keyHex, 'hex')
+
+    return this.cachedKey
   }
 
   /**

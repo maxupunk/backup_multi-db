@@ -67,6 +67,18 @@ export type StorageDestinationConfig =
       basePath?: string
     }
 
+/**
+ * Cache da configuração descriptografada, por instância de modelo.
+ *
+ * WeakMap (e não campo de instância) para não alterar a forma do objeto que o
+ * Lucid serializa, e para que a entrada seja coletada junto com o modelo —
+ * config em claro não sobrevive ao request.
+ */
+const decryptedConfigCache = new WeakMap<
+  StorageDestination,
+  { source: string; value: StorageDestinationConfig }
+>()
+
 export default class StorageDestination extends BaseModel {
   @column({ isPrimary: true })
   declare id: number
@@ -120,10 +132,34 @@ export default class StorageDestination extends BaseModel {
     }
   }
 
+  /**
+   * Descriptografa a configuração do destino, memoizando por instância.
+   *
+   * Sem cache, cada chamada custa uma derivação de chave, um AES-256-GCM e um
+   * `JSON.parse`. Isso não seria problema se fosse esporádico, mas caminhos como
+   * a listagem do explorer chamam este método DUAS VEZES POR OBJETO listado —
+   * mil arquivos viravam duas mil operações de cripto só para resolver prefixos.
+   *
+   * A chave do cache é o próprio ciphertext: qualquer alteração em
+   * `configEncrypted` (inclusive via `setConfig`) invalida a entrada sozinha.
+   *
+   * O cache vive num WeakMap por instância — some junto com o modelo no GC, sem
+   * reter config em claro num Map global de vida longa.
+   */
   getDecryptedConfig(): StorageDestinationConfig | null {
     if (!this.configEncrypted) return null
+
+    const cached = decryptedConfigCache.get(this)
+    if (cached && cached.source === this.configEncrypted) {
+      return cached.value
+    }
+
     const json = EncryptionService.decrypt(this.configEncrypted)
-    return JSON.parse(json)
+    const value = JSON.parse(json) as StorageDestinationConfig
+
+    decryptedConfigCache.set(this, { source: this.configEncrypted, value })
+
+    return value
   }
 
   setConfig(config: StorageDestinationConfig | null | undefined): void {
