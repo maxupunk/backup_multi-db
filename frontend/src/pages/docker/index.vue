@@ -241,8 +241,7 @@ async function loadResourceHistory(): Promise<void> {
 }
 
 onMounted(async () => {
-  await load()
-  await loadResourceHistory()
+  await Promise.all([load(), loadResourceHistory()])
 })
 </script>
 

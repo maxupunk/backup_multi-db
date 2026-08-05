@@ -112,6 +112,8 @@ export class DockerContainerMonitoringService {
   private readonly dockerHttpClient = new DockerEngineHttpClient()
   /** Nome e labels por container id — imutaveis enquanto o container existir. */
   private readonly inspectCache = new Map<string, DockerInspectContainerItem>()
+  private lastOverview: DockerContainerResourceOverview | null = null
+  private lastOverviewTimestamp = 0
 
   static instance(): DockerContainerMonitoringService {
     if (!this.instanceRef) {
@@ -121,28 +123,42 @@ export class DockerContainerMonitoringService {
     return this.instanceRef
   }
 
-  async getOverview(): Promise<DockerContainerResourceOverview> {
+  async getOverview(options: { maxAgeMs?: number } = {}): Promise<DockerContainerResourceOverview> {
+    const maxAgeMs = options.maxAgeMs ?? 15_000
+    const now = Date.now()
+
+    if (this.lastOverview && now - this.lastOverviewTimestamp < maxAgeMs) {
+      return this.lastOverview
+    }
+
     const socketAvailable = this.dockerHttpClient.isSocketAvailable()
     let socketError: string | null = null
+    let overview: DockerContainerResourceOverview | null = null
 
     if (socketAvailable) {
       try {
         const containers = await this.getContainersUsingEngineSocket()
-        return this.buildOverview(true, null, containers)
+        overview = this.buildOverview(true, null, containers)
       } catch (error) {
         socketError =
           error instanceof Error ? error.message : 'Falha ao consultar Docker via socket'
       }
     }
 
-    try {
-      const containers = await this.getContainersUsingCli()
-      return this.buildOverview(true, null, containers)
-    } catch (error) {
-      const cliError = error instanceof Error ? error.message : 'Falha ao consultar Docker via CLI'
-      const reason = socketError ? `${socketError}; ${cliError}` : cliError
-      return this.buildOverview(false, reason, [])
+    if (!overview) {
+      try {
+        const containers = await this.getContainersUsingCli()
+        overview = this.buildOverview(true, null, containers)
+      } catch (error) {
+        const cliError = error instanceof Error ? error.message : 'Falha ao consultar Docker via CLI'
+        const reason = socketError ? `${socketError}; ${cliError}` : cliError
+        overview = this.buildOverview(false, reason, [])
+      }
     }
+
+    this.lastOverview = overview
+    this.lastOverviewTimestamp = now
+    return overview
   }
 
   private buildOverview(

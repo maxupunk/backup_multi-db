@@ -131,7 +131,7 @@ export class ResourceMetricsPollingService {
 
     const [systemResult, dockerResult] = await Promise.allSettled([
       this.collectSystemSnapshot(),
-      this.dockerMonitoringService.getOverview(),
+      this.dockerMonitoringService.getOverview({ maxAgeMs: 0 }),
     ])
 
     if (systemResult.status === 'fulfilled') {

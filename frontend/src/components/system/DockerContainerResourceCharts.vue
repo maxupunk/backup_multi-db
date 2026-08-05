@@ -13,17 +13,17 @@
       </v-alert>
     </v-col>
 
-    <v-col v-else-if="!overview?.dockerAvailable" cols="12">
+    <v-col v-else-if="!overview" cols="12">
+      <v-skeleton-loader type="card@2" />
+    </v-col>
+
+    <v-col v-else-if="!overview.dockerAvailable" cols="12">
       <v-alert type="warning" variant="tonal">
         Docker indisponível para coleta de métricas.
-        <div v-if="overview?.unavailableReason" class="mt-1 text-caption">
+        <div v-if="overview.unavailableReason" class="mt-1 text-caption">
           {{ overview.unavailableReason }}
         </div>
       </v-alert>
-    </v-col>
-
-    <v-col v-else-if="loading && !overview" cols="12">
-      <v-skeleton-loader type="card@2" />
     </v-col>
 
     <v-col v-else-if="!groupedContainers.length" cols="12">
