@@ -32,7 +32,7 @@
         <div class="summary-metric">
           <v-progress-circular
             :color="resolveUsageColor(container.cpu.usagePercent)"
-            :model-value="container.cpu.usagePercent"
+            :model-value="Math.min(100, container.cpu.usagePercent)"
             :rotate="-90"
             :size="76"
             :width="8"
@@ -44,6 +44,9 @@
           <div class="summary-copy">
             <span class="text-caption text-medium-emphasis d-block">CPU</span>
             <strong>{{ container.cpu.usagePercent.toFixed(1) }}%</strong>
+            <span v-if="container.cpu.usagePercent > 100" class="text-caption text-medium-emphasis d-block">
+              ({{ (container.cpu.usagePercent / 100).toFixed(1) }} núcleos)
+            </span>
           </div>
         </div>
 
@@ -73,7 +76,7 @@
         <div v-if="expanded" class="mt-4">
           <div class="mb-4">
             <div class="d-flex align-center justify-space-between mb-2">
-              <span class="text-caption text-medium-emphasis">CPU</span>
+              <span class="text-caption text-medium-emphasis">CPU (1 núcleo = 100%)</span>
               <strong>{{ container.cpu.usagePercent.toFixed(1) }}%</strong>
             </div>
             <UsageLineChart

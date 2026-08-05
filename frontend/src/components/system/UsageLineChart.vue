@@ -3,7 +3,7 @@
     <!-- Y-axis labels: height matches only the SVG area, not the x-axis -->
     <div class="chart-y-axis" :style="{ height: `${height}px` }">
       <span
-        v-for="tick in Y_TICKS"
+        v-for="tick in yTicks"
         :key="tick.value"
         class="y-tick-label"
       >
@@ -35,12 +35,12 @@
 
           <!-- Horizontal grid lines aligned with Y-axis ticks -->
           <line
-            v-for="tick in Y_TICKS"
+            v-for="tick in yTicks"
             :key="tick.value"
             x1="0"
             x2="360"
-            :y1="percentToSvgY(tick.value)"
-            :y2="percentToSvgY(tick.value)"
+            :y1="valToSvgY(tick.value)"
+            :y2="valToSvgY(tick.value)"
             class="grid-line"
           />
 
@@ -98,19 +98,6 @@
 import { computed, ref } from 'vue'
 
 // Fixed SVG coordinate space: Y=0 → 100%, Y=100 → 0%
-const SVG_W = 360
-const SVG_H = 100
-
-const Y_TICKS = [
-  { value: 100, label: '100%' },
-  { value: 75, label: '75%' },
-  { value: 50, label: '50%' },
-  { value: 25, label: '25%' },
-  { value: 0, label: '0%' },
-] as const
-
-const X_TICK_COUNT = 5
-
 const props = withDefaults(defineProps<{
   values: number[]
   timestamps?: string[]
@@ -135,24 +122,43 @@ const hoveredPoint = ref<{
   rawLabel?: string
 } | null>(null)
 
-// Maps a percentage (0–100) to SVG Y coordinate
-function percentToSvgY(pct: number): number {
-  return SVG_H - pct
-}
+const SVG_W = 360
+const SVG_H = 100
 
-const sanitizedValues = computed(() =>
-  props.values.map((v) => Math.max(0, Math.min(100, Number(v) || 0)))
+const rawValuesList = computed(() =>
+  props.values.map((v) => Math.max(0, Number(v) || 0))
 )
 
+const maxY = computed(() => {
+  const maxInValues = Math.max(0, ...rawValuesList.value)
+  if (maxInValues <= 100) return 100
+  return Math.ceil(maxInValues / 50) * 50
+})
+
+const yTicks = computed(() => {
+  const top = maxY.value
+  return [
+    { value: top, label: `${top}%` },
+    { value: Math.round(top * 0.75), label: `${Math.round(top * 0.75)}%` },
+    { value: Math.round(top * 0.5), label: `${Math.round(top * 0.5)}%` },
+    { value: Math.round(top * 0.25), label: `${Math.round(top * 0.25)}%` },
+    { value: 0, label: '0%' },
+  ]
+})
+
+function valToSvgY(pct: number): number {
+  return SVG_H - (pct / maxY.value) * SVG_H
+}
+
 const points = computed(() => {
-  const values = sanitizedValues.value
+  const values = rawValuesList.value
   if (!values.length) return []
 
   const stepX = values.length > 1 ? SVG_W / (values.length - 1) : SVG_W
 
   return values.map((value, index) => ({
     x: Math.round(stepX * index * 100) / 100,
-    y: Math.round(percentToSvgY(value) * 100) / 100,
+    y: Math.round(valToSvgY(value) * 100) / 100,
   }))
 })
 
@@ -169,6 +175,8 @@ const areaPath = computed(() => {
   const poly = points.value.map((p) => `${p.x},${p.y}`).join(' ')
   return `M ${first.x},${SVG_H} L ${poly} L ${last.x},${SVG_H} Z`
 })
+
+const X_TICK_COUNT = 5
 
 const xTicks = computed(() => {
   const ts = props.timestamps
@@ -228,7 +236,7 @@ function handlePointerMove(event: MouseEvent): void {
   const ratioX = Math.max(0, Math.min(1, pointerX / svgRect.width))
   const index = Math.round(ratioX * (points.value.length - 1))
   const point = points.value[index]
-  const value = sanitizedValues.value[index]
+  const value = rawValuesList.value[index]
 
   if (!point || value === undefined) {
     hoveredPoint.value = null

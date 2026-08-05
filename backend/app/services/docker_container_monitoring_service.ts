@@ -275,7 +275,7 @@ export class DockerContainerMonitoringService {
       imageName: base.Image?.trim() || 'N/A',
       status: base.State?.trim() || base.Status?.trim() || 'unknown',
       cpu: {
-        usagePercent: this.parsePercent(stats.CPUPerc),
+        usagePercent: this.parseCpuPercent(stats.CPUPerc),
       },
       memory: {
         usageBytes: memUsage.first,
@@ -403,7 +403,7 @@ export class DockerContainerMonitoringService {
       return 0
     }
 
-    return this.toPercent((cpuDelta / systemDelta) * onlineCpus * 100)
+    return this.toCpuPercent((cpuDelta / systemDelta) * onlineCpus * 100)
   }
 
   private parseNetworkFromSocket(stats: DockerContainerStatsItem): {
@@ -498,7 +498,7 @@ export class DockerContainerMonitoringService {
           imageName: entry.Image?.trim() || 'N/A',
           status: entry.State?.trim() || entry.Status?.trim() || 'unknown',
           cpu: {
-            usagePercent: this.parsePercent(stats?.CPUPerc),
+            usagePercent: this.parseCpuPercent(stats?.CPUPerc),
           },
           memory: {
             usageBytes: memUsage.first,
@@ -661,6 +661,19 @@ export class DockerContainerMonitoringService {
     return this.toPercent(numeric)
   }
 
+  private parseCpuPercent(value: string | undefined): number {
+    if (!value) {
+      return 0
+    }
+
+    const numeric = Number(value.replace('%', '').replace(',', '.').trim())
+    if (!Number.isFinite(numeric)) {
+      return 0
+    }
+
+    return this.toCpuPercent(numeric)
+  }
+
   private parseInteger(value: string | undefined): number | null {
     if (!value) {
       return null
@@ -676,6 +689,10 @@ export class DockerContainerMonitoringService {
 
   private toPercent(value: number): number {
     return Math.min(100, Math.max(0, Math.round(value * 100) / 100))
+  }
+
+  private toCpuPercent(value: number): number {
+    return Math.max(0, Math.round(value * 100) / 100)
   }
 
   private runDockerCommand(args: string[], timeoutMs = 4000): Promise<CommandResult> {
