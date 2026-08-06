@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto'
+import { existsSync } from 'node:fs'
+import { truncate } from 'node:fs/promises'
 import type { IncomingMessage } from 'node:http'
 import { DockerEngineHttpClient } from '#services/docker_engine_http_client'
 import type {
@@ -178,6 +180,39 @@ export class DockerManagerService {
 
       stream.on('error', reject)
     })
+  }
+
+  async clearContainerLogs(id: string): Promise<DockerActionResult> {
+    const raw = await this.client.getJson<RawDockerInspectContainer>(
+      `/containers/${encodeURIComponent(id)}/json`
+    )
+
+    const logPath = raw.LogPath
+    if (!logPath) {
+      throw new Error(
+        'O container não possui um arquivo de log local (driver de log diferente de json-file/local).'
+      )
+    }
+
+    try {
+      await truncate(logPath, 0)
+      return { success: true, message: 'Logs do container limpos com sucesso.' }
+    } catch (error: unknown) {
+      const err = error as { code?: string; message?: string }
+      if (err.code === 'ENOENT') {
+        // Se o diretório base de containers do Docker existe, mas o arquivo especifico .log ainda não foi criado pelo daemon (0 logs escritos), considera como limpo com sucesso
+        if (existsSync('/var/lib/docker/containers')) {
+          return { success: true, message: 'Logs do container limpos com sucesso.' }
+        }
+        throw new Error(
+          `Arquivo de log não encontrado em ${logPath}. Verifique se o volume '/var/lib/docker/containers:/var/lib/docker/containers:rw' está montado no docker-compose.`
+        )
+      }
+      if (err.code === 'EACCES' || err.code === 'EPERM') {
+        throw new Error(`Sem permissão para truncar o arquivo de log em ${logPath}.`)
+      }
+      throw new Error(`Falha ao limpar logs: ${err.message ?? 'Erro desconhecido'}`)
+    }
   }
 
   // ================================================================

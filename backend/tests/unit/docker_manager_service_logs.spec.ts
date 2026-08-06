@@ -60,4 +60,19 @@ test.group('DockerManagerService | logs', () => {
       },
     ])
   })
+
+  test('lança erro ao tentar limpar logs de container sem LogPath', async ({ assert }) => {
+    const fakeClient = {
+      getJson: async () => {
+        return { Id: 'abc123', LogPath: '' }
+      },
+    } as unknown as DockerEngineHttpClient
+
+    const service = new DockerManagerService(fakeClient)
+
+    await assert.rejects(
+      () => service.clearContainerLogs('abc123'),
+      'O container não possui um arquivo de log local (driver de log diferente de json-file/local).'
+    )
+  })
 })

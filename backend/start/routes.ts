@@ -173,6 +173,9 @@ router
             router.get('containers/:id', [DockerManagerController, 'inspectContainer'])
             router.get('containers/:id/logs', [DockerManagerController, 'containerLogs'])
             router
+              .delete('containers/:id/logs', [DockerManagerController, 'clearContainerLogs'])
+              .use(middleware.rateLimit({ limiter: 'strict' }))
+            router
               .post('containers/:id/start', [DockerManagerController, 'startContainer'])
               .use(middleware.rateLimit({ limiter: 'strict' }))
             router

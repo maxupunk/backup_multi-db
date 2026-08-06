@@ -148,6 +148,71 @@ export const dockerContainersApi = {
     return fetchContainerLogs(id, params)
   },
 
+  clearLogs(id: string): Promise<DockerActionResult> {
+    return apiFetch<DockerActionResult>(`${BASE}/containers/${encodeURIComponent(id)}/logs`, {
+      method: 'DELETE',
+    })
+  },
+
+  async clearGroupLogs(ids: string[]): Promise<DockerActionResult[]> {
+    const results = await Promise.allSettled(ids.map((id) => this.clearLogs(id)))
+    const errors: string[] = []
+    const successes: DockerActionResult[] = []
+
+    for (const res of results) {
+      if (res.status === 'fulfilled') {
+        successes.push(res.value)
+      } else {
+        const msg = res.reason instanceof Error ? res.reason.message : String(res.reason)
+        errors.push(msg)
+      }
+    }
+
+    if (errors.length > 0) {
+      if (successes.length === 0) {
+        throw new Error(errors[0])
+      }
+      throw new Error(`Logs de alguns containers limpos. Erro: ${errors[0]}`)
+    }
+
+    return successes
+  },
+
+  async downloadGroupLogs(
+    projectName: string,
+    containers: Array<{ id: string; name: string }>
+  ): Promise<void> {
+    const results = await Promise.all(
+      containers.map(async (c) => {
+        try {
+          const logs = await fetchContainerLogs(c.id, { tail: 'all', timestamps: true })
+          return { ...c, logs }
+        } catch {
+          return { ...c, logs: [] as DockerLogEntry[] }
+        }
+      })
+    )
+
+    let fullContent = `=== LOGS DO GRUPO: ${projectName === '_standalone' ? 'Standalone' : projectName} ===\n`
+    fullContent += `Gerado em: ${new Date().toLocaleString('pt-BR')}\n`
+    fullContent += `Total de containers: ${containers.length}\n\n`
+
+    for (const item of results) {
+      fullContent += `========================================\n`
+      fullContent += `CONTAINER: ${item.name} (${item.id.slice(0, 12)})\n`
+      fullContent += `========================================\n`
+      const serialized = serializeDockerLogs(item.logs)
+      fullContent += serialized || '(nenhum log registrado)\n'
+      fullContent += `\n\n`
+    }
+
+    const safeName = (projectName || 'grupo').replace(/[^a-zA-Z0-9_-]/g, '_')
+    const stamp = new Date().toISOString().replace(/[.:]/g, '-')
+    const filename = `grupo-${safeName}-logs-${stamp}.log`
+
+    downloadBlob(new Blob([fullContent], { type: 'text/plain;charset=utf-8' }), filename)
+  },
+
   async downloadAllLogs(id: string, filename = buildDockerLogsFilename(id)): Promise<void> {
     const entries = await fetchContainerLogs(id, {
       tail: 'all',

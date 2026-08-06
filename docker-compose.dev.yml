@@ -63,6 +63,7 @@ services:
       - ./backend/storage/backups:/storage/backups
       - ./backend/storage/database:/storage/database
       - /var/run/docker.sock:/var/run/docker.sock
+      - /var/lib/docker/containers:/var/lib/docker/containers:rw
     healthcheck:
       test:
         [

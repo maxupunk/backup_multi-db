@@ -209,6 +209,7 @@ export interface RawDockerInspectContainer {
   Name?: string
   Created?: string
   Image?: string
+  LogPath?: string
   Config?: {
     Hostname?: string
     Env?: string[]

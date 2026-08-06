@@ -133,6 +133,15 @@ export default class DockerManagerController {
   }
 
   /**
+   * DELETE /api/docker/containers/:id/logs
+   * Limpa os logs do container.
+   */
+  async clearContainerLogs({ params, response }: HttpContext) {
+    const result = await this.service.clearContainerLogs(params.id as string)
+    return response.ok({ success: true, data: result })
+  }
+
+  /**
    * DELETE /api/docker/containers/:id
    * Remove um container. Query: force=true
    */

@@ -41,6 +41,17 @@
       </v-btn>
 
       <v-btn
+        color="error"
+        density="compact"
+        :loading="clearing"
+        prepend-icon="mdi-delete-sweep"
+        variant="tonal"
+        @click="clearConfirmDialog = true"
+      >
+        Limpar logs
+      </v-btn>
+
+      <v-btn
         density="compact"
         :loading="loading"
         prepend-icon="mdi-refresh"
@@ -124,6 +135,16 @@
         Nenhum log disponível.
       </div>
     </div>
+
+    <DockerActionConfirmDialog
+      v-model="clearConfirmDialog"
+      confirm-color="error"
+      confirm-label="Limpar todos os logs"
+      :loading="clearing"
+      message="Deseja realmente limpar todos os logs deste container? Esta ação não pode ser desfeita."
+      @cancel="clearConfirmDialog = false"
+      @confirm="executeClearLogs"
+    />
   </div>
 </template>
 
@@ -131,6 +152,8 @@
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import type { DockerLogEntry, DockerLogsParams } from '@/types/api'
 import { dockerContainersApi } from '@/services/dockerService'
+import { useNotifier } from '@/composables/useNotifier'
+import DockerActionConfirmDialog from '@/components/docker/DockerActionConfirmDialog.vue'
 
 const TAIL_OPTIONS = [
   { title: '50 linhas', value: 50 },
@@ -144,6 +167,9 @@ const props = defineProps<{ containerId: string }>()
 const entries = ref<DockerLogEntry[]>([])
 const loading = ref(false)
 const downloading = ref(false)
+const clearing = ref(false)
+const clearConfirmDialog = ref(false)
+const notify = useNotifier()
 const tailOption = ref<number | 'all'>(200)
 const showTimestamps = ref(false)
 const filterStderr = ref(false)
@@ -236,6 +262,24 @@ async function downloadAllLogs() {
     requestError.value = getErrorMessage(error)
   } finally {
     downloading.value = false
+  }
+}
+
+async function executeClearLogs() {
+  clearing.value = true
+  requestError.value = null
+
+  try {
+    const result = await dockerContainersApi.clearLogs(props.containerId)
+    notify(result.message || 'Logs limpos com sucesso.', 'success')
+    await load()
+  } catch (error) {
+    const msg = getErrorMessage(error)
+    requestError.value = msg
+    notify(msg, 'error')
+  } finally {
+    clearConfirmDialog.value = false
+    clearing.value = false
   }
 }
 

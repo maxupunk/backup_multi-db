@@ -36,6 +36,7 @@ services:
       - database_data:/storage/database
       - diagnostics_data:/storage/diagnostics
       - /var/run/docker.sock:/var/run/docker.sock
+      - /var/lib/docker/containers:/var/lib/docker/containers:rw
     healthcheck:
       test:
         [

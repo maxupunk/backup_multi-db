@@ -29,6 +29,28 @@
             <v-icon icon="mdi-restart" start />
             Reiniciar todos
           </v-btn>
+          <v-btn
+            color="primary"
+            density="compact"
+            :disabled="loading"
+            size="small"
+            variant="tonal"
+            @click="emit('downloadGroupLogs', group)"
+          >
+            <v-icon icon="mdi-download" start />
+            Baixar logs
+          </v-btn>
+          <v-btn
+            color="error"
+            density="compact"
+            :disabled="loading"
+            size="small"
+            variant="tonal"
+            @click="emit('clearGroupLogs', group)"
+          >
+            <v-icon icon="mdi-delete-sweep" start />
+            Limpar logs
+          </v-btn>
         </div>
       </v-expansion-panel-title>
 
@@ -73,6 +95,8 @@ const emit = defineEmits<{
   (e: 'restart', id: string): void
   (e: 'stopAll', ids: string[]): void
   (e: 'restartAll', ids: string[]): void
+  (e: 'clearGroupLogs', group: DockerContainerGroup): void
+  (e: 'downloadGroupLogs', group: DockerContainerGroup): void
 }>()
 
 const open = ref([0])

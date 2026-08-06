@@ -39,6 +39,8 @@
         :group="group"
         :loading="actionLoading"
         :resources-by-id="resourcesByContainerId"
+        @clear-group-logs="handleClearGroupLogs"
+        @download-group-logs="handleDownloadGroupLogs"
         @restart="handleAction('restart', $event)"
         @restart-all="handleAll('restart', $event)"
         @start="handleAction('start', $event)"
@@ -66,6 +68,7 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import type { DockerContainerGroup, DockerContainerResourceMetrics } from '@/types/api'
 import { dockerContainersApi } from '@/services/dockerService'
 import { useDockerContainerResources } from '@/composables/useDockerContainerResources'
+import { useNotifier } from '@/composables/useNotifier'
 import ContainerProjectGroup from '@/components/docker/ContainerProjectGroup.vue'
 import DockerUnavailableBanner from '@/components/docker/DockerUnavailableBanner.vue'
 import DockerActionConfirmDialog from '@/components/docker/DockerActionConfirmDialog.vue'
@@ -73,6 +76,7 @@ import DockerActionConfirmDialog from '@/components/docker/DockerActionConfirmDi
 type StateFilter = 'all' | 'running' | 'stopped'
 type ActionType = 'start' | 'stop' | 'restart'
 
+const notify = useNotifier()
 const groups = ref<DockerContainerGroup[]>([])
 const loading = ref(false)
 const actionLoading = ref(false)
@@ -149,6 +153,31 @@ function handleAll(action: 'stop' | 'restart', ids: string[]) {
   confirmMessage.value = `Deseja ${labels[action]} todos os ${ids.length} containers deste projeto?`
   pendingAction = () => Promise.all(ids.map((id) => dockerContainersApi[action](id))).then(() => load())
   confirmDialog.value = true
+}
+
+function handleClearGroupLogs(group: DockerContainerGroup) {
+  const name = group.projectName === '_standalone' ? 'Standalone' : group.projectName
+  const ids = group.containers.map((c) => c.id)
+  confirmMessage.value = `Deseja realmente limpar todos os logs dos ${ids.length} containers do grupo "${name}"? Esta ação não pode ser desfeita.`
+  pendingAction = async () => {
+    await dockerContainersApi.clearGroupLogs(ids)
+    notify(`Logs do grupo "${name}" limpos com sucesso.`, 'success')
+  }
+  confirmDialog.value = true
+}
+
+async function handleDownloadGroupLogs(group: DockerContainerGroup) {
+  const name = group.projectName === '_standalone' ? 'Standalone' : group.projectName
+  const containers = group.containers.map((c) => ({
+    id: c.id,
+    name: c.names[0] || c.id.slice(0, 12),
+  }))
+  notify(`Iniciando o download dos logs do grupo "${name}"...`, 'info')
+  try {
+    await dockerContainersApi.downloadGroupLogs(group.projectName, containers)
+  } catch (error) {
+    notify(error instanceof Error ? error.message : 'Erro ao baixar logs do grupo.', 'error')
+  }
 }
 
 async function executeConfirmed() {
