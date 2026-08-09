@@ -1,6 +1,14 @@
 pub mod _entities;
 pub mod access_token;
 pub mod audit_log;
+pub mod audit_logs;
+pub mod auth_access_tokens;
+pub mod backups;
+pub mod connection_databases;
+pub mod connections;
 pub mod encryption;
 pub mod password;
+pub mod resource_metric_history;
+pub mod storage_destinations;
+pub mod system_settings;
 pub mod users;

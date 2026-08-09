@@ -56,6 +56,14 @@ name = "back_roco-cli"
 path = "src/bin/main.rs"
 required-features = []
 [[bin]]
+name = "migrate_data"
+path = "src/bin/migrate_data.rs"
+required-features = []
+[[bin]]
+name = "schema_diff"
+path = "src/bin/schema_diff.rs"
+required-features = []
+[[bin]]
 name = "tool"
 path = "src/bin/tool.rs"
 required-features = []

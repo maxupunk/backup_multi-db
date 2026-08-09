@@ -18,3 +18,5 @@ target/
 
 *.sqlite
 *.sqlite-*
+# Banco descartavel dos testes do migrador de dados.
+.contract-tmp/

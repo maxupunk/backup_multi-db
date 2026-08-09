@@ -546,7 +546,7 @@ começar, e aí a suíte garante que o back-roco não implemente a correção pe
   - teste garante que descrições e ícones são **únicos**: dois iguais seriam indistinguíveis na tela de auditoria, e o erro só apareceria durante um incidente;
   - `failure` mapeia para a cor **`error`** — copiar o status como cor é o engano natural aqui.
 - [x] 3.9 — ✅ **`ts-rs` corrigido** — `export_to` passou a `../../frontend/src/bindings/`; os bindings agora caem no `frontend/` real da raiz e o diretório fantasma `back-roco/frontend/` foi removido.
-- [ ] 3.10 — **Bloqueada pela Fase 4.** As fixtures teriam de descrever entidades que ainda não existem: a decisão D4 é schema novo, e `src/models/_entities/` hoje só tem o `users` do scaffold do Loco (com `pid`/`api_key`/argon2), que não é o schema do Adonis. Escrever o YAML agora seria escrever contra um schema imaginário.
+- [x] 3.10 — ✅ **Desbloqueada e feita na Fase 4.** `src/fixtures/{users,storage_destinations,connections,connection_databases}.yaml` espelham os seeds da tarefa 1.5 — admin, usuário comum, usuário pendente, storage local e conexão MySQL apontando para o `docker-compose.test.yml`. Carregam com `cargo loco db seed`. O `seed` do `App` ignora arquivo ausente: os fixtures crescem por fase, e exigir todos desde já tornaria o comando inútil até o fim do porte.
 - [x] 3.11 — ✅ **`back-roco/Dockerfile`** (multi-stage com `cargo-chef`, usuário sem privilégios, clientes MySQL/PostgreSQL na imagem) e serviço `back-roco` no `docker-compose.dev.yml`, sob o profile `roco`.
   - sobe **lado a lado** com o Adonis, em porta e banco próprios — é o que viabiliza o tráfego-sombra da 12.13 trocando só `CONTRACT_BASE_URL`;
   - **não** compartilha o SQLite do backend: D4 é schema novo, e apontar os dois para o mesmo arquivo corromperia produção;
@@ -603,8 +603,9 @@ da Fase 4.
 Estado atual da suíte: **117 testes, 0 falhas, 2 ignorados** (os de dados de produção).
 `cargo fmt --check` e `cargo clippy --all-targets -- -D warnings` limpos.
 
-Restam **3.4 (camada de banco)**, **3.5 (limitadores por rota)**, **3.8 (persistência)** e
-**3.10 (fixtures)** — todos bloqueados pelas entidades Sea-ORM da Fase 4.
+Restam **3.4 (camada de banco)**, **3.5 (limitadores por rota)** e **3.8 (persistência)**.
+Deixaram de estar bloqueados com a Fase 4, mas pertencem à Fase 5 — cada um entra junto com as
+rotas que o consomem. A **3.10** foi feita junto com a Fase 4.
 
 ---
 
@@ -612,25 +613,92 @@ Restam **3.4 (camada de banco)**, **3.5 (limitadores por rota)**, **3.8 (persist
 
 **Duração estimada:** 1 semana · **Depende de:** Fase 3
 
-- [ ] 4.1 — Escrever as migrations Sea-ORM para as 8 tabelas + `auth_access_tokens`, no formato `mYYYYMMDD_HHMMSS_<assunto>.rs`, registradas em `migration/src/lib.rs`.
-- [ ] 4.2 — Reescrever a migration de `users` do scaffold para bater com o schema do Adonis (`full_name`, `is_active`, `is_admin`) — ou criar migration de ajuste, se já aplicada.
-- [ ] 4.3 — Replicar **todos** os índices nomeados (são ~25 e afetam performance real).
-- [ ] 4.4 — Replicar as constraints: unique de `connection_databases`, FKs com `CASCADE`/`SET NULL`.
-- [ ] 4.5 — Conferir os enums: `connections.type/status/schedule_frequency`, `backups.status/retention_type/trigger`, `audit_logs.status`. Lembrar que `audit_logs.action/entity_type` são **TEXT**, não enum (migration 10).
-- [ ] 4.6 — `cargo loco db migrate` + `cargo loco db entities` — gerar `src/models/_entities/`.
-- [ ] 4.7 — Lógica de domínio em `src/models/*.rs`: hooks de criptografia (`ActiveModelBehavior`), `getDecryptedPassword`, `getSafeConfig`, `markAsStarted/Completed/Failed`, `promoteRetention`, `getDefaultPort`, `getDumpCommand`, `getScheduleIntervalMs`.
-- [ ] 4.8 — **Validação de schema cruzado**: script que compara `.schema` do SQLite gerado pelo Rust com `docs/schema-baseline.sql` (Fase 0.5). Diferenças precisam ser justificadas.
-- [ ] 4.9 — **Script de migração de dados** (D4 = schema novo). Entregável próprio, não um detalhe:
-  - lê o SQLite do Adonis e popula o schema novo, tabela a tabela, na ordem das FKs;
-  - **preserva o hash dos `auth_access_tokens`** — sem isso o cutover derruba todas as sessões e anula o ganho de D1/D2;
-  - preserva os `password_encrypted` / `config_encrypted` como estão (a cripto é byte-compatível por D3, não precisa recriptografar);
-  - lida com as 25.458 linhas de `resource_metric_history` em lote, sem carregar tudo em memória;
-  - teste de round-trip sobre uma **cópia** do banco real, comparando contagens e checksums por tabela;
-  - é idempotente e re-executável (o shadow traffic da 12.13 vai exigir rodar mais de uma vez).
-- [ ] 4.10 — Testes de model em `back-roco/tests/models/` para os 8 models (`insta` + `#[serial]`).
+- [x] 4.1 — ✅ **4 migrations** cobrindo as 9 tabelas, agrupadas por dependência de FK e registradas em `migration/src/lib.rs`.
+- [x] 4.2 — ✅ A migration `users` do scaffold foi **substituída**. Ver "Remoção da superfície de auth do scaffold" abaixo.
+- [x] 4.3 — ✅ **32 índices nomeados**, todos conferidos pelo comparador da 4.8.
+- [x] 4.4 — ✅ Constraints replicadas: unique de `connection_databases`, e as FKs com `CASCADE`/`SET NULL` — cada escolha comentada na migration e coberta por teste.
+- [x] 4.5 — ✅ Enums como `text` + `CHECK`, igual ao Knex. `audit_logs.action`/`entity_type` ficaram **TEXT sem CHECK**: a migration `10_relax_audit_logs_enums` do Adonis afrouxou os dois de propósito, porque um valor fora da lista fazia o `INSERT` da auditoria derrubar a operação que ela deveria apenas registrar.
+- [x] 4.6 — ✅ `db migrate` + `db entities` — 9 entidades geradas em `src/models/_entities/`.
+- [x] 4.7 — ✅ Lógica de domínio em `src/models/`: `default_port`, `dump_command`, `mysql_ssl_args`, `schedule_interval_ms`, `decrypted_password`; `safe_config` e `provider_label`; `mark_as_started/completed/failed`, `promote`, `format_size`, `format_duration`.
+- [x] 4.8 — ✅ **`cargo run --bin schema_diff`** — compara **estrutura normalizada**, não texto. Resultado: **nenhuma diferença estrutural**.
+- [x] 4.9 — ✅ **`cargo run --bin migrate_data`** — validado contra uma cópia do banco de produção.
+- [x] 4.10 — ✅ Testes de entidade em `tests/models/entities.rs` (`#[serial]`), mais os unitários de domínio em `src/models/`.
 
-**Pronto quando:** `cargo loco db migrate` roda limpo, o diff de schema da 4.8 está vazio (ou justificado),
-e todos os testes de model passam.
+### Remoção da superfície de auth do scaffold
+
+O scaffold do Loco trazia auth por **JWT** com magic link, reset de senha e verificação de
+e-mail, e uma tabela `users` com `pid`, `api_key` e `reset_token`. Nada disso existe nas 91 rotas
+do contrato, e a decisão **D1** é token opaco. Manter a tabela obrigaria a carregar os dois
+schemas ao mesmo tempo e o diff da 4.8 nunca fecharia.
+
+Removidos: `controllers/auth.rs`, `views/auth.rs`, `mailers/auth*`, `tasks/user_create.rs`,
+`tests/requests/auth.rs`, `tests/models/users.rs` e os snapshots correspondentes. **Está tudo no
+git** se algum trecho for útil depois.
+
+### 4.8 — o comparador compara estrutura, não texto
+
+O Sea-ORM emite `"id" integer NOT NULL PRIMARY KEY AUTOINCREMENT` onde o Knex emite
+`` `id` integer not null primary key autoincrement ``. Um `diff` de texto acusaria as 44 linhas
+como diferentes e não diria nada. O comparador normaliza os dois lados e confere tabelas,
+colunas, **afinidade** SQLite, nulabilidade, e índices — inclusive se são `UNIQUE`.
+
+Tabelas de controle de migration são ignoradas **com o motivo impresso na saída**: uma exceção
+que ninguém vê é uma exceção que ninguém revisa.
+
+**Uma diferença ficou, justificada.** O builder do Sea-ORM emite `datetime_text` (afinidade TEXT)
+onde o Knex emite `datetime` (NUMERIC). Declarar o tipo cru igualaria o schema — cheguei a fazer
+isso e o diff fechou zerado — mas aí o gerador de entidades deixa de reconhecer a coluna e a
+mapeia como `String` em vez de `DateTime`. Preferi segurança de tipo a fidelidade cosmética. Só
+seria um problema se alguma coluna guardasse número, e é exatamente por isso que o migrador
+converte os inteiros de `auth_access_tokens`.
+
+### 4.9 — o migrador, validado contra o banco real
+
+```
+users                      origem=1:1              destino=1:1              ok
+auth_access_tokens         origem=3:6              destino=3:6              ok
+storage_destinations       origem=1:1              destino=1:1              ok
+connections                origem=1:1              destino=1:1              ok
+connection_databases       origem=1:1              destino=1:1              ok
+backups                    origem=1:1              destino=1:1              ok
+audit_logs                 origem=2:3              destino=2:3              ok
+system_settings            origem=1:1              destino=1:1              ok
+resource_metric_history    origem=24608:302789136  destino=24608:302789136  ok
+```
+
+Verificado numa **cópia** do `backend/storage/database/app.sqlite3`:
+
+- **hash dos tokens byte-idêntico** — é o que D1 protege; perdê-lo desloga todo mundo no cutover;
+- **hash das senhas byte-idêntico** (D2) e **ciphertexts byte-idênticos** (D3) — copiados como
+  estão, sem decifrar; recriptografar colocaria os segredos em memória sem necessidade;
+- **24.608 linhas** de `resource_metric_history` em lotes de 500 — carregar tudo funcionaria hoje
+  e deixaria de funcionar quando a tabela dobrar;
+- **idempotente**: rodado duas vezes, checksums idênticos. O tráfego-sombra da 12.13 exige isso;
+- tudo numa **transação só**: um erro na 7ª tabela não pode deixar as 6 primeiras migradas.
+
+Conversão feita: `created_at`, `updated_at`, `last_used_at` e `expires_at` de
+`auth_access_tokens` guardam **epoch em milissegundos** (`1785928191780`). Viram ISO na cópia —
+sem isso o token não seria lido de volta e preservar o `hash` não serviria de nada. A conversão
+recusa valores fora da janela 2000–2100: um `0` viraria 1970, que num `expires_at` parece
+expiração válida e descartaria o token sem explicação.
+
+**Um bug que o teste com dados reais pegou:** a primeira versão lia as colunas do destino com a
+transação já aberta. O SQLite segura o lock de escrita, a consulta ao catálogo pede outra conexão
+do pool, e o programa trava esperando o lock que ele mesmo segura — aparece como "connection pool
+timed out", sem pista da causa. Corrigido levantando as colunas antes de abrir a transação.
+
+### Entrada standalone das migrations
+
+`migration/src/main.rs` existe para quebrar uma dependência circular real: `cargo loco db migrate`
+precisa que a aplicação compile, a aplicação precisa das entidades geradas, e as entidades só
+podem ser geradas de um banco já migrado. Com o binário próprio:
+
+```sh
+DATABASE_URL="sqlite://banco.sqlite?mode=rwc" cargo run -p migration -- up
+```
+
+**Pronto quando:** ~~`cargo loco db migrate` roda limpo, o diff de schema da 4.8 está vazio (ou
+justificado), e todos os testes de model passam.~~ ✅ **142 testes**, diff estrutural vazio.
 
 ---
 
@@ -1071,9 +1139,10 @@ Legenda: **T** = teste de contrato escrito (Fase 2) · **P** = portado no `back-
 Fase 0  ████████████████████  100%   decisões + baselines + ambiente
 Fase 1  ████████████████████  100%   harness de contrato
 Fase 2  ████████████████████  100%   91/91 rotas · 266 testes · 63 goldens ✅
-Fase 3  ██████████████░░░░░░   70%   fundação back-roco (7,5/11 — resto na Fase 4)
-Fase 4  ░░░░░░░░░░░░░░░░░░░░    0%   entidades Sea-ORM + migrador  ← próxima
-Fases 5–12                      0%
+Fase 3  ██████████████░░░░░░   70%   fundação back-roco (7,5/11)
+Fase 4  ████████████████████  100%   schema, entidades e migrador de dados ✅
+Fase 5  ░░░░░░░░░░░░░░░░░░░░    0%   auth, users, audit, system  ← próxima
+Fases 6–12                      0%
 ```
 
 Concluído até aqui: **Fase 0** (exceto 0.2, que depende do time), **Fase 1**, **Fase 2 inteira** e
@@ -1094,7 +1163,12 @@ A especificação executável do back-roco está pronta. **A Fase 2 rendeu sete 
 decisão errada no próprio roadmap a um endpoint que devolve HTML com status 200 — todos fixados
 por teste e listados na seção da Fase 2.
 
-No lado Rust, a Fase 3 fechou tudo que não depende de banco: **117 testes**, `fmt` e
-`clippy -D warnings` limpos. O que resta da Fase 3 (camada de banco do token, limitadores por
-rota, persistência da auditoria e fixtures) está bloqueado pelas entidades da Fase 4 — não é
-trabalho adiado por escolha, é dependência real.
+No lado Rust: **142 testes**, `fmt` e `clippy -D warnings` limpos. A **Fase 4 fechou** — schema
+com diff estrutural vazio contra o baseline de produção, 9 entidades geradas, e o migrador de
+dados validado contra uma cópia do banco real, preservando byte a byte os hashes de token
+(D1), de senha (D2) e os ciphertexts (D3).
+
+Da Fase 3 restam **3.4** (camada de banco do token), **3.5** (limitadores por rota) e **3.8**
+(persistência da auditoria) — agora desbloqueados, mas pertencem naturalmente à Fase 5, junto com
+as rotas que os consomem. **3.10 saiu do bloqueio e está feito**: os fixtures YAML espelham os
+seeds da tarefa 1.5 e carregam com `db seed`.

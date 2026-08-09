@@ -1,0 +1,15 @@
+# O destino local que o backend cria sozinho no boot
+# (`StorageDestinationService.ensureDefaultLocalDestination`).
+#
+# `config_encrypted` e' um ciphertext AES-256-GCM de `{"type":"local"}` sob a
+# chave de teste. Nao e' segredo: a chave de teste esta' no `config/test.yaml`.
+---
+- id: 1
+  name: Local
+  type: local
+  status: active
+  is_default: true
+  config_encrypted: "BwcHBwcHBwcHBwcHBwcHBw==:CoHc28RVl8IvZtnmAEVO/g==:s0qvj4jbn9kM2oewLYTdVft49w0sR4fizGHEFQJBWOfr5KjNTUylyk3+QjUvug=="
+  provider: local
+  created_at: "2026-08-09T12:00:00"
+  updated_at: "2026-08-09T12:00:00"

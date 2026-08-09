@@ -10,6 +10,7 @@ path = "src/lib.rs"
 
 [dependencies]
 loco-rs = { workspace = true }
+tokio = { version = "1.45", features = ["macros", "rt-multi-thread"] }
 
 
 [dependencies.sea-orm-migration]
@@ -19,4 +20,5 @@ features = [
   # View the list of supported features at https://www.sea-ql.org/SeaORM/docs/install-and-config/database-and-async-runtime.
   # e.g.
   "runtime-tokio-rustls", # `ASYNC_RUNTIME` feature
+  "sqlx-sqlite",          # driver do banco de controle
 ]
