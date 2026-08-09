@@ -79,6 +79,7 @@ impl Hooks for App {
 
         AppRoutes::with_default_routes()
             .add_route(controllers::auth::routes(&limiters))
+            .add_route(controllers::connections::routes(&limiters))
             .add_route(controllers::users::routes())
             .add_route(controllers::audit_logs::routes())
             .add_route(controllers::system::routes())

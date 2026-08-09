@@ -48,6 +48,19 @@ pub enum ErrorItem {
         field: String,
         rule: String,
     },
+    /// Valor fora de um `vine.enum()`.
+    ///
+    /// Carrega `meta.choices` com a lista aceita — e' o que a interface usa
+    /// para montar o select depois de um 422, e o golden
+    /// `connections/store-invalid-type` fixa a chave. A variante e' separada
+    /// da de validacao comum porque o `meta` **so'** aparece aqui; um campo
+    /// opcional na outra emitiria `"meta": null` nos demais erros.
+    Enum {
+        message: String,
+        field: String,
+        rule: String,
+        meta: EnumChoices,
+    },
     /// Rate limit estourado.
     RateLimited {
         message: String,
@@ -58,7 +71,29 @@ pub enum ErrorItem {
     Simple { message: String },
 }
 
+/// `meta` de um erro de enum.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EnumChoices {
+    pub choices: Vec<String>,
+}
+
 impl ErrorItem {
+    /// Erro de `vine.enum()`, com as opcoes aceitas.
+    ///
+    /// A mensagem e' a do VineJS: "The selected {field} is invalid".
+    pub fn enum_choice(field: impl Into<String>, choices: &[&str]) -> Self {
+        let field = field.into();
+
+        Self::Enum {
+            message: format!("The selected {field} is invalid"),
+            field,
+            rule: "enum".to_string(),
+            meta: EnumChoices {
+                choices: choices.iter().map(ToString::to_string).collect(),
+            },
+        }
+    }
+
     pub fn validation(
         field: impl Into<String>,
         rule: impl Into<String>,
@@ -222,7 +257,17 @@ impl ApiError {
                         .as_ref()
                         .map_or_else(|| default_message(field, &rule), ToString::to_string);
 
-                    items.push(ErrorItem::validation(field.to_string(), rule, message));
+                    // `enum` e' a unica regra que leva `meta`; ela vem do
+                    // parametro `choices` que `validation::rule_enum` anexa.
+                    match choices_of(error) {
+                        Some(choices) => items.push(ErrorItem::Enum {
+                            message,
+                            field: field.to_string(),
+                            rule,
+                            meta: EnumChoices { choices },
+                        }),
+                        None => items.push(ErrorItem::validation(field.to_string(), rule, message)),
+                    }
                 }
             }
         }
@@ -236,9 +281,21 @@ impl ApiError {
     }
 }
 
+/// Extrai `meta.choices` de um erro de enum.
+fn choices_of(error: &validator::ValidationError) -> Option<Vec<String>> {
+    if error.code != "enum" {
+        return None;
+    }
+
+    error
+        .params
+        .get("choices")
+        .and_then(|value| serde_json::from_value(value.clone()).ok())
+}
+
 fn field_of(item: &ErrorItem) -> &str {
     match item {
-        ErrorItem::Validation { field, .. } => field,
+        ErrorItem::Validation { field, .. } | ErrorItem::Enum { field, .. } => field,
         _ => "",
     }
 }
@@ -251,6 +308,7 @@ fn map_rule(code: &str) -> String {
         "range" => "range",
         "email" => "email",
         "url" => "url",
+        // `enum`, `positive` e `max` ja' tem o nome que o VineJS usa.
         _ => code,
     }
     .to_string()
@@ -481,6 +539,35 @@ mod tests {
     }
 
     #[test]
+    fn an_enum_error_carries_the_accepted_choices() {
+        // O golden `connections/store-invalid-type` tem exatamente este corpo.
+        assert_eq!(
+            body_of(ApiError::Validation(vec![ErrorItem::enum_choice(
+                "type",
+                &["mysql", "mariadb", "postgresql"]
+            )])),
+            serde_json::json!({
+                "errors": [{
+                    "message": "The selected type is invalid",
+                    "field": "type",
+                    "rule": "enum",
+                    "meta": { "choices": ["mysql", "mariadb", "postgresql"] }
+                }]
+            })
+        );
+    }
+
+    #[test]
+    fn only_the_enum_variant_carries_meta() {
+        // Um `meta` opcional na variante comum emitiria `"meta": null` em todo
+        // erro de validacao.
+        let plain = body_of(ApiError::Validation(vec![ErrorItem::validation(
+            "email", "required", "x",
+        )]));
+        assert!(plain["errors"][0].get("meta").is_none());
+    }
+
+    #[test]
     fn a_missing_row_uses_the_framework_family() {
         // `findOrFail` levanta antes de o handler existir; a mensagem e' a do
         // Lucid, nao uma escrita a mao.
@@ -533,6 +620,30 @@ mod tests {
         assert_eq!(
             items.iter().map(field_of).collect::<Vec<_>>(),
             vec!["email", "password"]
+        );
+    }
+
+    #[test]
+    fn translates_an_enum_error_with_its_choices() {
+        // A ponte entre `validation::rule_enum` (no model) e o corpo de 422.
+        let mut errors = validator::ValidationErrors::new();
+        errors.add(
+            "type",
+            crate::models::validation::rule_enum("type", &["mysql", "mariadb", "postgresql"]),
+        );
+
+        let ApiError::Validation(items) = ApiError::from_validation_errors(&errors) else {
+            panic!("esperava a variante de validacao")
+        };
+
+        assert_eq!(
+            serde_json::to_value(&items[0]).expect("serializa"),
+            serde_json::json!({
+                "message": "The selected type is invalid",
+                "field": "type",
+                "rule": "enum",
+                "meta": { "choices": ["mysql", "mariadb", "postgresql"] }
+            })
         );
     }
 

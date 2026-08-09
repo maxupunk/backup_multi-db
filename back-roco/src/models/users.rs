@@ -17,10 +17,11 @@ use sea_orm::{
     QuerySelect,
 };
 use serde::{Deserialize, Serialize};
-use validator::{Validate, ValidationError, ValidationErrors};
+use validator::{Validate, ValidationErrors};
 
 use crate::models::email;
 use crate::models::password::PasswordHasher;
+use crate::models::validation::{finish, required_email, required_text};
 use crate::views::pagination::PageRequest;
 
 pub use super::_entities::users::{ActiveModel, Column, Entity, Model};
@@ -69,115 +70,20 @@ pub struct LoginParams {
     pub password: Option<String>,
 }
 
-/// Monta um erro no vocabulario do VineJS.
-///
-/// O `code` vira o `rule` do corpo de 422 e a mensagem e' a que o VineJS
-/// geraria — as duas coisas sao contrato, nao detalhe interno.
-fn rule(code: &'static str, message: String) -> ValidationError {
-    let mut error = ValidationError::new(code);
-    error.message = Some(message.into());
-    error
-}
-
-/// Aplica as regras de um campo texto obrigatorio com limite de tamanho.
-fn check_required_text(
-    errors: &mut ValidationErrors,
-    field: &'static str,
-    value: Option<&String>,
-    min: usize,
-    max: usize,
-) -> bool {
-    let Some(value) = value else {
-        errors.add(
-            field,
-            rule("required", format!("The {field} field must be defined")),
-        );
-        return false;
-    };
-
-    // O VineJS conta caracteres, nao bytes: um `ç` nao pode valer por dois.
-    let length = value.chars().count();
-
-    if length < min {
-        errors.add(
-            field,
-            rule(
-                "minLength",
-                format!("The {field} field must have at least {min} characters"),
-            ),
-        );
-        return false;
-    }
-
-    if length > max {
-        errors.add(
-            field,
-            rule(
-                "maxLength",
-                format!("The {field} field must not be greater than {max} characters"),
-            ),
-        );
-        return false;
-    }
-
-    true
-}
-
-/// Aceita o que o `vine.string().email()` aceita.
-///
-/// E' a checagem do `validator.js`: um `@`, algo de cada lado, e um ponto no
-/// dominio. Deliberadamente frouxa — apertar aqui recusaria endereco que o
-/// Adonis aceita hoje, e o cadastro passaria a falhar para gente que ja' tem
-/// conta.
-fn looks_like_an_email(value: &str) -> bool {
-    let Some((local, domain)) = value.rsplit_once('@') else {
-        return false;
-    };
-
-    !local.is_empty()
-        && !domain.is_empty()
-        && !value.contains(char::is_whitespace)
-        && domain.contains('.')
-        && !domain.starts_with('.')
-        && !domain.ends_with('.')
-}
-
-fn check_email(errors: &mut ValidationErrors, value: Option<&String>) {
-    if !check_required_text(errors, "email", value, 1, 254) {
-        return;
-    }
-
-    if let Some(value) = value {
-        if !looks_like_an_email(value.trim()) {
-            errors.add(
-                "email",
-                rule(
-                    "email",
-                    "The email field must be a valid email address".to_string(),
-                ),
-            );
-        }
-    }
-}
-
 impl Validate for RegisterParams {
     fn validate(&self) -> std::result::Result<(), ValidationErrors> {
         let mut errors = ValidationErrors::new();
 
         if let Some(full_name) = self.full_name.as_ref() {
-            check_required_text(&mut errors, "fullName", Some(full_name), 0, 100);
+            required_text(&mut errors, "fullName", Some(full_name), 0, 100);
         }
-        check_email(&mut errors, self.email.as_ref());
-        check_required_text(&mut errors, "password", self.password.as_ref(), 8, 32);
+        required_email(&mut errors, self.email.as_ref());
+        required_text(&mut errors, "password", self.password.as_ref(), 8, 32);
         if let Some(token) = self.bootstrap_token.as_ref() {
-            check_required_text(&mut errors, "bootstrapToken", Some(token), 0, 255);
+            required_text(&mut errors, "bootstrapToken", Some(token), 0, 255);
         }
 
-        if errors.is_empty() {
-            Ok(())
-        } else {
-            Err(errors)
-        }
+        finish(errors)
     }
 }
 
@@ -185,11 +91,11 @@ impl Validate for LoginParams {
     fn validate(&self) -> std::result::Result<(), ValidationErrors> {
         let mut errors = ValidationErrors::new();
 
-        check_email(&mut errors, self.email.as_ref());
+        required_email(&mut errors, self.email.as_ref());
         // Sem limite de tamanho: o `loginValidator` do Adonis so' exige que a
         // senha exista. Recusar por tamanho aqui trocaria um 400 de credencial
         // invalida por um 422, e quebraria quem tem senha antiga fora da faixa.
-        check_required_text(
+        required_text(
             &mut errors,
             "password",
             self.password.as_ref(),
@@ -197,11 +103,7 @@ impl Validate for LoginParams {
             usize::MAX,
         );
 
-        if errors.is_empty() {
-            Ok(())
-        } else {
-            Err(errors)
-        }
+        finish(errors)
     }
 }
 
@@ -409,38 +311,6 @@ mod tests {
                 errors_of(&params),
                 vec![("password".to_string(), expected.to_string())],
                 "senha {password:?}"
-            );
-        }
-    }
-
-    #[test]
-    fn counts_characters_not_bytes() {
-        // `çãoçãoçã` tem 8 caracteres e 13 bytes. Contar bytes deixaria passar
-        // uma senha de 5 caracteres com acento.
-        let params = RegisterParams {
-            password: Some("çãoçãoçã".to_string()),
-            ..valid_register()
-        };
-        assert!(Validate::validate(&params).is_ok());
-    }
-
-    #[test]
-    fn rejects_a_malformed_email() {
-        for bad in [
-            "sem-arroba",
-            "@dominio.com",
-            "usuario@",
-            "usuario@dominio",
-            "a b@c.com",
-        ] {
-            let params = RegisterParams {
-                email: Some(bad.to_string()),
-                ..valid_register()
-            };
-            assert_eq!(
-                errors_of(&params),
-                vec![("email".to_string(), "email".to_string())],
-                "aceitou {bad:?}"
             );
         }
     }

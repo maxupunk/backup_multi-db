@@ -2,7 +2,9 @@
 
 use loco_rs::prelude::ConnectionTrait;
 use sea_orm::entity::prelude::*;
+use sea_orm::Statement;
 use sea_orm::{ColumnTrait, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder, QuerySelect};
+use std::collections::HashMap;
 
 use sea_orm::ActiveValue::Set;
 use serde::{Deserialize, Serialize};
@@ -290,6 +292,66 @@ impl Model {
         Ok(rows
             .into_iter()
             .map(|(backup, connection)| (backup, connection.map(|row| row.name)))
+            .collect())
+    }
+}
+
+/// Consultas que alimentam `GET /api/connections` e `/:id` (tarefa 6.1).
+impl Model {
+    /// Os `limit` backups mais recentes de uma conexao.
+    pub async fn recent_for_connection(
+        db: &impl ConnectionTrait,
+        connection_id: i64,
+        limit: u64,
+    ) -> loco_rs::Result<Vec<Self>> {
+        Ok(Entity::find()
+            .filter(Column::ConnectionId.eq(connection_id))
+            .order_by_desc(Column::CreatedAt)
+            .order_by_desc(Column::Id)
+            .limit(limit)
+            .all(db)
+            .await?)
+    }
+
+    /// O backup mais recente de **cada** conexao da lista.
+    ///
+    /// E' o `groupLimit(1)` do Lucid. A alternativa obvia — um `SELECT` por
+    /// conexao dentro do laco — seria uma ida ao banco por linha da pagina; a
+    /// outra — carregar todos os backups das conexoes e filtrar em memoria —
+    /// traria milhares de linhas para descartar quase todas. A funcao de janela
+    /// resolve numa consulta so', e o SQLite a suporta desde a 3.25.
+    pub async fn latest_per_connection(
+        db: &impl ConnectionTrait,
+        connection_ids: &[i64],
+    ) -> loco_rs::Result<HashMap<i64, Self>> {
+        if connection_ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+
+        let placeholders = vec!["?"; connection_ids.len()].join(", ");
+        let sql = format!(
+            "SELECT * FROM ( \
+               SELECT *, ROW_NUMBER() OVER ( \
+                 PARTITION BY connection_id ORDER BY created_at DESC, id DESC \
+               ) AS row_position \
+               FROM backups WHERE connection_id IN ({placeholders}) \
+             ) WHERE row_position = 1"
+        );
+
+        let values: Vec<sea_orm::Value> = connection_ids.iter().map(|id| (*id).into()).collect();
+
+        let rows = Entity::find()
+            .from_raw_sql(Statement::from_sql_and_values(
+                db.get_database_backend(),
+                sql,
+                values,
+            ))
+            .all(db)
+            .await?;
+
+        Ok(rows
+            .into_iter()
+            .filter_map(|row| row.connection_id.map(|id| (id, row)))
             .collect())
     }
 }

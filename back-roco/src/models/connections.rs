@@ -11,7 +11,13 @@
 //!    por engano.
 
 use loco_rs::prelude::ConnectionTrait;
+use loco_rs::prelude::Error;
 use sea_orm::entity::prelude::*;
+use sea_orm::{ActiveValue::Set, Condition, QueryOrder, QuerySelect};
+use validator::{Validate, ValidationErrors};
+
+use crate::models::validation;
+use crate::views::pagination::PageRequest;
 use sea_orm::{ColumnTrait, EntityTrait, PaginatorTrait, QueryFilter};
 
 use serde::{Deserialize, Serialize};
@@ -236,6 +242,579 @@ impl Model {
             .filter(Column::Status.eq(ConnectionStatus::Active.as_str()))
             .count(db)
             .await?)
+    }
+}
+
+// ============================================================================
+// Entrada validada de `/api/connections` (tarefas 6.1 e 6.2)
+// ============================================================================
+
+/// Distingue "campo ausente" de "campo com `null`".
+///
+/// O `update` do Adonis compara com `!== undefined`: mandar
+/// `"storageDestinationId": null` **desvincula** o destino, enquanto omitir a
+/// chave mantem o valor atual. Um `Option<T>` simples colapsaria os dois casos
+/// e toda atualizacao parcial apagaria os campos nao enviados.
+pub type Patch<T> = Option<Option<T>>;
+
+fn deserialize_patch<'de, D, T>(deserializer: D) -> std::result::Result<Patch<T>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    Option::<T>::deserialize(deserializer).map(Some)
+}
+
+const SCHEDULE_CHOICES: [&str; 4] = ["1h", "6h", "12h", "24h"];
+const TYPE_CHOICES: [&str; 3] = ["mysql", "mariadb", "postgresql"];
+const STATUS_CHOICES: [&str; 3] = ["active", "inactive", "error"];
+
+/// Porta maxima de TCP.
+const MAX_PORT: i64 = 65535;
+
+/// Corpo de `POST /api/connections`.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct CreateParams {
+    pub name: Option<String>,
+    pub r#type: Option<String>,
+    pub host: Option<String>,
+    pub port: Option<i64>,
+    pub databases: Option<Vec<String>>,
+    pub username: Option<String>,
+    pub password: Option<String>,
+    #[serde(rename = "storageDestinationId")]
+    pub storage_destination_id: Option<i64>,
+    #[serde(rename = "scheduleFrequency")]
+    pub schedule_frequency: Option<String>,
+    #[serde(rename = "scheduleEnabled")]
+    pub schedule_enabled: Option<bool>,
+    pub options: Option<serde_json::Value>,
+}
+
+/// Corpo de `PUT`/`PATCH /api/connections/:id`.
+///
+/// Os campos anulaveis usam [`Patch`]; os demais, `Option`, porque para eles
+/// "ausente" e "nulo" tem o mesmo efeito — nao mexer.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct UpdateParams {
+    pub name: Option<String>,
+    pub r#type: Option<String>,
+    pub host: Option<String>,
+    pub port: Option<i64>,
+    pub databases: Option<Vec<String>>,
+    pub username: Option<String>,
+    pub password: Option<String>,
+    #[serde(
+        rename = "storageDestinationId",
+        default,
+        deserialize_with = "deserialize_patch"
+    )]
+    pub storage_destination_id: Patch<i64>,
+    #[serde(
+        rename = "scheduleFrequency",
+        default,
+        deserialize_with = "deserialize_patch"
+    )]
+    pub schedule_frequency: Patch<String>,
+    #[serde(rename = "scheduleEnabled")]
+    pub schedule_enabled: Option<bool>,
+    #[serde(default, deserialize_with = "deserialize_patch")]
+    pub options: Patch<serde_json::Value>,
+}
+
+/// Query string de `GET /api/connections`.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct ListQuery {
+    pub page: Option<String>,
+    pub limit: Option<String>,
+    pub r#type: Option<String>,
+    pub status: Option<String>,
+    pub search: Option<String>,
+}
+
+/// Corpo de `POST /api/connections/discover-databases`.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct DiscoverParams {
+    pub r#type: Option<String>,
+    pub host: Option<String>,
+    pub port: Option<i64>,
+    pub username: Option<String>,
+    pub password: Option<String>,
+    pub ssl: Option<bool>,
+}
+
+/// Corpo de `POST /api/connections/:id/create-database`.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct CreateDatabaseParams {
+    #[serde(rename = "databaseName")]
+    pub database_name: Option<String>,
+}
+
+/// Aplica as regras comuns a `name`, `host`, `port` e `username`.
+fn validate_shared(
+    errors: &mut ValidationErrors,
+    name: Option<&String>,
+    host: Option<&String>,
+    port: Option<i64>,
+    username: Option<&String>,
+    required: bool,
+) {
+    if required || name.is_some() {
+        validation::required_text(errors, "name", name, 1, 100);
+    }
+    if required || host.is_some() {
+        validation::required_text(errors, "host", host, 1, 255);
+    }
+    if required || port.is_some() {
+        validation::required_number(errors, "port", port, MAX_PORT);
+    }
+    if required || username.is_some() {
+        validation::required_text(errors, "username", username, 1, 100);
+    }
+}
+
+/// Cada nome de database e' um texto de 1..100, como no `vine.array`.
+fn validate_databases(errors: &mut ValidationErrors, databases: Option<&Vec<String>>) {
+    let Some(databases) = databases else {
+        return;
+    };
+
+    if databases.is_empty() {
+        errors.add(
+            "databases",
+            validation::rule(
+                "minLength",
+                "The databases field must have at least 1 items".to_string(),
+            ),
+        );
+        return;
+    }
+
+    // Um nome vazio no meio da lista criaria uma linha inutil em
+    // `connection_databases` que o backup tentaria dumpar todo dia.
+    for name in databases {
+        if !validation::text_length(errors, "databases", name.trim(), 1, 100) {
+            return;
+        }
+    }
+}
+
+impl Validate for CreateParams {
+    fn validate(&self) -> std::result::Result<(), ValidationErrors> {
+        let mut errors = ValidationErrors::new();
+
+        validate_shared(
+            &mut errors,
+            self.name.as_ref(),
+            self.host.as_ref(),
+            self.port,
+            self.username.as_ref(),
+            true,
+        );
+        validation::required_enum(&mut errors, "type", self.r#type.as_ref(), &TYPE_CHOICES);
+
+        if self.databases.is_none() {
+            errors.add(
+                "databases",
+                validation::rule(
+                    "required",
+                    "The databases field must be defined".to_string(),
+                ),
+            );
+        }
+        validate_databases(&mut errors, self.databases.as_ref());
+
+        validation::optional_enum(
+            &mut errors,
+            "scheduleFrequency",
+            self.schedule_frequency.as_ref(),
+            &SCHEDULE_CHOICES,
+        );
+        if let Some(id) = self.storage_destination_id {
+            validation::number_range(&mut errors, "storageDestinationId", id, i64::MAX);
+        }
+
+        validation::finish(errors)
+    }
+}
+
+impl Validate for UpdateParams {
+    fn validate(&self) -> std::result::Result<(), ValidationErrors> {
+        let mut errors = ValidationErrors::new();
+
+        validate_shared(
+            &mut errors,
+            self.name.as_ref(),
+            self.host.as_ref(),
+            self.port,
+            self.username.as_ref(),
+            false,
+        );
+        validation::optional_enum(&mut errors, "type", self.r#type.as_ref(), &TYPE_CHOICES);
+        validate_databases(&mut errors, self.databases.as_ref());
+        validation::optional_enum(
+            &mut errors,
+            "scheduleFrequency",
+            self.schedule_frequency.as_ref().and_then(Option::as_ref),
+            &SCHEDULE_CHOICES,
+        );
+        if let Some(Some(id)) = self.storage_destination_id {
+            validation::number_range(&mut errors, "storageDestinationId", id, i64::MAX);
+        }
+
+        validation::finish(errors)
+    }
+}
+
+impl Validate for ListQuery {
+    fn validate(&self) -> std::result::Result<(), ValidationErrors> {
+        let mut errors = ValidationErrors::new();
+
+        validation::optional_enum(&mut errors, "type", self.r#type.as_ref(), &TYPE_CHOICES);
+        validation::optional_enum(&mut errors, "status", self.status.as_ref(), &STATUS_CHOICES);
+
+        validation::finish(errors)
+    }
+}
+
+impl Validate for DiscoverParams {
+    fn validate(&self) -> std::result::Result<(), ValidationErrors> {
+        let mut errors = ValidationErrors::new();
+
+        validation::required_enum(&mut errors, "type", self.r#type.as_ref(), &TYPE_CHOICES);
+        validation::required_text(&mut errors, "host", self.host.as_ref(), 1, 255);
+        validation::required_number(&mut errors, "port", self.port, MAX_PORT);
+        validation::required_text(&mut errors, "username", self.username.as_ref(), 1, 100);
+
+        validation::finish(errors)
+    }
+}
+
+impl Validate for CreateDatabaseParams {
+    fn validate(&self) -> std::result::Result<(), ValidationErrors> {
+        let mut errors = ValidationErrors::new();
+
+        if validation::required_text(
+            &mut errors,
+            "databaseName",
+            self.database_name.as_ref(),
+            1,
+            63,
+        ) {
+            let name = self.database_name.as_deref().unwrap_or_default().trim();
+            // `^[a-zA-Z_][a-zA-Z0-9_-]*$`, o mesmo do `createDatabaseValidator`.
+            // O nome entra em DDL, que nao aceita parametro — a regex e' a
+            // primeira das duas barreiras contra injecao; a segunda esta' em
+            // `database_driver::quote_identifier`.
+            let valid = name
+                .chars()
+                .next()
+                .is_some_and(|first| first.is_ascii_alphabetic() || first == '_')
+                && name
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-');
+
+            if !valid {
+                errors.add(
+                    "databaseName",
+                    validation::rule(
+                        "regex",
+                        "The databaseName field format is invalid".to_string(),
+                    ),
+                );
+            }
+        }
+
+        validation::finish(errors)
+    }
+}
+
+impl DiscoverParams {
+    /// Alvo de conexao para a descoberta, com a senha vinda do corpo.
+    ///
+    /// Aqui nao ha' registro no banco: a tela de "nova conexao" chama esta rota
+    /// **antes** de salvar, justamente para o usuario escolher os databases.
+    pub fn target(&self) -> Option<crate::models::database_driver::DatabaseTarget> {
+        let kind: DatabaseType = self.r#type.as_deref()?.parse().ok()?;
+
+        Some(crate::models::database_driver::DatabaseTarget {
+            kind,
+            host: self.host.clone().unwrap_or_default().trim().to_string(),
+            port: u16::try_from(self.port.unwrap_or(0)).unwrap_or_else(|_| kind.default_port()),
+            username: self.username.clone().unwrap_or_default().trim().to_string(),
+            password: self.password.clone().unwrap_or_default(),
+            // Sem database: a descoberta conecta ao banco default do motor.
+            database: None,
+            ssl: self.ssl.unwrap_or(false),
+        })
+    }
+}
+
+// ============================================================================
+// Persistencia (tarefa 6.1)
+// ============================================================================
+
+/// O que mudou numa atualizacao, para a auditoria.
+pub type Changes = serde_json::Map<String, serde_json::Value>;
+
+fn change(from: impl Serialize, to: impl Serialize) -> serde_json::Value {
+    serde_json::json!({
+        "from": serde_json::to_value(from).unwrap_or(serde_json::Value::Null),
+        "to": serde_json::to_value(to).unwrap_or(serde_json::Value::Null),
+    })
+}
+
+impl Model {
+    /// Uma pagina da listagem, ordenada por nome.
+    pub async fn list_page(
+        db: &impl ConnectionTrait,
+        query: &ListQuery,
+        page: PageRequest,
+    ) -> loco_rs::Result<(Vec<Self>, u64)> {
+        let mut condition = Condition::all()
+            .add_option(query.r#type.as_ref().map(|v| Column::Type.eq(v.as_str())))
+            .add_option(query.status.as_ref().map(|v| Column::Status.eq(v.as_str())));
+
+        if let Some(search) = query
+            .search
+            .as_ref()
+            .map(|v| v.trim())
+            .filter(|v| !v.is_empty())
+        {
+            let pattern = format!("%{search}%");
+            // Nome **ou** host, como no `whereILike(...).orWhereILike(...)`. O
+            // `LIKE` do SQLite ja' e' insensivel a caixa para ASCII.
+            condition = condition.add(
+                Condition::any()
+                    .add(Column::Name.like(&pattern))
+                    .add(Column::Host.like(&pattern)),
+            );
+        }
+
+        let total = Entity::find().filter(condition.clone()).count(db).await?;
+
+        let rows = Entity::find()
+            .filter(condition)
+            .order_by_asc(Column::Name)
+            // Desempate estavel: sem ele, duas conexoes de mesmo nome podem
+            // aparecer duas vezes numa pagina e sumir de outra.
+            .order_by_asc(Column::Id)
+            .offset(page.offset())
+            .limit(page.per_page)
+            .all(db)
+            .await?;
+
+        Ok((rows, total))
+    }
+
+    pub async fn find_one(db: &impl ConnectionTrait, id: i64) -> loco_rs::Result<Option<Self>> {
+        Ok(Entity::find_by_id(id).one(db).await?)
+    }
+
+    /// Cria a conexao, ja' com a senha criptografada.
+    pub async fn create(
+        db: &impl ConnectionTrait,
+        params: &CreateParams,
+        encryption: &EncryptionService,
+    ) -> loco_rs::Result<Self> {
+        let now = chrono::Utc::now().naive_utc();
+
+        Ok(ActiveModel {
+            name: Set(trimmed(params.name.as_deref())),
+            r#type: Set(trimmed(params.r#type.as_deref())),
+            host: Set(trimmed(params.host.as_deref())),
+            port: Set(params.port.unwrap_or(0)),
+            username: Set(trimmed(params.username.as_deref())),
+            password_encrypted: Set(encrypt_password(params.password.as_deref(), encryption)?),
+            schedule_frequency: Set(params.schedule_frequency.clone()),
+            schedule_enabled: Set(Some(params.schedule_enabled.unwrap_or(false))),
+            // Nasce `active` mesmo sem teste — e' o que o Adonis faz, e e' o que
+            // permite o primeiro backup manual antes de qualquer teste.
+            status: Set(Some(ConnectionStatus::Active.as_str().to_string())),
+            storage_destination_id: Set(params.storage_destination_id),
+            options: Set(serialize_options(params.options.as_ref())),
+            created_at: Set(now),
+            updated_at: Set(now),
+            ..Default::default()
+        }
+        .insert(db)
+        .await?)
+    }
+
+    /// Aplica uma atualizacao parcial e devolve o registro novo mais o diff.
+    ///
+    /// O diff alimenta a auditoria. A senha entra nele como `***` nos dois
+    /// lados: registrar que ela mudou e' util, registrar o valor seria gravar a
+    /// credencial em texto numa tabela que a interface exibe.
+    pub async fn apply_update(
+        self,
+        db: &impl ConnectionTrait,
+        params: &UpdateParams,
+        encryption: &EncryptionService,
+    ) -> loco_rs::Result<(Self, Changes)> {
+        let mut changes = Changes::new();
+        let mut active: ActiveModel = self.clone().into();
+
+        if let Some(value) = params.name.as_deref().map(str::trim) {
+            if value != self.name {
+                changes.insert("name".into(), change(&self.name, value));
+                active.name = Set(value.to_string());
+            }
+        }
+        if let Some(value) = params.r#type.as_deref().map(str::trim) {
+            if value != self.r#type {
+                changes.insert("type".into(), change(&self.r#type, value));
+                active.r#type = Set(value.to_string());
+            }
+        }
+        if let Some(value) = params.host.as_deref().map(str::trim) {
+            if value != self.host {
+                changes.insert("host".into(), change(&self.host, value));
+                active.host = Set(value.to_string());
+            }
+        }
+        if let Some(value) = params.port {
+            if value != self.port {
+                changes.insert("port".into(), change(self.port, value));
+                active.port = Set(value);
+            }
+        }
+        if let Some(value) = params.username.as_deref().map(str::trim) {
+            if value != self.username {
+                changes.insert("username".into(), change(&self.username, value));
+                active.username = Set(value.to_string());
+            }
+        }
+        if let Some(password) = params.password.as_deref() {
+            changes.insert("password".into(), change("***", "***"));
+            active.password_encrypted = Set(encrypt_password(Some(password), encryption)?);
+        }
+        if let Some(value) = params.storage_destination_id {
+            if value != self.storage_destination_id {
+                changes.insert(
+                    "storageDestinationId".into(),
+                    change(self.storage_destination_id, value),
+                );
+                active.storage_destination_id = Set(value);
+            }
+        }
+        if let Some(value) = params.schedule_frequency.clone() {
+            if value != self.schedule_frequency {
+                changes.insert(
+                    "scheduleFrequency".into(),
+                    change(&self.schedule_frequency, &value),
+                );
+                active.schedule_frequency = Set(value);
+            }
+        }
+        if let Some(value) = params.schedule_enabled {
+            if Some(value) != self.schedule_enabled {
+                changes.insert(
+                    "scheduleEnabled".into(),
+                    change(self.schedule_enabled, value),
+                );
+                active.schedule_enabled = Set(Some(value));
+            }
+        }
+        if let Some(value) = params.options.as_ref() {
+            // `options` fica de fora do diff, como no Adonis: o objeto pode
+            // carregar configuracao de TLS, e a auditoria e' exibida na tela.
+            active.options = Set(serialize_options(value.as_ref()));
+        }
+
+        active.updated_at = Set(chrono::Utc::now().naive_utc());
+
+        Ok((active.update(db).await?, changes))
+    }
+
+    /// Grava o resultado de um teste de conexao.
+    pub async fn record_test(
+        self,
+        db: &impl ConnectionTrait,
+        error: Option<&str>,
+    ) -> loco_rs::Result<Self> {
+        let now = chrono::Utc::now().naive_utc();
+        let mut active: ActiveModel = self.into();
+
+        active.status = Set(Some(
+            if error.is_some() {
+                ConnectionStatus::Error
+            } else {
+                ConnectionStatus::Active
+            }
+            .as_str()
+            .to_string(),
+        ));
+        active.last_error = Set(error.map(ToString::to_string));
+        active.last_tested_at = Set(Some(now));
+        active.updated_at = Set(now);
+
+        Ok(active.update(db).await?)
+    }
+
+    pub async fn delete_by_id(db: &impl ConnectionTrait, id: i64) -> loco_rs::Result<u64> {
+        Ok(Entity::delete_by_id(id).exec(db).await?.rows_affected)
+    }
+
+    /// Alvo de conexao correspondente, com a senha ja' descriptografada.
+    pub fn target(
+        &self,
+        encryption: &EncryptionService,
+        database: Option<String>,
+    ) -> loco_rs::Result<crate::models::database_driver::DatabaseTarget> {
+        let kind = self
+            .database_type()
+            .map_err(|err| Error::Message(format!("tipo de banco desconhecido: {err}")))?;
+        let password = self
+            .decrypted_password(encryption)
+            .map_err(|err| Error::Message(format!("falha ao decifrar a senha: {err}")))?;
+
+        Ok(crate::models::database_driver::DatabaseTarget {
+            kind,
+            port: u16::try_from(self.port).unwrap_or_else(|_| kind.default_port()),
+            host: self.host.clone(),
+            username: self.username.clone(),
+            password,
+            database,
+            ssl: self.ssl_enabled(),
+        })
+    }
+
+    /// `options.ssl == true`.
+    pub fn ssl_enabled(&self) -> bool {
+        self.options
+            .as_deref()
+            .and_then(|raw| serde_json::from_str::<serde_json::Value>(raw).ok())
+            .and_then(|value| value.get("ssl").and_then(serde_json::Value::as_bool))
+            .unwrap_or(false)
+    }
+}
+
+fn trimmed(value: Option<&str>) -> String {
+    value.unwrap_or_default().trim().to_string()
+}
+
+/// Criptografa a senha, ou grava vazio quando nao ha' senha.
+///
+/// Conexao sem senha e' caso real (socket local confiavel), e criptografar
+/// string vazia produziria um ciphertext que a leitura teria de tratar como
+/// caso especial mesmo assim.
+fn encrypt_password(
+    plaintext: Option<&str>,
+    encryption: &EncryptionService,
+) -> loco_rs::Result<String> {
+    match plaintext.filter(|value| !value.is_empty()) {
+        Some(value) => encryption
+            .encrypt(value)
+            .map_err(|err| Error::Message(format!("falha ao cifrar a senha: {err}"))),
+        None => Ok(String::new()),
+    }
+}
+
+fn serialize_options(options: Option<&serde_json::Value>) -> Option<String> {
+    match options {
+        Some(serde_json::Value::Null) | None => None,
+        Some(value) => serde_json::to_string(value).ok(),
     }
 }
 
