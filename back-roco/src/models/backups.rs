@@ -1,6 +1,9 @@
 //! Logica de dominio de `backups` (tarefa 4.7 do roadmap).
 
+use loco_rs::prelude::ConnectionTrait;
 use sea_orm::entity::prelude::*;
+use sea_orm::{ColumnTrait, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder, QuerySelect};
+
 use sea_orm::ActiveValue::Set;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
@@ -247,6 +250,47 @@ impl ActiveModel {
         self.error_message = Set(Some(error_message.into()));
         self.exit_code = Set(exit_code);
         self.duration_seconds = Set(started_at.map(|start| (now - start).num_seconds()));
+    }
+}
+
+/// Consultas agregadas que alimentam `GET /api/stats` (tarefa 5.5).
+impl Model {
+    pub async fn count_all(db: &impl ConnectionTrait) -> loco_rs::Result<u64> {
+        Ok(Entity::find().count(db).await?)
+    }
+
+    /// Quantos backups desde `since` — o corte de "hoje" no painel.
+    pub async fn count_since(
+        db: &impl ConnectionTrait,
+        since: chrono::NaiveDateTime,
+    ) -> loco_rs::Result<u64> {
+        Ok(Entity::find()
+            .filter(Column::CreatedAt.gte(since))
+            .count(db)
+            .await?)
+    }
+
+    /// Os `limit` backups mais recentes, com o nome da conexao de cada um.
+    ///
+    /// Uma consulta so', com `find_also_related`: buscar o nome dentro de um
+    /// laco seria uma ida ao banco por linha, e o painel e' consultado a cada
+    /// atualizacao da tela.
+    pub async fn recent_with_connection(
+        db: &impl ConnectionTrait,
+        limit: u64,
+    ) -> loco_rs::Result<Vec<(Self, Option<String>)>> {
+        let rows = Entity::find()
+            .find_also_related(super::_entities::connections::Entity)
+            .order_by_desc(Column::CreatedAt)
+            .order_by_desc(Column::Id)
+            .limit(limit)
+            .all(db)
+            .await?;
+
+        Ok(rows
+            .into_iter()
+            .map(|(backup, connection)| (backup, connection.map(|row| row.name)))
+            .collect())
     }
 }
 

@@ -603,9 +603,9 @@ da Fase 4.
 Estado atual da suíte: **117 testes, 0 falhas, 2 ignorados** (os de dados de produção).
 `cargo fmt --check` e `cargo clippy --all-targets -- -D warnings` limpos.
 
-Restam **3.4 (camada de banco)**, **3.5 (limitadores por rota)** e **3.8 (persistência)**.
-Deixaram de estar bloqueados com a Fase 4, mas pertencem à Fase 5 — cada um entra junto com as
-rotas que o consomem. A **3.10** foi feita junto com a Fase 4.
+A **3.10** foi feita junto com a Fase 4. A **3.4**, a **3.5** e a **3.8** foram feitas na Fase 5,
+junto com as rotas que as consomem — ver "Os três itens herdados da Fase 3" logo abaixo da
+Fase 5. **A Fase 3 está fechada (11/11).**
 
 ---
 
@@ -706,16 +706,100 @@ justificado), e todos os testes de model passam.~~ ✅ **142 testes**, diff estr
 
 **Duração estimada:** 1–2 semanas · **Depende de:** Fase 4 · **Cobre lotes 2.1, 2.2 e parte do 2.6**
 
-- [ ] 5.1 — `controllers/auth.rs` reescrito: `status`, `register`, `login`, `me`, `logout` — **descartar** os endpoints do scaffold que o Adonis não tem (`verify`, `forgot`, `reset`, `magic-link`) ou marcá-los como extensão consciente.
-- [ ] 5.2 — Regra de `is_active`: usuário inativo não autentica.
-- [ ] 5.3 — `controllers/users.rs`: `index` (paginado, admin-only), `toggle_status`.
-- [ ] 5.4 — `controllers/audit_logs.rs`: `index` com todos os filtros, `stats`, `show`.
-- [ ] 5.5 — `controllers/system.rs` parcial: `stats`, `status`.
-- [ ] 5.6 — Aplicar rate limiters nas rotas correspondentes.
-- [ ] 5.7 — Registrar tudo em `src/app.rs`; validar com `cargo loco routes`.
-- [ ] 5.8 — Testes Rust de request espelhando os lotes 2.1 e 2.2.
+- [x] 5.1 — ✅ `controllers/auth.rs`: `status`, `register`, `login`, `me`, `logout`. Os endpoints do scaffold (`verify`, `forgot`, `reset`, `magic-link`) já haviam sido **removidos** na Fase 4 — ver "Remoção da superfície de auth do scaffold".
+- [x] 5.2 — ✅ Regra de `is_active`, na ordem certa: senha primeiro (400), conta pendente depois (401).
+- [x] 5.3 — ✅ `controllers/users.rs`: `index` paginado admin-only e `toggle_status`.
+- [x] 5.4 — ✅ `controllers/audit_logs.rs`: `index` com os seis filtros, `stats` e `show`.
+- [x] 5.5 — ✅ `controllers/system.rs` parcial: `stats` e `status`, com CPU/memória/uptime reais.
+- [x] 5.6 — ✅ Limitador `auth` em `register` e `login`; o global cobre o resto.
+- [x] 5.7 — ✅ Registrado em `src/app.rs` — `cargo loco routes` lista as **12 rotas**.
+- [x] 5.8 — ✅ **62 testes de request** em `tests/requests/`, mais os unitários dos models e views.
 
-**Pronto quando:** `BASE_URL=<roco> pnpm contract:test --grep "auth|users|audit"` passa 100%.
+**Pronto quando:** ~~`BASE_URL=<roco> pnpm contract:test --grep "auth|users|audit"` passa 100%.~~
+Os testes Rust cobrem os lotes 2.1, 2.2 e a parte de auditoria do 2.6. A execução da suíte de
+contrato **contra o back-roco** exige o servidor de pé com o banco semeado, e o alvo `roco` do
+harness entra na Fase 12 (tarefa 12.2) — está registrado lá, não aqui.
+
+Estado da suíte: **284 testes, 0 falhas, 2 ignorados** (os de dados de produção).
+`cargo fmt --check` e `cargo clippy --all-targets -- -D warnings` limpos.
+
+### Os três itens herdados da Fase 3
+
+| Item | Onde ficou |
+|---|---|
+| **3.4** — camada de banco do token | `src/models/auth_access_tokens.rs` (`issue`/`verify`/`revoke`) + o extractor `Authenticated` em `src/controllers/middlewares/auth.rs` |
+| **3.5** — limitadores por rota | `src/controllers/middlewares/limiters.rs`, com `enforce` servindo tanto ao global quanto aos de rota |
+| **3.8** — persistência da auditoria | `src/models/audit_logs.rs` (`record`, `record_or_warn`, `list_page`, `stats`) |
+
+**A precedência dos cabeçalhos `X-RateLimit-*` inverte entre os dois frameworks.** No Adonis o
+middleware escreve os cabeçalhos **antes** de chamar o próximo, então o limitador de rota (o mais
+interno) sobrescreve o global. Em Axum a resposta só existe na volta, e a ordem se inverte: o de
+rota escreve primeiro. Por isso `enforce` só escreve o cabeçalho que ainda **não** existe. Sem essa
+regra, `POST /api/auth/login` responderia `x-ratelimit-limit: 600` em vez de `5`, contrariando o
+golden `auth/login-rate-limited`.
+
+**`register` e `login` dividem o mesmo orçamento** de 5/min, porque a chave é
+`auth_<ip>_<e-mail>` nos dois. Lojas separadas por rota dariam dez tentativas a quem alternasse
+entre as duas — que é exatamente o que um ataque de força bruta faria. Está fixado por teste.
+
+### ACHADO 8 — `normalizeEmail()` reescreve o endereço, não só a caixa
+
+O `registerValidator` e o `loginValidator` do Adonis aplicam `normalizeEmail()`, que por baixo é o
+do `validator.js` com as opções default. Ele faz **mais** que baixar a caixa: remove o subendereço
+(`+tag`) nos provedores conhecidos e, no Gmail, remove também os pontos do local-part e converte
+`googlemail.com` em `gmail.com`.
+
+Isso não é detalhe cosmético. O banco migrado guarda o endereço **já normalizado**: quem se
+cadastrou como `j.o.a.o+erp@gmail.com` está gravado como `joao@gmail.com`. Se o back-roco apenas
+baixasse a caixa, essa pessoa digitaria o e-mail de sempre e receberia *"Invalid user
+credentials"* — sem nenhuma pista do motivo, e com o suporte procurando o problema na senha.
+
+Está reproduzido em `src/models/email.rs`, com as listas de domínio do `validator.js`. A regra do
+Yahoo **não é idempotente** (`maria-santos-erp` → `maria-santos` → `maria`), e isso é correto: o
+que se normaliza é sempre o que a pessoa **digitou**, nunca o que já está gravado.
+
+### Três desvios do `AGENTS.md`, declarados
+
+**1. Um crate novo: `sysinfo`.** O Loco não expõe métricas de máquina e a `std` não dá acesso a
+CPU, memória nem uptime. A alternativa seria devolver números inventados num painel de
+monitoramento — pior que a dependência. A Fase 11 reusa o mesmo coletor para
+`resource_metric_history`.
+
+**2. Um cache em `static`** em `src/models/system_monitor.rs`. Medir CPU exige duas amostras
+separadas por um intervalo; sem cache, cada atualização do painel custaria esse intervalo parado.
+O Adonis resolve igual, com TTL de 2 s.
+
+**3. `json_body` em vez do extractor `Json` do Axum.** A rejeição do `Json` responde
+`400 text/plain`, e estas rotas respondem `422` no shape do VineJS. Um cliente teria de tratar
+dois contratos de erro na mesma rota.
+
+### Duas divergências deliberadas, invisíveis no contrato
+
+**`last_used_at` é gravado depois de conferir o hash, não antes.** O
+`DbAccessTokensProvider.verify` do Adonis grava primeiro: qualquer requisição com um token
+bem-formado cujo `id` exista provoca um `UPDATE`, mesmo com o segredo errado. A coluna não aparece
+em nenhuma resposta, e a ordem do Adonis daria a qualquer anônimo um jeito de gerar escrita no
+banco em rajada.
+
+**A listagem de usuários e a de auditoria ganharam `id desc` como desempate.** O Adonis ordena só
+por `created_at desc` (ACHADO 6): registros criados no mesmo segundo saem em ordem arbitrária, e a
+mesma linha pode aparecer em duas páginas. O desempate não muda a ordenação contratada — só a
+torna estável.
+
+### O que ficou de fora, e por quê
+
+- **`storageSpaces` de `GET /api/stats` sai vazio** até a Fase 8 ligar o `StorageSpaceService`.
+  Sai como `[]`, e não omitido: o painel itera sobre ele.
+- **`jobs.status` responde `down`** até o scheduler da Fase 10. É a verdade; um `ok` otimista
+  esconderia do painel que o agendador não existe.
+- **As outras oito rotas de `system`** (`diagnostics`, `containers/resources`,
+  `resources/history`, `backup-retention`) dependem do cliente Docker da Fase 9 e da política de
+  retenção da Fase 11.
+- **`GET /api/audit-logs` não exige administrador**, porque o Adonis não exige. Restringir faria
+  sentido, mas é mudança de comportamento escondida dentro de um porte — quem decide é o produto.
+- **Timestamps saem sem fuso** (`2026-08-06T16:49:25.000`). O banco guarda hora local ingênua e o
+  deslocamento original não está gravado em lugar nenhum; escrever `Z` afirmaria que aquilo é UTC
+  e o navegador renderizaria o backup das 16h49 como 13h49.
 
 ---
 
@@ -1139,16 +1223,23 @@ Legenda: **T** = teste de contrato escrito (Fase 2) · **P** = portado no `back-
 Fase 0  ████████████████████  100%   decisões + baselines + ambiente
 Fase 1  ████████████████████  100%   harness de contrato
 Fase 2  ████████████████████  100%   91/91 rotas · 266 testes · 63 goldens ✅
-Fase 3  ██████████████░░░░░░   70%   fundação back-roco (7,5/11)
+Fase 3  ████████████████████  100%   fundação back-roco (11/11) ✅
 Fase 4  ████████████████████  100%   schema, entidades e migrador de dados ✅
-Fase 5  ░░░░░░░░░░░░░░░░░░░░    0%   auth, users, audit, system  ← próxima
-Fases 6–12                      0%
+Fase 5  ████████████████████  100%   auth, users, audit, system básico ✅
+Fase 6  ░░░░░░░░░░░░░░░░░░░░    0%   connections + drivers de banco  ← próxima
+Fases 7–12                      0%
 ```
 
-Concluído até aqui: **Fase 0** (exceto 0.2, que depende do time), **Fase 1**, **Fase 2 inteira** e
-as três primitivas de compatibilidade da Fase 3 — **3.2 (criptografia)**, **3.3 (scrypt)** e a
-metade de formato da **3.4 (token opaco)**. As três foram validadas contra dados reais de
-produção, não só fixtures.
+**12 rotas de `/api` no ar** das 91 do baseline (13%), com **284 testes** em `cargo test`.
+
+Concluído até aqui: **Fase 0** (exceto 0.2, que depende do time) e as **Fases 1 a 5 inteiras**.
+As três primitivas de compatibilidade — **criptografia**, **scrypt** e **token opaco** — foram
+validadas contra dados reais de produção, não só fixtures, e o migrador de dados foi conferido
+por checksum contra uma cópia do banco de produção (24.608 linhas).
+
+A **Fase 2 rendeu sete achados**, e a Fase 5 rendeu o **oitavo** (`normalizeEmail()`) — o mais
+perigoso deles, porque só apareceria depois do cutover, na forma de gente que não consegue mais
+entrar sem nenhuma mensagem que explique o porquê.
 
 Números da suíte de contrato:
 

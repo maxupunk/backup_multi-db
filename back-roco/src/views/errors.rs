@@ -108,6 +108,21 @@ pub enum ApiError {
     Validation(Vec<ErrorItem>),
     /// 400 do `E_INVALID_CREDENTIALS`.
     InvalidCredentials,
+    /// 404 do `E_ROW_NOT_FOUND`, lancado pelo `findOrFail` do Lucid.
+    ///
+    /// Tambem da familia do framework: quem levanta e' o ORM, antes de o
+    /// handler ter chance de montar uma mensagem propria. E' o que
+    /// `PATCH /api/users/:id/status` devolve para um id inexistente — diferente
+    /// do 404 escrito a mao em `GET /api/audit-logs/:id`, que usa a outra
+    /// familia porque o controller consulta com `find` e trata o `null`.
+    RowNotFound,
+    /// 401 do `E_UNAUTHORIZED_ACCESS`, lancado pelo middleware `auth`.
+    ///
+    /// Pertence a' familia do framework, e nao a' dos controllers: quem responde
+    /// e' o middleware, antes de qualquer handler. Usar
+    /// [`ApiError::unauthorized`] aqui trocaria `{"errors":[…]}` por
+    /// `{"success":false,…}` num ponto que todo cliente atravessa.
+    UnauthorizedAccess,
     /// 429, com o `Retry-After` e os cabecalhos de limite.
     RateLimited {
         retry_after: u64,
@@ -182,6 +197,8 @@ impl ApiError {
         match self {
             Self::Validation(_) => StatusCode::UNPROCESSABLE_ENTITY,
             Self::InvalidCredentials => StatusCode::BAD_REQUEST,
+            Self::UnauthorizedAccess => StatusCode::UNAUTHORIZED,
+            Self::RowNotFound => StatusCode::NOT_FOUND,
             Self::RateLimited { .. } => StatusCode::TOO_MANY_REQUESTS,
             Self::Controller { status, .. } => *status,
         }
@@ -250,6 +267,29 @@ fn default_message(field: &str, rule: &str) -> String {
     }
 }
 
+/// Um erro interno vira 500 na familia dos controllers.
+///
+/// A mensagem tecnica **nao** vai para o cliente: um `DbErr` carrega o SQL e os
+/// valores ligados a ele. Fica no log, com o `tracing`, e o cliente recebe so'
+/// o que precisa para saber que a culpa nao e' dele.
+impl From<loco_rs::Error> for ApiError {
+    fn from(error: loco_rs::Error) -> Self {
+        tracing::error!(error = %error, "unhandled application error");
+
+        Self::Controller {
+            status: StatusCode::INTERNAL_SERVER_ERROR,
+            message: "Erro interno ao processar a requisição".to_string(),
+            error: None,
+        }
+    }
+}
+
+impl From<sea_orm::DbErr> for ApiError {
+    fn from(error: sea_orm::DbErr) -> Self {
+        Self::from(loco_rs::Error::DB(error))
+    }
+}
+
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         let status = self.status();
@@ -262,6 +302,18 @@ impl IntoResponse for ApiError {
             Self::InvalidCredentials => (
                 serde_json::to_value(FrameworkError {
                     errors: vec![ErrorItem::simple("Invalid user credentials")],
+                }),
+                Vec::new(),
+            ),
+            Self::UnauthorizedAccess => (
+                serde_json::to_value(FrameworkError {
+                    errors: vec![ErrorItem::simple("Unauthorized access")],
+                }),
+                Vec::new(),
+            ),
+            Self::RowNotFound => (
+                serde_json::to_value(FrameworkError {
+                    errors: vec![ErrorItem::simple("Row not found")],
                 }),
                 Vec::new(),
             ),
@@ -326,6 +378,12 @@ mod tests {
             ApiError::Validation(items) => serde_json::to_value(FrameworkError { errors: items }),
             ApiError::InvalidCredentials => serde_json::to_value(FrameworkError {
                 errors: vec![ErrorItem::simple("Invalid user credentials")],
+            }),
+            ApiError::UnauthorizedAccess => serde_json::to_value(FrameworkError {
+                errors: vec![ErrorItem::simple("Unauthorized access")],
+            }),
+            ApiError::RowNotFound => serde_json::to_value(FrameworkError {
+                errors: vec![ErrorItem::simple("Row not found")],
             }),
             ApiError::RateLimited { retry_after, .. } => serde_json::to_value(FrameworkError {
                 errors: vec![ErrorItem::rate_limited(retry_after)],
@@ -420,6 +478,32 @@ mod tests {
             StatusCode::UNPROCESSABLE_ENTITY
         );
         assert_eq!(ApiError::forbidden("x").status(), StatusCode::FORBIDDEN);
+    }
+
+    #[test]
+    fn a_missing_row_uses_the_framework_family() {
+        // `findOrFail` levanta antes de o handler existir; a mensagem e' a do
+        // Lucid, nao uma escrita a mao.
+        assert_eq!(
+            body_of(ApiError::RowNotFound),
+            serde_json::json!({ "errors": [{ "message": "Row not found" }] })
+        );
+        assert_eq!(ApiError::RowNotFound.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[test]
+    fn unauthenticated_access_uses_the_framework_family() {
+        // O middleware `auth` do Adonis levanta `E_UNAUTHORIZED_ACCESS`, que
+        // sai no shape do framework. Trocar por `{"success":false}` mudaria o
+        // corpo de **toda** rota protegida de uma vez.
+        assert_eq!(
+            body_of(ApiError::UnauthorizedAccess),
+            serde_json::json!({ "errors": [{ "message": "Unauthorized access" }] })
+        );
+        assert_eq!(
+            ApiError::UnauthorizedAccess.status(),
+            StatusCode::UNAUTHORIZED
+        );
     }
 
     #[test]

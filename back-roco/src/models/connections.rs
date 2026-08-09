@@ -10,7 +10,10 @@
 //!    campo `password` cru sequer existe, para que nao haja como serializa-lo
 //!    por engano.
 
+use loco_rs::prelude::ConnectionTrait;
 use sea_orm::entity::prelude::*;
+use sea_orm::{ColumnTrait, EntityTrait, PaginatorTrait, QueryFilter};
+
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 
@@ -214,6 +217,25 @@ impl Model {
         } else {
             vec!["--skip-ssl"]
         }
+    }
+}
+
+/// Contadores que alimentam `GET /api/stats` (tarefa 5.5).
+impl Model {
+    pub async fn count_all(db: &impl ConnectionTrait) -> loco_rs::Result<u64> {
+        Ok(Entity::find().count(db).await?)
+    }
+
+    /// Conexoes com `status = 'active'`.
+    ///
+    /// A coluna e' anulavel: uma conexao nunca testada tem `status` nulo e
+    /// **nao** conta como ativa, que e' o que o `where('status','active')` do
+    /// Adonis faz.
+    pub async fn count_active(db: &impl ConnectionTrait) -> loco_rs::Result<u64> {
+        Ok(Entity::find()
+            .filter(Column::Status.eq(ConnectionStatus::Active.as_str()))
+            .count(db)
+            .await?)
     }
 }
 

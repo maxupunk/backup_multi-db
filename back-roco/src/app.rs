@@ -63,11 +63,25 @@ impl Hooks for App {
         controllers::middlewares::layers::apply(router, ctx)
     }
 
-    fn routes(_ctx: &AppContext) -> AppRoutes {
-        // As rotas de `/api` entram a partir da Fase 5. O scaffold do Loco
-        // trazia auth por JWT com magic link e reset de senha — nada disso
-        // existe nas 91 rotas do contrato, e a decisao D1 e' token opaco.
+    fn routes(ctx: &AppContext) -> AppRoutes {
+        // O limitador `auth` (5/min por IP+e-mail) e' pendurado nas rotas de
+        // `register` e `login`; os demais grupos so' levam o global, que entra
+        // em `after_routes`.
+        //
+        // Cair no default quando a configuracao esta' quebrada nao afrouxa
+        // nada — os defaults **sao** os numeros do Adonis —, e evita trocar a
+        // mensagem clara do `SettingsInitializer` por um panico aqui.
+        let limiters =
+            controllers::middlewares::limiters::Limiters::shared(ctx).unwrap_or_else(|err| {
+                tracing::error!(error = %err, "falling back to the default rate limits");
+                controllers::middlewares::limiters::Limiters::with_defaults()
+            });
+
         AppRoutes::with_default_routes()
+            .add_route(controllers::auth::routes(&limiters))
+            .add_route(controllers::users::routes())
+            .add_route(controllers::audit_logs::routes())
+            .add_route(controllers::system::routes())
     }
     async fn connect_workers(ctx: &AppContext, queue: &Queue) -> Result<()> {
         queue.register(DownloadWorker::build(ctx)).await?;
