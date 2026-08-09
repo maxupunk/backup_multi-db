@@ -20,9 +20,19 @@ serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1" }
 tokio = { version = "1.45", default-features = false, features = [
   "rt-multi-thread",
+  # Fase 7: o pipeline de dump/restore da' `spawn` em `mysqldump`/`pg_dump` e
+  # transmite o stdout deles para o disco sem passar pela memoria.
+  "process",
+  "fs",
+  "io-util",
+  "time",
+  "sync",
 ] }
 async-trait = { version = "0.1" }
-axum = { version = "0.8" }
+# `multipart` cobre `POST /api/backups/import`, o unico endpoint da API que
+# recebe arquivo. O extractor do Axum entrega o campo em pedacos, o que permite
+# gravar 500 MB em disco sem bufferizar o upload inteiro.
+axum = { version = "0.8", features = ["multipart"] }
 tracing = { version = "0.1" }
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 regex = { version = "1.11" }
@@ -54,6 +64,16 @@ sha2 = "0.11"
 crc32fast = "1"
 sysinfo = "0.39.6"
 sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio", "tls-rustls-ring", "mysql", "postgres", "macros"] }
+# Gzip em streaming (Fase 7). O Loco nao expoe compressao de arquivo, e a
+# alternativa — `flate2` num `spawn_blocking` — exigiria bombear os pedacos a
+# mao entre o mundo async e o sincrono. `async-compression` e' um `AsyncWrite`
+# que entra direto no `tokio::io::copy`, mantendo o backpressure de ponta a
+# ponta: quando o disco fica para tras, o stdout do dump e' pausado em vez de
+# a fila crescer sem teto.
+async-compression = { version = "0.4", default-features = false, features = ["tokio", "gzip"] }
+# `ReaderStream` converte o arquivo aberto no corpo de `GET /:id/download` sem
+# ler o backup inteiro para a memoria.
+tokio-util = { version = "0.7", default-features = false, features = ["io"] }
 
 [[bin]]
 name = "back_roco-cli"
@@ -78,3 +98,6 @@ serial_test = { version = "3.1.1" }
 rstest = { version = "0.25" }
 insta = { version = "1.34", features = ["redactions", "yaml", "filters"] }
 axum-test = "17"
+# Diretorio descartavel por teste do pipeline de dump/import — sem ele os
+# testes escreveriam no `backup_storage_path` real da maquina.
+tempfile = "3"

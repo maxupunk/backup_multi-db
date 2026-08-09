@@ -29,11 +29,14 @@ use crate::initializers::settings::Settings;
 use crate::models::_entities::{connection_databases, connections};
 use crate::models::audit_log::AuditAction;
 use crate::models::audit_logs::{AuditEntry, Model as AuditLog};
+use crate::models::backup_runner;
+use crate::models::backups::BackupTrigger;
 use crate::models::connections::{
-    CreateDatabaseParams, CreateParams, DiscoverParams, ListQuery, UpdateParams,
+    ConnectionStatus, CreateDatabaseParams, CreateParams, DiscoverParams, ListQuery, UpdateParams,
 };
 use crate::models::database_driver;
 use crate::models::encryption::EncryptionService;
+use crate::views::backups as backup_view;
 use crate::views::connections as view;
 use crate::views::envelope::{Data, Message, MessageWithData};
 use crate::views::errors::ApiError;
@@ -445,6 +448,164 @@ pub async fn docker_hosts(State(_ctx): State<AppContext>, _session: Authenticate
     .into_response())
 }
 
+/// `POST /api/connections/:id/backup`.
+///
+/// Dispara o backup de **todos** os databases habilitados e responde so' no
+/// fim — e' sincrono no Adonis, e o corpo traz o resultado de cada um. A
+/// restauracao, que e' assincrona, esta' em [`crate::controllers::backups`].
+///
+/// Duas guardas antes de comecar:
+///
+/// - conexao com `status = 'error'` → **422**. Tentar o dump renderia a mesma
+///   falha do ultimo teste, agora com um registro de backup falho a mais;
+/// - nenhum database habilitado → **422**. O Adonis criaria um backup de
+///   `N/A` marcado como falho, o que polui a listagem sem informar nada.
+#[debug_handler]
+pub async fn backup(
+    State(ctx): State<AppContext>,
+    _session: Authenticated,
+    origin: RequestOrigin,
+    Path(id): Path<i64>,
+) -> Reply {
+    let connection = find_or_404(&ctx, id).await?;
+
+    if connection.status.as_deref() == Some(ConnectionStatus::Error.as_str()) {
+        return Err(ApiError::unprocessable(
+            "Não é possível fazer backup de uma conexão com erro. Teste a conexão primeiro.",
+        ));
+    }
+
+    let databases = backup_runner::enabled_databases(&ctx, connection.id).await?;
+
+    if databases.is_empty() {
+        return Err(ApiError::unprocessable(
+            "Nenhum database habilitado para backup nesta conexão.",
+        ));
+    }
+
+    let mut items = Vec::with_capacity(databases.len());
+    let mut successful = 0;
+    let mut failed = 0;
+
+    // Um database por vez, e nao em paralelo: `n` dumps simultaneos contra o
+    // mesmo servidor multiplicam a carga nele e o pico de disco aqui. E' o que
+    // o `executeAll` do Adonis faz.
+    for connection_database in &databases {
+        let run = backup_runner::run_backup(
+            &ctx,
+            backup_runner::BackupRequest {
+                connection: &connection,
+                connection_database_id: Some(connection_database.id),
+                database_name: connection_database.database_name.clone(),
+                trigger: BackupTrigger::Manual,
+                metadata: None,
+            },
+        )
+        .await?;
+
+        audit(
+            &ctx,
+            &origin,
+            AuditEntry::success(
+                AuditAction::BackupStarted,
+                format!(
+                    "Backup do banco \"{}\" iniciado",
+                    connection_database.database_name
+                ),
+            )
+            .entity(run.backup.id, &connection.name),
+        )
+        .await;
+
+        let entity_name = format!(
+            "{} / {}",
+            connection.name, connection_database.database_name
+        );
+
+        if run.succeeded() {
+            successful += 1;
+            audit(
+                &ctx,
+                &origin,
+                AuditEntry::success(
+                    AuditAction::BackupCompleted,
+                    format!(
+                        "Backup do banco \"{}\" concluído",
+                        connection_database.database_name
+                    ),
+                )
+                .entity(run.backup.id, &entity_name),
+            )
+            .await;
+
+            items.push(backup_view::ConnectionBackupItem::Succeeded {
+                database_name: connection_database.database_name.clone(),
+                backup_id: run.backup.id,
+                file_name: run.backup.file_name.clone(),
+                file_size: run.backup.formatted_size(),
+                duration: run.backup.formatted_duration(),
+            });
+        } else {
+            failed += 1;
+            let error = run.error().unwrap_or("Erro desconhecido").to_string();
+
+            audit(
+                &ctx,
+                &origin,
+                AuditEntry::success(
+                    AuditAction::BackupFailed,
+                    format!(
+                        "Backup do banco \"{}\" falhou",
+                        connection_database.database_name
+                    ),
+                )
+                .entity(run.backup.id, &entity_name)
+                .failed(&error),
+            )
+            .await;
+
+            items.push(backup_view::ConnectionBackupItem::Failed {
+                database_name: connection_database.database_name.clone(),
+                backup_id: run.backup.id,
+                success: false,
+                error: Some(error),
+            });
+        }
+    }
+
+    // `last_backup_at` marca **a conexao**, uma vez por chamada — a coluna
+    // responde "quando esta conexao foi backupeada", nao "quantas vezes".
+    backup_runner::touch_last_backup(&ctx, connection).await?;
+
+    let data = backup_view::ConnectionBackupResult {
+        total_databases: databases.len(),
+        successful,
+        failed,
+        backups: items,
+    };
+
+    if failed == 0 {
+        return Ok(axum::Json(MessageWithData::new(
+            format!("Backup realizado com sucesso para {successful} database(s)"),
+            data,
+        ))
+        .into_response());
+    }
+
+    // Falha parcial responde **422 com corpo de sucesso parcial**: o envelope
+    // traz `success: false` e o mesmo `data`, porque a interface lista quais
+    // databases falharam. E' o unico ponto da API em que um 4xx carrega `data`.
+    Ok((
+        StatusCode::UNPROCESSABLE_ENTITY,
+        axum::Json(serde_json::json!({
+            "success": false,
+            "message": format!("Backup parcialmente concluído: {successful} sucesso, {failed} falha(s)"),
+            "data": data,
+        })),
+    )
+        .into_response())
+}
+
 async fn find_or_404(
     ctx: &AppContext,
     id: i64,
@@ -501,4 +662,14 @@ pub fn routes(limiters: &Limiters) -> Routes {
         .add("/{id}", delete(destroy))
         .add("/{id}/test", post(test).layer(strict.clone()))
         .add("/{id}/create-database", post(create_database).layer(strict))
+        // O limitador `backup` (60/min) e' o mesmo que o Adonis pendura aqui — e'
+        // o numero que o golden `connections/backup-connection-in-error` gravou
+        // em `x-ratelimit-limit`.
+        .add(
+            "/{id}/backup",
+            post(backup).layer(axum::middleware::from_fn_with_state(
+                limiters.backup(),
+                enforce,
+            )),
+        )
 }

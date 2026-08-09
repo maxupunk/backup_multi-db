@@ -574,6 +574,7 @@ version = "0.1.0"
 dependencies = [
  "aes",
  "aes-gcm",
+ "async-compression",
  "async-trait",
  "axum",
  "axum-test",
@@ -597,8 +598,10 @@ dependencies = [
  "sqlx",
  "subtle",
  "sysinfo",
+ "tempfile",
  "thiserror 2.0.20",
  "tokio",
+ "tokio-util",
  "tracing",
  "tracing-subscriber",
  "ts-rs",

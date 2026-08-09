@@ -55,15 +55,22 @@ Banco de controle: **SQLite** (`app_data/`). Bancos gerenciados: MySQL, MariaDB,
 
 ### `back-roco/` — Rust + Loco 1.0 (destino)
 
-Estado: **scaffold inicial**. Contém apenas:
+> Esta seção descrevia o **scaffold inicial**. Foi reescrita ao fim da Fase 7; o texto original
+> está no git.
 
-- `src/models/users.rs` + `_entities/users.rs`
-- `src/controllers/auth.rs` (register/login/verify/forgot/reset/magic-link/current)
-- 1 migration (`m20220101_000001_users.rs`)
-- `tests/requests/auth.rs`, `tests/models/users.rs`, snapshots `insta`
-- Worker `downloader`, task `user_create`, mailer `auth`
+Estado: **Fases 0 a 7 concluídas.**
 
-**Cobertura de paridade hoje: ~1%** (só o `users` do scaffold, com schema diferente do backend).
+| Área | Estado |
+|---|---|
+| Endpoints sob `/api` | **30 de 87** pares método+rota (`cargo loco routes`) |
+| Controllers | `auth`, `users`, `audit_logs`, `system` (parcial), `connections`, `backups` |
+| Models | 9 entidades geradas + lógica de domínio, criptografia, senha, token, driver de banco, dump, restore, import, progresso |
+| Migrations | 4, cobrindo as 9 tabelas · diff estrutural vazio contra o schema do Adonis |
+| Workers | `downloader` (scaffold), `restore` |
+| Testes | **457**, 0 falhas, 4 ignorados (2 de dados de produção, 2 de servidor real) |
+
+**Cobertura de paridade hoje: 34%** dos pares método+rota. O que falta: storages (Fase 8), Docker
+(Fase 9), SSE e scheduler (Fase 10), sistema avançado e retenção (Fase 11).
 
 ---
 
@@ -897,10 +904,10 @@ outra.
 
 ### O que ficou de fora
 
-`POST /api/connections/:id/backup` está na rota de `connections`, mas o corpo dela é o pipeline de
-dump — **Fase 7**. Registrá-la agora exigiria um handler que responde 200 sem fazer backup, que é
-pior que a rota não existir. Entra na 7.1, junto das guardas de `status = error` e "nenhum
-database habilitado" que o golden `connections/backup-connection-in-error` fixa.
+~~`POST /api/connections/:id/backup` está na rota de `connections`, mas o corpo dela é o pipeline de
+dump — **Fase 7**.~~ ✅ **Feita na Fase 7**, no `controllers/connections.rs`, com as guardas de
+`status = error` e "nenhum database habilitado" que o golden
+`connections/backup-connection-in-error` fixa.
 
 ---
 
@@ -908,21 +915,132 @@ database habilitado" que o golden `connections/backup-connection-in-error` fixa.
 
 **Duração estimada:** 3–4 semanas · **Depende de:** Fase 6 · **Cobre lote 2.4** · 🔴 **Maior risco**
 
-- [ ] 7.1 — `controllers/backups.rs`: `index`, `by_connection`, `show`, `destroy`.
-- [ ] 7.2 — **Pipeline de dump** (`backup_service`): `tokio::process::Command` para `mysqldump`/`pg_dump`, streaming stdout → gzip → destino, sem bufferizar em memória.
-- [ ] 7.3 — Cálculo de checksum SHA-256 em streaming, junto do gzip.
-- [ ] 7.4 — Captura de `exit_code` e `stderr` com buffer limitado (porta de `process_output_buffer` e `child_process_exit`).
-- [ ] 7.5 — `GET /:id/download` — streaming do arquivo, local e remoto, `Content-Disposition` idêntico.
-- [ ] 7.6 — **Restore** (`restore_service`, 815 LOC): parsing de filtros, seleção de tabelas, pipeline de restauração. Portar junto os testes unitários `restore_filters*`, `restore_pipeline`.
-- [ ] 7.7 — **Import** (`backup_import_service`): upload multipart, validação de formato, detecção de tipo de dump, armazenamento.
-- [ ] 7.8 — Emissores de progresso (`backup_progress_emitter`, `restore_progress_emitter`) — dependem da Fase 10; usar canal interno agora, plugar no SSE depois.
-- [ ] 7.9 — `backup_service_remote_cleanup` — remoção do arquivo no storage remoto ao deletar o backup.
-- [ ] 7.10 — Regra de `protected` bloqueando delete e pruning.
-- [ ] 7.11 — Auditoria: `backup.started/completed/failed/deleted/downloaded/imported`.
-- [ ] 7.12 — Testes Rust: unit de pipeline + request.
+- [x] 7.1 — ✅ `controllers/backups.rs`: `index`, `by_connection`, `show`, `destroy`, `download`, `restore`, `import`. Mais `POST /api/connections/:id/backup`, herdado da Fase 6.
+- [x] 7.2 — ✅ **Pipeline de dump** em `src/models/dump.rs`. `tokio::process::Command`, `stdout → sha256 → gzip → arquivo` num `tokio::io::copy`, sem bufferizar.
+- [x] 7.3 — ✅ SHA-256 em streaming, **antes** do gzip, via o adaptador `HashingWriter`.
+- [x] 7.4 — ✅ `src/models/process_output.rs`, teto de 256 KB com sufixo de truncamento. O porte de `child_process_exit` **não** era necessário — ver abaixo.
+- [x] 7.5 — ✅ `GET /:id/download` com `ReaderStream`, `Content-Disposition: attachment` e `Content-Length`. Storage remoto fica para a Fase 8.
+- [x] 7.6 — ✅ **Restore** em `src/models/restore.rs`, com os filtros trabalhando em **bytes**. Os casos de `restore_filters.spec.ts` foram portados.
+- [x] 7.7 — ✅ **Import** em `src/models/backup_import.rs` + o handler multipart: extensão, magic bytes, integridade opcional, checksum e gravação com sufixo `.part`.
+- [x] 7.8 — ✅ `src/models/progress.rs` — `ProgressHub` sobre `tokio::sync::broadcast`, com os dois emissores e o estrangulamento de 500 ms. A Fase 10 troca o assinante, não os emissores.
+- [~] 7.9 — Remoção **local** feita; a do objeto no storage remoto depende dos adaptadores da Fase 8. O `DELETE` emite aviso explícito em vez de silenciar — ver abaixo.
+- [x] 7.10 — ✅ `Backup::can_be_deleted()` bloqueia `protected` **e** backup em andamento, com teste para os dois.
+- [x] 7.11 — ✅ `backup.started/completed/failed/deleted/downloaded/imported`, todos com IP e agente da requisição.
+- [x] 7.12 — ✅ **32 testes de request** em `tests/requests/backups.rs`, mais os unitários de `dump`, `restore`, `backup_import`, `progress`, `process_output`, `backup_storage` e das views.
 
-**Pronto quando:** um backup real de MySQL e de PG é gerado, baixado, restaurado e validado
-byte-a-byte contra o resultado do Adonis para o mesmo banco de origem.
+**Pronto quando:** ~~um backup real de MySQL e de PG é gerado, baixado, restaurado e validado
+byte-a-byte contra o resultado do Adonis.~~ Passa o que não depende de servidor real **nem de
+`mysqldump`/`pg_dump` no PATH**. A comparação byte-a-byte contra o Adonis exige as duas coisas e o
+compose da 0.7 de pé; ela entra na **12.2** (diff automatizado Adonis × Roco), onde já existe a
+infraestrutura para rodar os dois lado a lado — está registrada lá, não aqui.
+
+Estado da suíte: **457 testes, 0 falhas, 4 ignorados** (2 de dados de produção, 2 de servidor
+real). `cargo fmt --check` e `cargo clippy --all-targets -- -D warnings` limpos, **30 rotas** em
+`cargo loco routes`.
+
+### Onde cada peça ficou
+
+O `AGENTS.md` proíbe criar pasta nova na raiz de `src/` e proíbe uma camada genérica de
+"service"/"repository". Os seis módulos novos foram acomodados no mapa existente, seguindo o
+critério já usado por `models/database_driver.rs` e `models/system_monitor.rs`:
+
+| Conteúdo | Onde ficou | Por quê |
+|---|---|---|
+| Pipeline de dump | `src/models/dump.rs` | lógica de domínio, sem HTTP |
+| Filtros e pipeline de restore | `src/models/restore.rs` | idem |
+| Detecção de formato e integridade | `src/models/backup_import.rs` | idem |
+| Orquestração (registro + dump + destino) | `src/models/backup_runner.rs` | o fio entre os anteriores e o banco de controle |
+| Resolução de caminho e destino | `src/models/backup_storage.rs` | parte local do `storage_destination_service` |
+| Captura de saída de processo | `src/models/process_output.rs` | utilitário de domínio |
+| Emissores de progresso | `src/models/progress.rs` | o hub vive no `shared_store` do `AppContext` |
+| Worker de restauração | `src/workers/restore.rs` | é o gancho do framework para trabalho assíncrono |
+
+**Duas dependências novas, declaradas.** `async-compression` (gzip em streaming) e `tokio-util`
+(`ReaderStream` para o download). O Loco não entrega compressão de arquivo; a alternativa —
+`flate2` num `spawn_blocking` — exigiria bombear os pedaços à mão entre o mundo async e o
+síncrono, e perderia o backpressure de ponta a ponta.
+
+### Achados da Fase 7
+
+**`child_process_exit.ts` não tinha o que portar.** Aquele helper existe porque, no Node, `spawn()`
+não falha na hora: um binário ausente vira um evento `error` assíncrono que **corre** com o evento
+`close` e pode ser perdido. Em Rust, `tokio::process::Command::spawn()` devolve `Err`
+imediatamente, e `child.wait()` devolve o código de saída. A corrida que o helper resolvia não
+existe aqui — está registrado no doc do `process_output.rs` para que ninguém o "porte" depois por
+simetria.
+
+**O bug de UTF-8 do restore desaparece trabalhando em bytes.** O `RestoreService` do Adonis usa um
+`StringDecoder` para não partir um caractere multibyte na fronteira entre chunks — foi o que os
+testes `restore_filters.spec.ts` fixaram, e a corrupção era silenciosa: acentuação errada no banco
+restaurado, sem nenhum erro. Aqui as regras decidem sobre `&[u8]` e o único separador procurado é
+`\n` (`0x0A`), que **não aparece** dentro de nenhuma sequência UTF-8. Não há conversão, não há
+fronteira para errar — e, de quebra, um dump em Latin-1 passa intacto, onde o decodificador do Node
+o teria substituído por `U+FFFD`.
+
+**O `stderr` precisa ser drenado em paralelo, não depois.** Lê-lo após o fim do processo trava o
+dump assim que o pipe de erro enche — e qualquer `mysqldump` com muitos avisos enche. As duas
+saídas vão para `tokio::spawn` antes de a escrita começar.
+
+**O checksum é dos bytes descomprimidos, e isso não é detalhe.** O cabeçalho do gzip carrega
+timestamp: comprimir o mesmo dump duas vezes produz arquivos diferentes. Um checksum do `.gz` nunca
+bateria entre duas execuções e seria inútil para verificar integridade. O `HashingWriter` fica
+**antes** do encoder, como no Adonis.
+
+**O extractor `Multipart` do Axum precisou de `Result`.** A rejeição dele responde `400 text/plain`,
+e o golden `backups/import-no-file` grava **422** com o corpo da família dos controllers. É o mesmo
+motivo pelo qual `json_body` não usa o extractor `Json` (registrado na Fase 5): um cliente que
+errasse o `Content-Type` receberia um contrato de erro que não existe em nenhuma outra rota.
+
+**O parâmetro de rota tem que ter o mesmo nome na mesma posição.** `GET /api/connections/:connectionId/backups`
+foi registrada como `/{id}/backups`, e não `/{connection_id}/backups`: o roteador do Axum entra em
+pânico no boot com "conflicting route" quando duas rotas do mesmo prefixo usam nomes diferentes
+para o parâmetro na mesma posição. O nome do parâmetro não aparece no contrato; o pânico apareceria
+só no boot de produção.
+
+**Um defeito encontrado e corrigido no adaptador de filtro.** A primeira versão devolvia os bytes
+não aceitos pelo `stdin` para o buffer de linha. O `stdin` de um processo aceita escrita parcial —
+o pipe tem buffer finito e o `psql` consome no ritmo dele —, então o resto seria **filtrado uma
+segunda vez**: linhas já aprovadas passariam de novo pelas regras, e um bloco `COPY` cortado no
+meio mudaria o estado do filtro. Corrigido com uma fila de saída separada (`outbox`), que guarda o
+que já foi aprovado mas ainda não foi aceito.
+
+**`inferDatabaseName` tem um quirk que foi preservado.** O padrão `[_-]?\d{8,}[_-]?` consome os
+separadores dos **dois** lados do bloco de 8+ dígitos, e a hora (6 dígitos) fica colada:
+`vendas_20260809_120000.sql.gz` vira `vendas120000`, não `vendas`. O valor é só o default de
+`databaseName` quando o formulário não o envia, mas aparece na listagem — "corrigir" mudaria o que
+fica gravado em todo backup importado sem nome. Está fixado por teste, com o motivo escrito.
+
+### Três divergências deliberadas
+
+**`clearBeforeRestore` usa o driver, não o CLI.** O Adonis dá `spawn` em `psql`/`mysql` só para
+rodar três comandos de DDL. Pelo `database_driver` não há processo filho nem dependência de binário
+no PATH — mesma escolha já registrada na Fase 6 para `create-database`. O restore em si continua
+pelo CLI: nenhum driver executa um dump com centenas de milhares de instruções de forma confiável.
+
+**A restauração roda num worker do Loco, não num `tokio::spawn`.** O `spawn` solto some do radar:
+não respeita o `workers.mode` configurado e, no ambiente de teste (`ForegroundBlocking`), rodaria
+em paralelo com as asserções em vez de antes delas. O worker é o gancho que o framework já oferece
+— e o `perform` devolve `Err` **só** para falha de infraestrutura, porque devolver `Err` para uma
+restauração que falhou faria a fila tentar de novo e restaurar o banco duas vezes.
+
+**A listagem ganhou teto de 100 itens por página.** O `BackupsController` do Adonis não tem teto, e
+`?limit=1000000` seria um jeito barato de derrubar o processo pela memória. É a mesma proteção que
+`GET /api/audit-logs` já aplica, e o contrato só fixa o comportamento com valores razoáveis.
+
+### O que ficou de fora, e por quê
+
+- **Upload e download em storage remoto.** O dump é gravado localmente e o `DELETE` remove só a
+  cópia local. Os dois pontos emitem `tracing::warn!` explícito nomeando a Fase 8 — "o backup foi
+  para o S3" nunca pode ser uma suposição de quem lê o log, e um `DELETE` silencioso deixaria o
+  objeto no bucket para sempre. É a pendência **7.9**.
+- **Os eventos de progresso não saem pelo SSE** — vão para o canal interno, como a própria 7.8
+  prevê. A 10.3 pluga o assinante.
+- **`MYSQL_PWD` não substituiu `--password=`.** O `mysqldump` recebe a senha na linha de comando,
+  onde ela aparece no `ps` da máquina — é o que o Adonis faz, e trocar mudaria comportamento
+  observável que nenhum teste de contrato cobre. Fica registrado para a revisão de segurança da
+  **12.8** decidir, em vez de mudar em silêncio dentro de um porte.
+- **`pg_dump -Fc` continua sendo só um formato de importação.** O dump gerado pelo back-roco é
+  sempre `.sql.gz`, igual ao do Adonis.
 
 ---
 
@@ -1015,7 +1133,7 @@ frontend atual consome o stream do `back-roco` sem alteração.
 **Duração estimada:** 2–3 semanas · **Depende de:** todas as anteriores
 
 - [ ] 12.1 — **Suíte de contrato 100% verde** contra o `back-roco`. Zero rota descoberta.
-- [ ] 12.2 — Diff automatizado Adonis × Roco: rodar a suíte contra os dois em paralelo e comparar respostas campo a campo.
+- [ ] 12.2 — Diff automatizado Adonis × Roco: rodar a suíte contra os dois em paralelo e comparar respostas campo a campo. **Inclui a validação byte-a-byte do backup/restore herdada da Fase 7** — ela exige `mysqldump`/`pg_dump` no PATH e o compose da 0.7, e é aqui que os dois lados rodam lado a lado.
 - [ ] 12.3 — Swagger conforme D10 — comparar com `openapi-baseline.json`.
 - [ ] 12.4 — Fallback SPA + `@adonisjs/static` equivalente (servir `public/`).
 - [ ] 12.5 — **Frontend contra o `back-roco`** — rodar a suíte E2E do frontend sem nenhuma alteração de código.
@@ -1033,189 +1151,220 @@ frontend atual consome o stream do `back-roco` sem alteração.
 
 ## Resumo de esforço
 
-| Fase | Escopo | Estimativa | Risco |
-|---|---|---|---|
-| 0 | Inventário e decisões | 2–3 dias | 🟢 |
-| 1 | Harness de contrato | 3–5 dias | 🟢 |
-| 2 | 85 testes de endpoint | 3–4 semanas | 🟡 |
-| 3 | Fundação | 1–2 semanas | 🟡 |
-| 4 | Schema e migrations | 1 semana | 🟡 |
-| 5 | Auth/Users/Audit/System | 1–2 semanas | 🟢 |
-| 6 | Connections + drivers | 2–3 semanas | 🟡 |
-| 7 | Backups/dump/restore | 3–4 semanas | 🔴 |
-| 8 | Storages multi-provider | 3–4 semanas | 🔴 |
-| 9 | Docker Manager | 2–3 semanas | 🔴 |
-| 10 | SSE/scheduler/workers | 2 semanas | 🟡 |
-| 11 | System avançado | 1–2 semanas | 🟡 |
-| 12 | Paridade e cutover | 2–3 semanas | 🟡 |
+| Fase | Escopo | Estimativa | Risco | Estado |
+|---|---|---|---|---|
+| 0 | Inventário e decisões | 2–3 dias | 🟢 | ✅ concluída |
+| 1 | Harness de contrato | 3–5 dias | 🟢 | ✅ concluída |
+| 2 | 85 testes de endpoint | 3–4 semanas | 🟡 | ✅ concluída |
+| 3 | Fundação | 1–2 semanas | 🟡 | ✅ concluída |
+| 4 | Schema e migrations | 1 semana | 🟡 | ✅ concluída |
+| 5 | Auth/Users/Audit/System | 1–2 semanas | 🟢 | ✅ concluída |
+| 6 | Connections + drivers | 2–3 semanas | 🟡 | ✅ concluída |
+| 7 | Backups/dump/restore | 3–4 semanas | 🔴 | ✅ concluída (7.9 parcial → Fase 8) |
+| 8 | Storages multi-provider | 3–4 semanas | 🔴 | ⬜ próxima |
+| 9 | Docker Manager | 2–3 semanas | 🔴 | ⬜ pode entrar em paralelo |
+| 10 | SSE/scheduler/workers | 2 semanas | 🟡 | ⬜ pode entrar em paralelo |
+| 11 | System avançado | 1–2 semanas | 🟡 | ⬜ depende de 9 e 10 |
+| 12 | Paridade e cutover | 2–3 semanas | 🟡 | ⬜ |
 
 **Total sequencial: ~5–7 meses.** Com as Fases 1–2 em paralelo às 3–4, e a Fase 9 em paralelo
 às 6–8, cai para **~4–5 meses** com duas frentes de trabalho.
+
+### O que a Fase 8 herda
+
+Quatro pendências fecham quando os adaptadores de storage existirem. Nenhuma delas é surpresa: as
+três da Fase 7 avisam em tempo de execução, e a da Fase 5 já estava registrada lá.
+
+| Herdada de | O quê | Onde está sinalizado |
+|---|---|---|
+| 7.9 | Remover o objeto no destino remoto ao apagar um backup | `tracing::warn!` no `DELETE /api/backups/:id` |
+| 7.2 | Enviar o dump para o destino remoto depois de gravá-lo | `tracing::warn!` ao fim de `run_backup` |
+| 7.6 | Baixar o arquivo de um destino remoto para restaurar | mensagem de erro nomeando a Fase 8 |
+| 5.x | `storageSpaces` de `GET /api/stats` sai como `[]` | registrado na Fase 5 |
 
 ---
 
 ## Apêndice A — Matriz completa de endpoints
 
-Legenda: **T** = teste de contrato escrito (Fase 2) · **P** = portado no `back-roco` · **V** = verde contra o Roco
+Legenda: **T** = teste de contrato escrito (Fase 2) · **P** = portado no `back-roco` ·
+**V** = verde contra o Roco. Valores: ✅ pronto · 🟡 parcial (o motivo está na fase correspondente) ·
+⬜ não começou.
+
+**Placar de paridade — atualizado ao fim da Fase 7:**
+
+| | Pares método+rota | % |
+|---|---:|---:|
+| **T** — teste de contrato escrito | 87 / 87 | 100% |
+| **P** — portado (28 ✅ + 2 🟡) | 30 / 87 | 34% |
+| **V** — verde contra o Roco | 0 / 87 | 0% |
+
+A coluna **V** só começa a mudar na **12.1**: rodar a suíte de contrato contra o `back-roco` exige
+o alvo `roco` do harness, que é a tarefa **12.2**. Marcar V antes disso seria afirmar paridade
+verificada com base nos testes Rust, que medem outra coisa — eles são a rede interna, não o
+contrato.
+
+> As linhas 14 e 22 valem **dois** pares método+rota cada (`PUT` e `PATCH` no mesmo handler), e é
+> por isso que 30 linhas marcadas em P correspondem aos 30 caminhos que `cargo loco routes` lista
+> hoje sob `/api`.
 
 ### Público
 
 | # | Método | Rota | Controller | Limiter | T | P | V |
 |---|---|---|---|---|:-:|:-:|:-:|
-| 1 | GET | `/api/health` | inline | global | ⬜ | ⬜ | ⬜ |
-| 2 | GET | `/api/swagger` | autoswagger | global | ⬜ | ⬜ | ⬜ |
-| 3 | GET | `/api/docs` | autoswagger | global | ⬜ | ⬜ | ⬜ |
-| 4 | GET | `/api/auth/status` | Auth.checkStatus | global | ⬜ | ⬜ | ⬜ |
-| 5 | POST | `/api/auth/register` | Auth.register | auth (ip-email) | ⬜ | ⬜ | ⬜ |
-| 6 | POST | `/api/auth/login` | Auth.login | auth (ip-email) | ⬜ | ⬜ | ⬜ |
+| 1 | GET | `/api/health` | inline | global | ✅ | ⬜ | ⬜ |
+| 2 | GET | `/api/swagger` | autoswagger | global | ✅ | ⬜ | ⬜ |
+| 3 | GET | `/api/docs` | autoswagger | global | ✅ | ⬜ | ⬜ |
+| 4 | GET | `/api/auth/status` | Auth.checkStatus | global | ✅ | ✅ | ⬜ |
+| 5 | POST | `/api/auth/register` | Auth.register | auth (ip-email) | ✅ | ✅ | ⬜ |
+| 6 | POST | `/api/auth/login` | Auth.login | auth (ip-email) | ✅ | ✅ | ⬜ |
 
 ### Auth protegido
 
 | # | Método | Rota | Controller | Limiter | T | P | V |
 |---|---|---|---|---|:-:|:-:|:-:|
-| 7 | GET | `/api/auth/me` | Auth.me | global | ⬜ | ⬜ | ⬜ |
-| 8 | POST | `/api/auth/logout` | Auth.logout | global | ⬜ | ⬜ | ⬜ |
+| 7 | GET | `/api/auth/me` | Auth.me | global | ✅ | ✅ | ⬜ |
+| 8 | POST | `/api/auth/logout` | Auth.logout | global | ✅ | ✅ | ⬜ |
 
 ### Connections
 
 | # | Método | Rota | Controller | Limiter | T | P | V |
 |---|---|---|---|---|:-:|:-:|:-:|
-| 9 | POST | `/api/connections/discover-databases` | Connections.discoverDatabases | strict | ⬜ | ⬜ | ⬜ |
-| 10 | GET | `/api/connections/docker-hosts` | Connections.dockerHosts | global | ⬜ | ⬜ | ⬜ |
-| 11 | GET | `/api/connections` | Connections.index | global | ⬜ | ⬜ | ⬜ |
-| 12 | POST | `/api/connections` | Connections.store | global | ⬜ | ⬜ | ⬜ |
-| 13 | GET | `/api/connections/:id` | Connections.show | global | ⬜ | ⬜ | ⬜ |
-| 14 | PUT/PATCH | `/api/connections/:id` | Connections.update | global | ⬜ | ⬜ | ⬜ |
-| 15 | DELETE | `/api/connections/:id` | Connections.destroy | global | ⬜ | ⬜ | ⬜ |
-| 16 | POST | `/api/connections/:id/test` | Connections.test | strict | ⬜ | ⬜ | ⬜ |
-| 17 | POST | `/api/connections/:id/create-database` | Connections.createDatabase | strict | ⬜ | ⬜ | ⬜ |
-| 18 | POST | `/api/connections/:id/backup` | Connections.backup | backup | ⬜ | ⬜ | ⬜ |
+| 9 | POST | `/api/connections/discover-databases` | Connections.discoverDatabases | strict | ✅ | ✅ | ⬜ |
+| 10 | GET | `/api/connections/docker-hosts` | Connections.dockerHosts | global | ✅ | 🟡 | ⬜ |
+| 11 | GET | `/api/connections` | Connections.index | global | ✅ | ✅ | ⬜ |
+| 12 | POST | `/api/connections` | Connections.store | global | ✅ | ✅ | ⬜ |
+| 13 | GET | `/api/connections/:id` | Connections.show | global | ✅ | ✅ | ⬜ |
+| 14 | PUT/PATCH | `/api/connections/:id` | Connections.update | global | ✅ | ✅ | ⬜ |
+| 15 | DELETE | `/api/connections/:id` | Connections.destroy | global | ✅ | ✅ | ⬜ |
+| 16 | POST | `/api/connections/:id/test` | Connections.test | strict | ✅ | ✅ | ⬜ |
+| 17 | POST | `/api/connections/:id/create-database` | Connections.createDatabase | strict | ✅ | ✅ | ⬜ |
+| 18 | POST | `/api/connections/:id/backup` | Connections.backup | backup | ✅ | ✅ | ⬜ |
 
 ### Storage Destinations (legado)
 
 | # | Método | Rota | Controller | Limiter | T | P | V |
 |---|---|---|---|---|:-:|:-:|:-:|
-| 19 | GET | `/api/storage-destinations` | StorageDestinations.index | global | ⬜ | ⬜ | ⬜ |
-| 20 | POST | `/api/storage-destinations` | StorageDestinations.store | global | ⬜ | ⬜ | ⬜ |
-| 21 | GET | `/api/storage-destinations/:id` | StorageDestinations.show | global | ⬜ | ⬜ | ⬜ |
-| 22 | PUT/PATCH | `/api/storage-destinations/:id` | StorageDestinations.update | global | ⬜ | ⬜ | ⬜ |
-| 23 | DELETE | `/api/storage-destinations/:id` | StorageDestinations.destroy | global | ⬜ | ⬜ | ⬜ |
-| 24 | GET | `/api/storage-destinations-space` | StorageDestinations.spaceAll | global | ⬜ | ⬜ | ⬜ |
-| 25 | GET | `/api/storage-destinations/:id/space` | StorageDestinations.space | global | ⬜ | ⬜ | ⬜ |
+| 19 | GET | `/api/storage-destinations` | StorageDestinations.index | global | ✅ | ⬜ | ⬜ |
+| 20 | POST | `/api/storage-destinations` | StorageDestinations.store | global | ✅ | ⬜ | ⬜ |
+| 21 | GET | `/api/storage-destinations/:id` | StorageDestinations.show | global | ✅ | ⬜ | ⬜ |
+| 22 | PUT/PATCH | `/api/storage-destinations/:id` | StorageDestinations.update | global | ✅ | ⬜ | ⬜ |
+| 23 | DELETE | `/api/storage-destinations/:id` | StorageDestinations.destroy | global | ✅ | ⬜ | ⬜ |
+| 24 | GET | `/api/storage-destinations-space` | StorageDestinations.spaceAll | global | ✅ | ⬜ | ⬜ |
+| 25 | GET | `/api/storage-destinations/:id/space` | StorageDestinations.space | global | ✅ | ⬜ | ⬜ |
 
 ### Storages
 
 | # | Método | Rota | Controller | Limiter | T | P | V |
 |---|---|---|---|---|:-:|:-:|:-:|
-| 26 | GET | `/api/storages` | Storages.index | global | ⬜ | ⬜ | ⬜ |
-| 27 | POST | `/api/storages` | Storages.store | global | ⬜ | ⬜ | ⬜ |
-| 28 | GET | `/api/storages/copy-jobs/:jobId` | Storages.copyStatus | global | ⬜ | ⬜ | ⬜ |
-| 29 | GET | `/api/storages/archive-jobs/:jobId` | Storages.archiveJobStatus | global | ⬜ | ⬜ | ⬜ |
-| 30 | GET | `/api/storages/archive-jobs/:jobId/download` | Storages.downloadArchive | global | ⬜ | ⬜ | ⬜ |
-| 31 | GET | `/api/storages/:id` | Storages.show | global | ⬜ | ⬜ | ⬜ |
-| 32 | PUT | `/api/storages/:id` | Storages.update | global | ⬜ | ⬜ | ⬜ |
-| 33 | DELETE | `/api/storages/:id` | Storages.destroy | global | ⬜ | ⬜ | ⬜ |
-| 34 | POST | `/api/storages/:id/test` | Storages.test | strict | ⬜ | ⬜ | ⬜ |
-| 35 | GET | `/api/storages/:id/browse` | Storages.browse | global | ⬜ | ⬜ | ⬜ |
-| 36 | DELETE | `/api/storages/:id/object` | Storages.destroyObject | global | ⬜ | ⬜ | ⬜ |
-| 37 | POST | `/api/storages/:id/copy` | Storages.startCopy | backup | ⬜ | ⬜ | ⬜ |
-| 38 | POST | `/api/storages/:id/archive` | Storages.startArchive | backup | ⬜ | ⬜ | ⬜ |
+| 26 | GET | `/api/storages` | Storages.index | global | ✅ | ⬜ | ⬜ |
+| 27 | POST | `/api/storages` | Storages.store | global | ✅ | ⬜ | ⬜ |
+| 28 | GET | `/api/storages/copy-jobs/:jobId` | Storages.copyStatus | global | ✅ | ⬜ | ⬜ |
+| 29 | GET | `/api/storages/archive-jobs/:jobId` | Storages.archiveJobStatus | global | ✅ | ⬜ | ⬜ |
+| 30 | GET | `/api/storages/archive-jobs/:jobId/download` | Storages.downloadArchive | global | ✅ | ⬜ | ⬜ |
+| 31 | GET | `/api/storages/:id` | Storages.show | global | ✅ | ⬜ | ⬜ |
+| 32 | PUT | `/api/storages/:id` | Storages.update | global | ✅ | ⬜ | ⬜ |
+| 33 | DELETE | `/api/storages/:id` | Storages.destroy | global | ✅ | ⬜ | ⬜ |
+| 34 | POST | `/api/storages/:id/test` | Storages.test | strict | ✅ | ⬜ | ⬜ |
+| 35 | GET | `/api/storages/:id/browse` | Storages.browse | global | ✅ | ⬜ | ⬜ |
+| 36 | DELETE | `/api/storages/:id/object` | Storages.destroyObject | global | ✅ | ⬜ | ⬜ |
+| 37 | POST | `/api/storages/:id/copy` | Storages.startCopy | backup | ✅ | ⬜ | ⬜ |
+| 38 | POST | `/api/storages/:id/archive` | Storages.startArchive | backup | ✅ | ⬜ | ⬜ |
 
 ### Backups
 
 | # | Método | Rota | Controller | Limiter | T | P | V |
 |---|---|---|---|---|:-:|:-:|:-:|
-| 39 | GET | `/api/backups` | Backups.index | global | ⬜ | ⬜ | ⬜ |
-| 40 | GET | `/api/connections/:connectionId/backups` | Backups.byConnection | global | ⬜ | ⬜ | ⬜ |
-| 41 | GET | `/api/backups/:id` | Backups.show | global | ⬜ | ⬜ | ⬜ |
-| 42 | GET | `/api/backups/:id/download` | Backups.download | global | ⬜ | ⬜ | ⬜ |
-| 43 | POST | `/api/backups/:id/restore` | Backups.restore | strict | ⬜ | ⬜ | ⬜ |
-| 44 | DELETE | `/api/backups/:id` | Backups.destroy | global | ⬜ | ⬜ | ⬜ |
-| 45 | POST | `/api/backups/import` | Backups.import | backup | ⬜ | ⬜ | ⬜ |
+| 39 | GET | `/api/backups` | Backups.index | global | ✅ | ✅ | ⬜ |
+| 40 | GET | `/api/connections/:connectionId/backups` | Backups.byConnection | global | ✅ | ✅ | ⬜ |
+| 41 | GET | `/api/backups/:id` | Backups.show | global | ✅ | ✅ | ⬜ |
+| 42 | GET | `/api/backups/:id/download` | Backups.download | global | ✅ | ✅ | ⬜ |
+| 43 | POST | `/api/backups/:id/restore` | Backups.restore | strict | ✅ | ✅ | ⬜ |
+| 44 | DELETE | `/api/backups/:id` | Backups.destroy | global | ✅ | ✅ | ⬜ |
+| 45 | POST | `/api/backups/import` | Backups.import | backup | ✅ | ✅ | ⬜ |
 
 ### System
 
 | # | Método | Rota | Controller | Limiter | T | P | V |
 |---|---|---|---|---|:-:|:-:|:-:|
-| 46 | GET | `/api/stats` | System.stats | global | ⬜ | ⬜ | ⬜ |
-| 47 | GET | `/api/system/status` | System.status | global | ⬜ | ⬜ | ⬜ |
-| 48 | GET | `/api/system/diagnostics` | System.diagnostics | global | ⬜ | ⬜ | ⬜ |
-| 49 | GET | `/api/system/diagnostics/:name/download` | System.downloadDiagnostic | strict | ⬜ | ⬜ | ⬜ |
-| 50 | DELETE | `/api/system/diagnostics/:name` | System.destroyDiagnostic | strict | ⬜ | ⬜ | ⬜ |
-| 51 | GET | `/api/system/containers/resources` | System.containerResources | global | ⬜ | ⬜ | ⬜ |
-| 52 | GET | `/api/system/resources/history` | System.resourcesHistory | global | ⬜ | ⬜ | ⬜ |
-| 53 | GET | `/api/system/backup-retention` | System.backupRetentionPolicy | global | ⬜ | ⬜ | ⬜ |
-| 54 | PUT | `/api/system/backup-retention` | System.updateBackupRetentionPolicy | strict | ⬜ | ⬜ | ⬜ |
-| 55 | POST | `/api/system/backup-retention/run` | System.runBackupRetention | strict | ⬜ | ⬜ | ⬜ |
+| 46 | GET | `/api/stats` | System.stats | global | ✅ | 🟡 | ⬜ |
+| 47 | GET | `/api/system/status` | System.status | global | ✅ | ✅ | ⬜ |
+| 48 | GET | `/api/system/diagnostics` | System.diagnostics | global | ✅ | ⬜ | ⬜ |
+| 49 | GET | `/api/system/diagnostics/:name/download` | System.downloadDiagnostic | strict | ✅ | ⬜ | ⬜ |
+| 50 | DELETE | `/api/system/diagnostics/:name` | System.destroyDiagnostic | strict | ✅ | ⬜ | ⬜ |
+| 51 | GET | `/api/system/containers/resources` | System.containerResources | global | ✅ | ⬜ | ⬜ |
+| 52 | GET | `/api/system/resources/history` | System.resourcesHistory | global | ✅ | ⬜ | ⬜ |
+| 53 | GET | `/api/system/backup-retention` | System.backupRetentionPolicy | global | ✅ | ⬜ | ⬜ |
+| 54 | PUT | `/api/system/backup-retention` | System.updateBackupRetentionPolicy | strict | ✅ | ⬜ | ⬜ |
+| 55 | POST | `/api/system/backup-retention/run` | System.runBackupRetention | strict | ✅ | ⬜ | ⬜ |
 
 ### Audit Logs
 
 | # | Método | Rota | Controller | Limiter | T | P | V |
 |---|---|---|---|---|:-:|:-:|:-:|
-| 56 | GET | `/api/audit-logs` | AuditLogs.index | global | ⬜ | ⬜ | ⬜ |
-| 57 | GET | `/api/audit-logs/stats` | AuditLogs.stats | global | ⬜ | ⬜ | ⬜ |
-| 58 | GET | `/api/audit-logs/:id` | AuditLogs.show | global | ⬜ | ⬜ | ⬜ |
+| 56 | GET | `/api/audit-logs` | AuditLogs.index | global | ✅ | ✅ | ⬜ |
+| 57 | GET | `/api/audit-logs/stats` | AuditLogs.stats | global | ✅ | ✅ | ⬜ |
+| 58 | GET | `/api/audit-logs/:id` | AuditLogs.show | global | ✅ | ✅ | ⬜ |
 
 ### Users
 
 | # | Método | Rota | Controller | Limiter | T | P | V |
 |---|---|---|---|---|:-:|:-:|:-:|
-| 59 | GET | `/api/users` | Users.index | global | ⬜ | ⬜ | ⬜ |
-| 60 | PATCH | `/api/users/:id/status` | Users.toggleStatus | global | ⬜ | ⬜ | ⬜ |
+| 59 | GET | `/api/users` | Users.index | global | ✅ | ✅ | ⬜ |
+| 60 | PATCH | `/api/users/:id/status` | Users.toggleStatus | global | ✅ | ✅ | ⬜ |
 
 ### Docker — Containers
 
 | # | Método | Rota | Controller | Limiter | T | P | V |
 |---|---|---|---|---|:-:|:-:|:-:|
-| 61 | GET | `/api/docker/status` | DockerManager.status | global | ⬜ | ⬜ | ⬜ |
-| 62 | GET | `/api/docker/containers` | DockerManager.listContainers | global | ⬜ | ⬜ | ⬜ |
-| 63 | GET | `/api/docker/containers/:id` | DockerManager.inspectContainer | global | ⬜ | ⬜ | ⬜ |
-| 64 | GET | `/api/docker/containers/:id/logs` | DockerManager.containerLogs | global | ⬜ | ⬜ | ⬜ |
-| 65 | DELETE | `/api/docker/containers/:id/logs` | DockerManager.clearContainerLogs | strict | ⬜ | ⬜ | ⬜ |
-| 66 | POST | `/api/docker/containers/:id/start` | DockerManager.startContainer | strict | ⬜ | ⬜ | ⬜ |
-| 67 | POST | `/api/docker/containers/:id/stop` | DockerManager.stopContainer | strict | ⬜ | ⬜ | ⬜ |
-| 68 | POST | `/api/docker/containers/:id/restart` | DockerManager.restartContainer | strict | ⬜ | ⬜ | ⬜ |
-| 69 | DELETE | `/api/docker/containers/:id` | DockerManager.removeContainer | strict | ⬜ | ⬜ | ⬜ |
+| 61 | GET | `/api/docker/status` | DockerManager.status | global | ✅ | ⬜ | ⬜ |
+| 62 | GET | `/api/docker/containers` | DockerManager.listContainers | global | ✅ | ⬜ | ⬜ |
+| 63 | GET | `/api/docker/containers/:id` | DockerManager.inspectContainer | global | ✅ | ⬜ | ⬜ |
+| 64 | GET | `/api/docker/containers/:id/logs` | DockerManager.containerLogs | global | ✅ | ⬜ | ⬜ |
+| 65 | DELETE | `/api/docker/containers/:id/logs` | DockerManager.clearContainerLogs | strict | ✅ | ⬜ | ⬜ |
+| 66 | POST | `/api/docker/containers/:id/start` | DockerManager.startContainer | strict | ✅ | ⬜ | ⬜ |
+| 67 | POST | `/api/docker/containers/:id/stop` | DockerManager.stopContainer | strict | ✅ | ⬜ | ⬜ |
+| 68 | POST | `/api/docker/containers/:id/restart` | DockerManager.restartContainer | strict | ✅ | ⬜ | ⬜ |
+| 69 | DELETE | `/api/docker/containers/:id` | DockerManager.removeContainer | strict | ✅ | ⬜ | ⬜ |
 
 ### Docker — Volumes
 
 | # | Método | Rota | Controller | Limiter | T | P | V |
 |---|---|---|---|---|:-:|:-:|:-:|
-| 70 | GET | `/api/docker/volumes` | DockerManager.listVolumes | global | ⬜ | ⬜ | ⬜ |
-| 71 | GET | `/api/docker/volumes/:name` | DockerManager.inspectVolume | global | ⬜ | ⬜ | ⬜ |
-| 72 | GET | `/api/docker/volumes/:name/export` | DockerManager.exportVolume | strict | ⬜ | ⬜ | ⬜ |
-| 73 | POST | `/api/docker/volumes/:name/backup` | DockerManager.backupVolumeToStorage | backup | ⬜ | ⬜ | ⬜ |
-| 74 | DELETE | `/api/docker/volumes/:name` | DockerManager.removeVolume | strict | ⬜ | ⬜ | ⬜ |
+| 70 | GET | `/api/docker/volumes` | DockerManager.listVolumes | global | ✅ | ⬜ | ⬜ |
+| 71 | GET | `/api/docker/volumes/:name` | DockerManager.inspectVolume | global | ✅ | ⬜ | ⬜ |
+| 72 | GET | `/api/docker/volumes/:name/export` | DockerManager.exportVolume | strict | ✅ | ⬜ | ⬜ |
+| 73 | POST | `/api/docker/volumes/:name/backup` | DockerManager.backupVolumeToStorage | backup | ✅ | ⬜ | ⬜ |
+| 74 | DELETE | `/api/docker/volumes/:name` | DockerManager.removeVolume | strict | ✅ | ⬜ | ⬜ |
 
 ### Docker — Networks
 
 | # | Método | Rota | Controller | Limiter | T | P | V |
 |---|---|---|---|---|:-:|:-:|:-:|
-| 75 | GET | `/api/docker/networks` | DockerManager.listNetworks | global | ⬜ | ⬜ | ⬜ |
-| 76 | GET | `/api/docker/networks/:id` | DockerManager.inspectNetwork | global | ⬜ | ⬜ | ⬜ |
-| 77 | POST | `/api/docker/networks` | DockerManager.createNetwork | strict | ⬜ | ⬜ | ⬜ |
-| 78 | POST | `/api/docker/networks/:id/connect` | DockerManager.connectContainerToNetwork | strict | ⬜ | ⬜ | ⬜ |
-| 79 | POST | `/api/docker/networks/:id/disconnect` | DockerManager.disconnectContainerFromNetwork | strict | ⬜ | ⬜ | ⬜ |
+| 75 | GET | `/api/docker/networks` | DockerManager.listNetworks | global | ✅ | ⬜ | ⬜ |
+| 76 | GET | `/api/docker/networks/:id` | DockerManager.inspectNetwork | global | ✅ | ⬜ | ⬜ |
+| 77 | POST | `/api/docker/networks` | DockerManager.createNetwork | strict | ✅ | ⬜ | ⬜ |
+| 78 | POST | `/api/docker/networks/:id/connect` | DockerManager.connectContainerToNetwork | strict | ✅ | ⬜ | ⬜ |
+| 79 | POST | `/api/docker/networks/:id/disconnect` | DockerManager.disconnectContainerFromNetwork | strict | ✅ | ⬜ | ⬜ |
 
 ### Docker — Diagnostics e Images
 
 | # | Método | Rota | Controller | Limiter | T | P | V |
 |---|---|---|---|---|:-:|:-:|:-:|
-| 80 | POST | `/api/docker/diagnostics` | DockerDiagnostics.start | strict | ⬜ | ⬜ | ⬜ |
-| 81 | GET | `/api/docker/diagnostics/:jobId` | DockerDiagnostics.show | global | ⬜ | ⬜ | ⬜ |
-| 82 | POST | `/api/docker/images/prune` | DockerManager.pruneImages | strict | ⬜ | ⬜ | ⬜ |
-| 83 | GET | `/api/docker/images` | DockerManager.listImages | global | ⬜ | ⬜ | ⬜ |
-| 84 | GET | `/api/docker/images/:id` | DockerManager.inspectImage | global | ⬜ | ⬜ | ⬜ |
-| 85 | DELETE | `/api/docker/images/:id` | DockerManager.removeImage | strict | ⬜ | ⬜ | ⬜ |
+| 80 | POST | `/api/docker/diagnostics` | DockerDiagnostics.start | strict | ✅ | ⬜ | ⬜ |
+| 81 | GET | `/api/docker/diagnostics/:jobId` | DockerDiagnostics.show | global | ✅ | ⬜ | ⬜ |
+| 82 | POST | `/api/docker/images/prune` | DockerManager.pruneImages | strict | ✅ | ⬜ | ⬜ |
+| 83 | GET | `/api/docker/images` | DockerManager.listImages | global | ✅ | ⬜ | ⬜ |
+| 84 | GET | `/api/docker/images/:id` | DockerManager.inspectImage | global | ✅ | ⬜ | ⬜ |
+| 85 | DELETE | `/api/docker/images/:id` | DockerManager.removeImage | strict | ✅ | ⬜ | ⬜ |
 
 ### Não-API
 
 | # | Método | Rota | Origem | T | P | V |
 |---|---|---|---|:-:|:-:|:-:|
-| 88 | GET | `/__transmit/events` | `@adonisjs/transmit` (stream SSE) | ⬜ | ⬜ | ⬜ |
-| 89 | POST | `/__transmit/subscribe` | `@adonisjs/transmit` | ⬜ | ⬜ | ⬜ |
-| 90 | POST | `/__transmit/unsubscribe` | `@adonisjs/transmit` | ⬜ | ⬜ | ⬜ |
-| 91 | GET | `*` | Fallback SPA | ⬜ | ⬜ | ⬜ |
+| 88 | GET | `/__transmit/events` | `@adonisjs/transmit` (stream SSE) | ✅ | ⬜ | ⬜ |
+| 89 | POST | `/__transmit/subscribe` | `@adonisjs/transmit` | ✅ | ⬜ | ⬜ |
+| 90 | POST | `/__transmit/unsubscribe` | `@adonisjs/transmit` | ✅ | ⬜ | ⬜ |
+| 91 | GET | `*` | Fallback SPA | ✅ | ⬜ | ⬜ |
 
 > As linhas 14 e 22 contam **dois** pares método+rota cada (`PUT` e `PATCH` no mesmo handler),
 > por isso a numeração 1–85 cobre 87 pares. Fonte de verdade: `docs/routes-baseline.txt`.

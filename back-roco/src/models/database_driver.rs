@@ -69,6 +69,25 @@ impl DatabaseTarget {
     fn is_postgres(&self) -> bool {
         matches!(self.kind, DatabaseType::Postgresql)
     }
+
+    /// O mesmo alvo apontando para outro banco.
+    ///
+    /// Existe porque duas operacoes precisam falar com o servidor **fora** do
+    /// banco em questao — derrubar um database e conferir se ele existe. A
+    /// struct nao deriva `Clone` de proposito (ela carrega a senha em claro),
+    /// entao a copia e' explicita e visivel na revisao.
+    #[must_use]
+    pub fn with_database(&self, database: Option<String>) -> Self {
+        Self {
+            kind: self.kind,
+            host: self.host.clone(),
+            port: self.port,
+            username: self.username.clone(),
+            password: self.password.clone(),
+            database,
+            ssl: self.ssl,
+        }
+    }
 }
 
 /// Resultado de um teste de conexao bem-sucedido.
@@ -228,6 +247,56 @@ pub async fn create_database(target: &DatabaseTarget, name: &str) -> Result<(), 
         .execute(&mut connection)
         .await
         .map_err(|err| query_error(&err))?;
+        let _ = connection.close().await;
+    }
+
+    Ok(())
+}
+
+/// Esvazia o banco de destino antes de uma restauracao (`clearBeforeRestore`).
+///
+/// PostgreSQL descarta e recria o schema `public`; MySQL/MariaDB derrubam e
+/// recriam o **database**. A assimetria e' a do Adonis e vem dos motores:
+/// dropar o database no PostgreSQL exigiria estar conectado a outro banco e
+/// derrubaria todas as sessoes abertas nele.
+///
+/// Nao ha' `IF EXISTS` no lado do PostgreSQL de proposito: o chamador so' pede
+/// limpeza depois de confirmar que o banco existe, e um `DROP SCHEMA` que
+/// silenciosamente nao encontra nada esconderia um destino errado.
+pub async fn clear_database(target: &DatabaseTarget, name: &str) -> Result<(), DriverError> {
+    let quoted = quote_identifier(name, target.is_postgres())?;
+
+    if target.is_postgres() {
+        let mut connection = connect_postgres(target).await?;
+
+        for statement in [
+            "DROP SCHEMA public CASCADE",
+            "CREATE SCHEMA public",
+            "GRANT ALL ON SCHEMA public TO public",
+        ] {
+            sqlx::query(AssertSqlSafe(statement.to_string()))
+                .execute(&mut connection)
+                .await
+                .map_err(|err| query_error(&err))?;
+        }
+
+        let _ = connection.close().await;
+    } else {
+        // Conecta **fora** do banco que vai cair. Estar dentro dele deixaria a
+        // sessao sem banco default no meio da operacao, e o `CREATE` seguinte
+        // dependeria de um detalhe de implementacao do servidor.
+        let mut connection = connect_mysql(&target.with_database(None)).await?;
+
+        for statement in [
+            format!("DROP DATABASE IF EXISTS {quoted}"),
+            format!("CREATE DATABASE {quoted} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"),
+        ] {
+            sqlx::query(AssertSqlSafe(statement))
+                .execute(&mut connection)
+                .await
+                .map_err(|err| query_error(&err))?;
+        }
+
         let _ = connection.close().await;
     }
 

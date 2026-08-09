@@ -21,7 +21,7 @@ use crate::{
         resource_metric_history, storage_destinations, system_settings, users,
     },
     tasks,
-    workers::downloader::DownloadWorker,
+    workers::{downloader::DownloadWorker, restore::RestoreWorker},
 };
 
 pub struct App;
@@ -80,12 +80,17 @@ impl Hooks for App {
         AppRoutes::with_default_routes()
             .add_route(controllers::auth::routes(&limiters))
             .add_route(controllers::connections::routes(&limiters))
+            // Antes das rotas de `connections`: `/{connection_id}/backups` e'
+            // mais especifica que `/{id}`, e o Axum casa a primeira que servir.
+            .add_route(controllers::backups::connection_routes())
+            .add_route(controllers::backups::routes(&limiters))
             .add_route(controllers::users::routes())
             .add_route(controllers::audit_logs::routes())
             .add_route(controllers::system::routes())
     }
     async fn connect_workers(ctx: &AppContext, queue: &Queue) -> Result<()> {
         queue.register(DownloadWorker::build(ctx)).await?;
+        queue.register(RestoreWorker::build(ctx)).await?;
         Ok(())
     }
 

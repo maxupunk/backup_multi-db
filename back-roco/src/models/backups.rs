@@ -195,6 +195,30 @@ impl Model {
         self.status.parse()
     }
 
+    /// O backup ainda esta' sendo produzido?
+    ///
+    /// `pending` conta como em andamento: o registro nasce assim, e a janela
+    /// entre a criacao da linha e o `mark_as_started` e' exatamente onde uma
+    /// remocao apagaria o arquivo que o dump esta' escrevendo.
+    #[must_use]
+    pub fn is_running(&self) -> bool {
+        matches!(
+            self.status_enum(),
+            Ok(BackupStatus::Running | BackupStatus::Pending)
+        )
+    }
+
+    /// Regra de `protected` (tarefa 7.10).
+    ///
+    /// Um backup protegido e' o que sobrevive a' poda da retencao; permitir que
+    /// o `DELETE` o remova esvaziaria a protecao pelo caminho mais obvio. Um
+    /// backup em andamento tambem nao sai: o processo de dump ainda tem o
+    /// arquivo aberto.
+    #[must_use]
+    pub fn can_be_deleted(&self) -> bool {
+        !self.protected.unwrap_or(false) && !self.is_running()
+    }
+
     pub fn retention(&self) -> std::result::Result<RetentionType, UnknownValue> {
         self.retention_type.parse()
     }
@@ -356,9 +380,223 @@ impl Model {
     }
 }
 
+// ============================================================================
+// Consultas de `/api/backups` (tarefa 7.1)
+// ============================================================================
+
+/// Query string de `GET /api/backups`.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct ListQuery {
+    pub page: Option<String>,
+    pub limit: Option<String>,
+    pub status: Option<String>,
+    #[serde(rename = "connectionId")]
+    pub connection_id: Option<String>,
+    #[serde(rename = "databaseName")]
+    pub database_name: Option<String>,
+}
+
+impl Model {
+    /// Uma pagina da listagem, do mais recente para o mais antigo.
+    ///
+    /// Um `connectionId` que nao seja numero **nao** vira 422: o Adonis passa o
+    /// valor cru ao `where`, o SQLite nao casa nada e a resposta e' uma lista
+    /// vazia. Reproduzir isso e' o contrato; o filtro e' ignorado, nao rejeitado.
+    pub async fn list_page(
+        db: &impl ConnectionTrait,
+        query: &ListQuery,
+        page: crate::views::pagination::PageRequest,
+    ) -> loco_rs::Result<(Vec<Self>, u64)> {
+        let condition = sea_orm::Condition::all()
+            .add_option(query.status.as_ref().map(|v| Column::Status.eq(v.as_str())))
+            .add_option(
+                query
+                    .database_name
+                    .as_ref()
+                    .map(|v| Column::DatabaseName.eq(v.as_str())),
+            )
+            .add_option(
+                query
+                    .connection_id
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                    .map(|value| {
+                        value.parse::<i64>().map_or_else(
+                            // Uma condicao impossivel, e nao a ausencia do
+                            // filtro: ignorar `?connectionId=abc` devolveria a
+                            // lista inteira, que e' o oposto do que foi pedido.
+                            |_| Column::Id.eq(-1),
+                            |id| Column::ConnectionId.eq(id),
+                        )
+                    }),
+            );
+
+        let total = Entity::find().filter(condition.clone()).count(db).await?;
+
+        let rows = Entity::find()
+            .filter(condition)
+            .order_by_desc(Column::CreatedAt)
+            // Desempate estavel: `created_at` tem resolucao de segundos, e sem
+            // isto a mesma linha pode aparecer em duas paginas (ACHADO 6).
+            .order_by_desc(Column::Id)
+            .offset(page.offset())
+            .limit(page.per_page)
+            .all(db)
+            .await?;
+
+        Ok((rows, total))
+    }
+
+    /// Uma pagina dos backups de uma conexao.
+    pub async fn list_page_for_connection(
+        db: &impl ConnectionTrait,
+        connection_id: i64,
+        page: crate::views::pagination::PageRequest,
+    ) -> loco_rs::Result<(Vec<Self>, u64)> {
+        let filter = Column::ConnectionId.eq(connection_id);
+
+        let total = Entity::find().filter(filter.clone()).count(db).await?;
+
+        let rows = Entity::find()
+            .filter(filter)
+            .order_by_desc(Column::CreatedAt)
+            .order_by_desc(Column::Id)
+            .offset(page.offset())
+            .limit(page.per_page)
+            .all(db)
+            .await?;
+
+        Ok((rows, total))
+    }
+
+    pub async fn find_one(db: &impl ConnectionTrait, id: i64) -> loco_rs::Result<Option<Self>> {
+        Ok(Entity::find_by_id(id).one(db).await?)
+    }
+
+    /// O backup com a conexao dele, numa consulta so'.
+    pub async fn find_one_with_connection(
+        db: &impl ConnectionTrait,
+        id: i64,
+    ) -> loco_rs::Result<Option<(Self, Option<super::_entities::connections::Model>)>> {
+        Ok(Entity::find_by_id(id)
+            .find_also_related(super::_entities::connections::Entity)
+            .one(db)
+            .await?)
+    }
+
+    /// Os nomes das conexoes de uma pagina de backups, numa consulta so'.
+    ///
+    /// A listagem faz `preload('connection')`: buscar dentro do laco seria uma
+    /// ida ao banco por linha da pagina.
+    pub async fn connections_of(
+        db: &impl ConnectionTrait,
+        rows: &[Self],
+    ) -> loco_rs::Result<HashMap<i64, super::_entities::connections::Model>> {
+        let ids: Vec<i64> = rows
+            .iter()
+            .filter_map(|row| row.connection_id)
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .collect();
+
+        if ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+
+        Ok(super::_entities::connections::Entity::find()
+            .filter(super::_entities::connections::Column::Id.is_in(ids))
+            .all(db)
+            .await?
+            .into_iter()
+            .map(|row| (row.id, row))
+            .collect())
+    }
+
+    pub async fn delete_by_id(db: &impl ConnectionTrait, id: i64) -> loco_rs::Result<u64> {
+        Ok(Entity::delete_by_id(id).exec(db).await?.rows_affected)
+    }
+
+    /// Metadados como JSON, ou `null` quando a coluna esta' vazia ou ilegivel.
+    ///
+    /// Um metadado corrompido nao pode derrubar a listagem inteira: e' um campo
+    /// informativo, e o registro do backup continua valendo sem ele.
+    #[must_use]
+    pub fn metadata_json(&self) -> serde_json::Value {
+        self.metadata
+            .as_deref()
+            .and_then(|raw| serde_json::from_str(raw).ok())
+            .unwrap_or(serde_json::Value::Null)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn model(status: &str, protected: Option<bool>) -> Model {
+        Model {
+            id: 1,
+            connection_id: Some(1),
+            connection_database_id: None,
+            database_name: "vendas".to_string(),
+            status: status.to_string(),
+            file_path: None,
+            file_name: None,
+            file_size: None,
+            checksum: None,
+            compressed: Some(true),
+            retention_type: "hourly".to_string(),
+            protected,
+            started_at: None,
+            finished_at: None,
+            duration_seconds: None,
+            error_message: None,
+            exit_code: None,
+            metadata: None,
+            trigger: "manual".to_string(),
+            created_at: chrono::NaiveDateTime::default(),
+            updated_at: chrono::NaiveDateTime::default(),
+            storage_destination_id: None,
+        }
+    }
+
+    #[test]
+    fn a_protected_backup_cannot_be_deleted() {
+        // Sem esta regra, a protecao contra a poda seria contornavel pelo
+        // caminho mais obvio: o botao de apagar.
+        assert!(!model("completed", Some(true)).can_be_deleted());
+        assert!(model("completed", Some(false)).can_be_deleted());
+        // A coluna e' anulavel; nulo nao pode significar "protegido".
+        assert!(model("completed", None).can_be_deleted());
+    }
+
+    #[test]
+    fn a_running_backup_cannot_be_deleted() {
+        // O processo de dump ainda tem o arquivo aberto.
+        assert!(!model("running", Some(false)).can_be_deleted());
+        // `pending` e' o estado em que a linha nasce — a janela mais perigosa.
+        assert!(!model("pending", Some(false)).can_be_deleted());
+        assert!(model("failed", Some(false)).can_be_deleted());
+        assert!(model("cancelled", Some(false)).can_be_deleted());
+    }
+
+    #[test]
+    fn an_unreadable_status_is_not_treated_as_finished() {
+        // Lixo na coluna nao pode virar permissao para apagar.
+        assert!(!model("lixo", Some(false)).is_running());
+        assert!(model("lixo", Some(false)).can_be_deleted());
+    }
+
+    #[test]
+    fn unreadable_metadata_does_not_break_the_listing() {
+        let mut row = model("completed", None);
+        row.metadata = Some("{isso nao e json".to_string());
+        assert!(row.metadata_json().is_null());
+
+        row.metadata = Some(r#"{"isImported":true}"#.to_string());
+        assert_eq!(row.metadata_json()["isImported"], true);
+    }
 
     #[test]
     fn promotes_only_upwards() {
