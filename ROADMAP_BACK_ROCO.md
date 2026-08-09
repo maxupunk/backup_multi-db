@@ -121,8 +121,51 @@ independentes e podem entrar a qualquer momento após a Fase 3).
 | D6 | Transporte SSE | ✅ **`axum::response::sse` no mesmo path** `/__transmit/*` | Replicar o protocolo do `@adonisjs/transmit`: `GET /__transmit/events`, `POST /__transmit/subscribe`, `POST /__transmit/unsubscribe` |
 | D7 | Rate limiting | ✅ **Middleware Axum próprio** (base `tower-governor`) | 4 limiters (`global`, `auth`, `strict`, `backup`), `keyBy` por IP e IP+email, headers `X-RateLimit-*` e `Retry-After` idênticos |
 | D8 | Cutover | ✅ **Big-bang ao final da Fase 12** | Sem proxy intermediário. Todo o risco concentrado num evento → as Fases 12.12–12.14 (shadow traffic e runbook de rollback) passam a ser **obrigatórias**, não opcionais |
-| D9 | Erros HTTP | ✅ **Shape do VineJS**: `{ message, errors: [{ message, field, rule }] }` | `impl IntoResponse` traduzindo `validator::ValidationErrors` para esse formato |
+| D9 | Erros HTTP | ⚠️ **Corrigida na Fase 2** — são **duas** famílias, não uma. Ver abaixo | `impl IntoResponse` para a família do framework + helper para a dos controllers |
 | D10 | Swagger | ✅ **`utoipa`**, comparado contra `docs/openapi-baseline.yml` | Anotação manual dos handlers; 73 paths a cobrir |
+
+### D9 corrigida — a API tem duas famílias de erro, não uma
+
+A decisão D9 foi tomada na Fase 0 assumindo um shape único. Os goldens gravados na Fase 2
+mostram que isso está errado. Convivem **duas** famílias, e o back-roco precisa reproduzir as
+duas:
+
+| Origem | Shape | Onde aparece |
+|---|---|---|
+| Framework (VineJS, `E_INVALID_CREDENTIALS`, limiter) | `{ "errors": [ … ] }` — **sem** `success`, **sem** `message` no topo | 422 de validação, 400 de credencial inválida, 429 de rate limit |
+| Escrita à mão nos controllers | `{ "success": false, "message": "…" }` — **sem** `errors` | 401 de conta pendente, 403 de não-admin, 404 de recurso, 400 de regra de negócio |
+
+Exemplos reais, extraídos dos goldens:
+
+```jsonc
+// 422 — POST /api/auth/register com e-mail duplicado
+{ "errors": [ { "field": "email", "message": "The email has already been taken", "rule": "database.unique" } ] }
+
+// 400 — POST /api/auth/login com senha errada
+{ "errors": [ { "message": "Invalid user credentials" } ] }
+
+// 429 — limiter de `auth` estourado (headers: `retry-after: 60`, `x-ratelimit-limit: 5`)
+{ "errors": [ { "message": "Too many requests", "retryAfter": 60 } ] }
+
+// 403 — GET /api/users como não-admin
+{ "success": false, "message": "Apenas administradores podem gerenciar usuarios." }
+```
+
+Repare que o item de `errors` **não tem forma fixa**: o de validação traz `field` e `rule`, o de
+credencial traz só `message`, o de rate limit traz `retryAfter`. A tarefa **3.6** precisa cobrir
+os três, não só o de validação.
+
+Note também que `POST /api/auth/login` com senha errada responde **400**, não 401.
+
+### Achado de segurança: desativar um usuário não revoga a sessão dele
+
+`PATCH /api/users/:id/status` altera `is_active`, e o login passa a ser barrado — mas o
+middleware `auth` valida o **token**, não o `is_active`. Quem já estava logado continua com
+acesso normal até o token expirar (`AUTH_ACCESS_TOKEN_EXPIRES_IN`, 7 dias por padrão).
+
+O teste `auth/me-deactivated` fixa o comportamento **atual** para que o porte o reproduza. Se o
+time decidir que desativar deve derrubar as sessões, mude o teste primeiro — ele vira a
+especificação da correção, e a Fase 2 já garante que ninguém a implemente pela metade.
 
 ### Consequências combinadas de D4 + D8 que precisam de atenção
 
@@ -346,19 +389,29 @@ Guardar apenas o redigido perderia o contrato — a redação troca tipos (`1` v
 | Rate limit estourado → 429 + headers | ✅ (rotas com limiter) |
 | Paginação / filtros / ordenação | ✅ (rotas de listagem) |
 
-### Lote 2.1 — Público e Auth (6 endpoints)
-- [ ] `GET /api/health` · `GET /api/swagger` · `GET /api/docs`
-- [ ] `GET /api/auth/status` (estado de setup inicial)
-- [ ] `POST /api/auth/register` — sucesso, e-mail duplicado, senha fraca, rate limit `auth`
-- [ ] `POST /api/auth/login` — sucesso, senha errada, usuário inativo, rate limit `ip-email`
-- [ ] `GET /api/auth/me` · `POST /api/auth/logout` — token válido, expirado, revogado, malformado
+### Lote 2.1 — Público e Auth (9 rotas) ✅
 
-### Lote 2.2 — Users e Audit Logs (5 endpoints)
-- [ ] `GET /api/users` — paginação, filtro, admin-only
-- [ ] `PATCH /api/users/:id/status` — toggle, auto-desativação bloqueada, não-admin → 403
-- [ ] `GET /api/audit-logs` — filtros por `action`, `entity_type`, `status`, range de datas, paginação
-- [ ] `GET /api/audit-logs/stats` · `GET /api/audit-logs/:id`
-- [ ] Verificar **efeito colateral**: ações em outros endpoints geram o `AuditLog` correto
+`tests/public.contract.test.ts`, `auth-register`, `auth-login`, `auth-session`.
+
+- [x] `GET /api/health` · `GET /api/swagger` · `GET /api/docs`
+- [x] `GET /api/auth/status` (estado de setup inicial)
+- [x] `POST /api/auth/register` — pendente de aprovação, e-mail duplicado, senha fraca, e-mail malformado, corpo vazio, JSON malformado, rate limit `auth`, isolamento por e-mail
+- [x] `POST /api/auth/login` — sucesso, senha errada (**400**), usuário inexistente indistinguível, inativo, multi-sessão, rate limit `ip-email` com `retry-after`
+- [x] `GET /api/auth/me` · `POST /api/auth/logout` — token válido, malformado, inexistente, revogado, duplo logout, revogação não afeta outras sessões
+
+Sem golden para `/api/swagger`: a spec chega como **string** de milhares de linhas, então o
+golden guardaria o texto inteiro e qualquer rota nova viraria um diff enorme sem informação. O
+contrato útil já é `docs/openapi-baseline.yml`.
+
+### Lote 2.2 — Users e Audit Logs (5 rotas) ✅
+
+`tests/users.contract.test.ts`, `tests/audit-logs.contract.test.ts`.
+
+- [x] `GET /api/users` — paginação (incl. prova de que a página 2 difere da 1), filtro `active`, admin-only, sem vazar hash
+- [x] `PATCH /api/users/:id/status` — toggle nos dois sentidos, auto-desativação bloqueada (400), 404, não-admin → 403 **sem efeito colateral**
+- [x] `GET /api/audit-logs` — filtros `action`/`entityType`/`status`, ordenação decrescente, teto de 100 por página, lista vazia = 200
+- [x] `GET /api/audit-logs/stats` (incl. não ser capturada por `/:id`) · `GET /api/audit-logs/:id` + 404
+- [x] Verificar **efeito colateral**: criar e apagar conexão geram `connection.created` / `connection.deleted` com `entityName` e `status` corretos
 
 ### Lote 2.3 — Connections (10 endpoints)
 - [ ] `GET /api/connections` — paginação, filtro por type/status, eager load de `databases`
@@ -942,7 +995,7 @@ Legenda: **T** = teste de contrato escrito (Fase 2) · **P** = portado no `back-
 ```
 Fase 0  ████████████████████  100%   decisões + baselines + ambiente
 Fase 1  ███████████████████░   95%   harness de contrato (backups no seed → Fase 2)
-Fase 2  ░░░░░░░░░░░░░░░░░░░░    1%   6/91 rotas cobertas          ← próxima
+Fase 2  ███░░░░░░░░░░░░░░░░░   16%   15/91 rotas · lotes 2.1 e 2.2 ✅  ← em andamento
 Fase 3  █████░░░░░░░░░░░░░░░   23%   fundação back-roco (2,5/11)  ← em andamento
 Fases 4–12                      0%
 ```
@@ -952,5 +1005,9 @@ primitivas de compatibilidade da Fase 3 — **3.2 (criptografia)**, **3.3 (scryp
 formato da **3.4 (token opaco)**. As três foram validadas contra dados reais de produção, não só
 fixtures.
 
-Números da suíte de contrato hoje: **36 testes do harness** + **12 de contrato**, 3 golden files
-gravados, **6 de 91 rotas** cobertas. A Fase 2 é o trabalho de levar esse 6 a 91.
+Números da suíte de contrato hoje: **36 testes do harness** + **74 de contrato**, 17 golden files
+gravados, **15 de 91 rotas** cobertas. A Fase 2 é o trabalho de levar esse 15 a 91.
+
+Os lotes 2.1 e 2.2 já renderam duas correções ao próprio roadmap — a decisão **D9** estava errada
+(são duas famílias de erro, não uma) e apareceu um achado de segurança sobre sessões de usuários
+desativados. Ambos documentados na seção de decisões.

@@ -1,0 +1,72 @@
+{
+  "name": "auth/me-deactivated",
+  "recordedFrom": "adonis",
+  "request": {
+    "method": "GET",
+    "route": "GET /api/auth/me",
+    "path": "/api/auth/me",
+    "as": "none"
+  },
+  "response": {
+    "status": 200,
+    "mime": "application/json",
+    "contentType": "application/json; charset=utf-8",
+    "headerNames": [
+      "content-type",
+      "x-ratelimit-limit"
+    ],
+    "headers": {
+      "content-type": "application/json; charset=utf-8",
+      "x-ratelimit-limit": "600"
+    },
+    "shape": {
+      "kind": "object",
+      "fields": {
+        "data": {
+          "kind": "object",
+          "fields": {
+            "createdAt": {
+              "kind": "primitive",
+              "type": "string"
+            },
+            "email": {
+              "kind": "primitive",
+              "type": "string"
+            },
+            "fullName": {
+              "kind": "primitive",
+              "type": "string"
+            },
+            "id": {
+              "kind": "primitive",
+              "type": "number"
+            },
+            "isActive": {
+              "kind": "primitive",
+              "type": "boolean"
+            },
+            "isAdmin": {
+              "kind": "primitive",
+              "type": "boolean"
+            }
+          }
+        },
+        "success": {
+          "kind": "primitive",
+          "type": "boolean"
+        }
+      }
+    },
+    "body": {
+      "data": {
+        "createdAt": "<timestamp>",
+        "email": "desativado@contract.test",
+        "fullName": "Contract Disposable",
+        "id": "<id>",
+        "isActive": false,
+        "isAdmin": false
+      },
+      "success": true
+    }
+  }
+}

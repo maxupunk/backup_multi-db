@@ -1,0 +1,40 @@
+{
+  "name": "auth/logout",
+  "recordedFrom": "adonis",
+  "request": {
+    "method": "POST",
+    "route": "POST /api/auth/logout",
+    "path": "/api/auth/logout",
+    "as": "none"
+  },
+  "response": {
+    "status": 200,
+    "mime": "application/json",
+    "contentType": "application/json; charset=utf-8",
+    "headerNames": [
+      "content-type",
+      "x-ratelimit-limit"
+    ],
+    "headers": {
+      "content-type": "application/json; charset=utf-8",
+      "x-ratelimit-limit": "600"
+    },
+    "shape": {
+      "kind": "object",
+      "fields": {
+        "message": {
+          "kind": "primitive",
+          "type": "string"
+        },
+        "success": {
+          "kind": "primitive",
+          "type": "boolean"
+        }
+      }
+    },
+    "body": {
+      "message": "Logged out successfully",
+      "success": true
+    }
+  }
+}

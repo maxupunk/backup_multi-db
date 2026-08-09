@@ -1,0 +1,40 @@
+{
+  "name": "users/toggle-status-self",
+  "recordedFrom": "adonis",
+  "request": {
+    "method": "PATCH",
+    "route": "PATCH /api/users/:id/status",
+    "path": "/api/users/1/status",
+    "as": "admin"
+  },
+  "response": {
+    "status": 400,
+    "mime": "application/json",
+    "contentType": "application/json; charset=utf-8",
+    "headerNames": [
+      "content-type",
+      "x-ratelimit-limit"
+    ],
+    "headers": {
+      "content-type": "application/json; charset=utf-8",
+      "x-ratelimit-limit": "600"
+    },
+    "shape": {
+      "kind": "object",
+      "fields": {
+        "message": {
+          "kind": "primitive",
+          "type": "string"
+        },
+        "success": {
+          "kind": "primitive",
+          "type": "boolean"
+        }
+      }
+    },
+    "body": {
+      "message": "Você não pode alterar seu próprio status.",
+      "success": false
+    }
+  }
+}

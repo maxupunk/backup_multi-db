@@ -1,0 +1,40 @@
+{
+  "name": "auth/login-inactive",
+  "recordedFrom": "adonis",
+  "request": {
+    "method": "POST",
+    "route": "POST /api/auth/login",
+    "path": "/api/auth/login",
+    "as": "none"
+  },
+  "response": {
+    "status": 401,
+    "mime": "application/json",
+    "contentType": "application/json; charset=utf-8",
+    "headerNames": [
+      "content-type",
+      "x-ratelimit-limit"
+    ],
+    "headers": {
+      "content-type": "application/json; charset=utf-8",
+      "x-ratelimit-limit": "5"
+    },
+    "shape": {
+      "kind": "object",
+      "fields": {
+        "message": {
+          "kind": "primitive",
+          "type": "string"
+        },
+        "success": {
+          "kind": "primitive",
+          "type": "boolean"
+        }
+      }
+    },
+    "body": {
+      "message": "Sua conta aguarda aprovação.",
+      "success": false
+    }
+  }
+}

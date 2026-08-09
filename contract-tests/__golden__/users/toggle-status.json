@@ -1,0 +1,57 @@
+{
+  "name": "users/toggle-status",
+  "recordedFrom": "adonis",
+  "request": {
+    "method": "PATCH",
+    "route": "PATCH /api/users/:id/status",
+    "path": "/api/users/9/status",
+    "as": "admin"
+  },
+  "response": {
+    "status": 200,
+    "mime": "application/json",
+    "contentType": "application/json; charset=utf-8",
+    "headerNames": [
+      "content-type",
+      "x-ratelimit-limit"
+    ],
+    "headers": {
+      "content-type": "application/json; charset=utf-8",
+      "x-ratelimit-limit": "600"
+    },
+    "shape": {
+      "kind": "object",
+      "fields": {
+        "data": {
+          "kind": "object",
+          "fields": {
+            "id": {
+              "kind": "primitive",
+              "type": "number"
+            },
+            "isActive": {
+              "kind": "primitive",
+              "type": "boolean"
+            }
+          }
+        },
+        "message": {
+          "kind": "primitive",
+          "type": "string"
+        },
+        "success": {
+          "kind": "primitive",
+          "type": "boolean"
+        }
+      }
+    },
+    "body": {
+      "data": {
+        "id": "<id>",
+        "isActive": true
+      },
+      "message": "Usuário ativado com sucesso.",
+      "success": true
+    }
+  }
+}
