@@ -67,7 +67,7 @@ Estado: **Fases 0 a 7 concluídas.**
 | Models | 9 entidades geradas + lógica de domínio, criptografia, senha, token, driver de banco, dump, restore, import, progresso |
 | Migrations | 4, cobrindo as 9 tabelas · diff estrutural vazio contra o schema do Adonis |
 | Workers | `downloader` (scaffold), `restore` |
-| Testes | **457**, 0 falhas, 4 ignorados (2 de dados de produção, 2 de servidor real) |
+| Testes | **371** no `--lib` + 135 de integração, 0 falhas, 4 ignorados (2 de dados de produção, 2 de servidor real) |
 
 **Cobertura de paridade hoje: 34%** dos pares método+rota. O que falta: storages (Fase 8), Docker
 (Fase 9), SSE e scheduler (Fase 10), sistema avançado e retenção (Fase 11).
@@ -280,6 +280,9 @@ Não há drift entre as migrations e o schema em disco. Volume de dados a migrar
 
 - 🟢 **GCS deixou de ser risco alto.** `google-cloud-storage = "1.17.0"` é hoje a biblioteca
   **oficial** do Google para Rust, não mais um port de comunidade. Risco rebaixado de 🔴 para 🟢.
+- 💡 ~~**`object_store = "0.14"`**~~ — **descartado na Fase 8**, por algo melhor: o `opendal` já vem
+  na árvore com o Loco. Ver "A avaliação do `object_store`" na Fase 8. O texto original segue
+  abaixo porque foi ele que motivou a investigação.
 - 💡 **`object_store = "0.14"`** oferece uma abstração única sobre S3, GCS, Azure e local.
   Mapeia quase 1:1 no trait `StorageExplorerAdapter` e pode substituir 3 SDKs por 1 dependência.
   **Avaliar na Fase 8** — SFTP continuaria fora dela, de qualquer forma.
@@ -1048,12 +1051,12 @@ restauração que falhou faria a fila tentar de novo e restaurar o banco duas ve
 
 **Duração estimada:** 3–4 semanas · **Depende de:** Fase 7 · **Cobre lote 2.5**
 
-- [ ] 8.1 — Trait `StorageExplorerAdapter` em Rust (espelho de `storage_explorer_adapter.ts`).
-- [ ] 8.2 — Adapter **local** — incluindo bloqueio de path traversal.
-- [ ] 8.3 — Adapter **S3** (`aws-sdk-s3`) — cobre AWS, MinIO e Cloudflare R2 (`force_path_style`, `endpoint`).
-- [ ] 8.4 — Adapter **GCS** — sem SDK oficial em Rust; avaliar `google-cloud-storage` (comunidade) ou REST direto.
-- [ ] 8.5 — Adapter **Azure Blob** (`azure_storage_blobs`).
-- [ ] 8.6 — Adapter **SFTP** (`russh-sftp` ou `ssh2`) — auth por senha, chave privada e passphrase.
+- [x] 8.1 — ✅ Trait `StorageExplorer` em `src/models/storage/mod.rs`, mais os tipos (`BucketObject`, `ListOptions`, `ListPage`, `ObjectMetadata`) e a fábrica `explorer_for`.
+- [x] 8.2 — ✅ Adapter **local** em `src/models/storage/local.rs`, com **duas** barreiras de path traversal — ver achados abaixo.
+- [x] 8.3 — ✅ Adapter **S3** (AWS, MinIO e Cloudflare R2) em `src/models/storage/cloud.rs`, sobre `opendal`.
+- [x] 8.4 — ✅ Adapter **GCS**, no mesmo arquivo. Nem `google-cloud-storage` nem REST direto — ver a avaliação abaixo.
+- [x] 8.5 — ✅ Adapter **Azure Blob**, no mesmo arquivo, com o parser da *connection string*.
+- [x] 8.6 — ✅ Adapter **SFTP** em `src/models/storage/sftp.rs`, sobre `russh`/`russh-sftp`. Autentica por senha, por chave privada e por chave com passphrase.
 - [ ] 8.7 — CRUD de `storages` + `storage-destinations` (rotas legadas mantidas).
 - [ ] 8.8 — `POST /:id/test` por provider.
 - [ ] 8.9 — `GET /:id/browse` — paginação por continuation token, mesma ordenação e shape.
@@ -1067,6 +1070,98 @@ restauração que falhou faria a fila tentar de novo e restaurar o banco duas ve
 
 **Pronto quando:** lote 2.5 passa para local, S3/MinIO e SFTP. GCS e Azure podem ficar
 com teste de integração opcional se não houver credencial em CI — **registrar a lacuna**.
+
+### Estado: 6 de 16 tarefas
+
+A **camada de adapters (8.1–8.6) está pronta e verde**: 67 testes unitários próprios, dentro de
+uma suíte de **371 testes** no `--lib`, com `fmt` e `clippy -D warnings` limpos. O que falta são as
+**rotas** (8.7–8.14) e a memoização da 8.15.
+
+### A avaliação do `object_store` — e por que ela terminou noutro lugar
+
+A Fase 0 sugeriu `object_store = "0.14"` para substituir três SDKs por um. A avaliação confirmou
+que ele serve: existe, tem os três backends, e a feature `ring` combina com o `tls-rustls-ring`
+que o `sqlx` já usa. Mas ao adicioná-lo apareceu algo melhor no `cargo tree`:
+
+> **O `opendal` já estava na árvore** — é a base do `ctx.storage` do próprio Loco, que o traz com
+> `services-fs` e `services-memory`. As features `services-s3`, `services-gcs` e `services-azblob`
+> vinham **desligadas**.
+
+Ligar três features de uma dependência existente custa zero crate nova; adicionar o `object_store`
+custaria uma árvore paralela para resolver o mesmo problema. O `AGENTS.md` chama isso de
+anti-padrão na letra ("adicionar crate para algo que o Loco já entrega"), e aqui a letra e a
+engenharia concordam. Verificado: `cargo tree -i object_store` não encontra mais o pacote, e o
+`opendal` aparece uma vez só, compartilhado entre `back_roco` e `loco-rs`.
+
+**Duas coisas que essa escolha *não* resolveu**, e por isso não foram escondidas:
+
+- **`ctx.storage` continua não servindo.** É a abstração que o Loco expõe, mas ela se configura no
+  **boot** (bloco `storage:` do YAML). Nossos destinos são **linhas de banco**, criadas e editadas
+  em runtime, com credencial cifrada. O que serve é o `Operator::from_iter` do `opendal` — um mapa
+  por requisição —, e é ele que o adapter usa.
+- **SFTP ficou de fora do `opendal`.** Ele tem `services-sftp`, mas o service delega ao binário
+  `ssh` da máquina: o container precisaria de um cliente SSH instalado, e no Windows dependeria do
+  OpenSSH opcional do sistema. Daí `russh` + `russh-sftp`, que são Rust puro. O `ssh2` foi
+  descartado por ligar no libssh2 em C e exigir OpenSSL no build do Windows.
+
+**Saldo de dependências da fase até aqui:** duas novas (`russh`, `russh-sftp`), contra as cinco que
+o inventário previa (3 SDKs de nuvem + SFTP + `object_store`).
+
+### Achados da Fase 8 (parcial)
+
+**Um defeito de path traversal, pego pelo próprio teste.** A primeira versão do adapter local
+tratava `/etc/passwd` como caminho **relativo**: o `split('/')` produz um primeiro componente
+vazio, que era descartado em silêncio, e o resultado virava `<base>/etc/passwd`. Contido, portanto
+seguro — mas errado: quem pede `/etc/passwd` está pedindo o arquivo do sistema, e responder `200`
+com outro conteúdo esconde a tentativa em vez de registrá-la. O `resolve()` do Node reprova esse
+caso, e agora o Rust também. **É a mesma classe de bug corrigida na Fase 7** em
+`backup_storage::local_full_path` — o que sugere que todo ponto que monta caminho a partir de
+entrada do usuário merece o mesmo teste.
+
+**O adapter local tem duas barreiras, e as duas são necessárias.** A primeira percorre componente a
+componente e recusa `..`, componente absoluto e `C:`; ela cobre o alvo que **não existe** (um
+`DELETE` de chave inventada, onde não há o que canonicalizar). A segunda canonicaliza e confere que
+o caminho real continua sob a base real; é ela que pega o **link simbólico** apontando para fora,
+que a primeira não enxerga.
+
+**`via_iter("s3", …)` compila e falha em produção.** O construtor por nome de scheme depende de um
+registro global que só é populado pela feature `auto-register-services` — desligada quando se usa
+`default-features = false`. O sintoma é um erro de runtime (`scheme is not registered`) que nenhum
+teste de compilação pegaria. Trocado pelo construtor **tipado**
+(`Operator::from_iter::<services::S3>`), onde é o compilador que garante que o service está na
+build.
+
+**A credencial do GCS precisa ir em base64.** O `opendal` aceita o JSON da service account no campo
+`credential`, mas **codificado**. Passar o JSON cru falha com uma mensagem que não menciona
+codificação nenhuma — o tipo de detalhe que custa meia hora de diagnóstico e não aparece em
+nenhuma documentação de erro.
+
+**A `AccountKey` do Azure termina em `=`.** O parser da connection string quebra no **primeiro**
+`=` de cada par, e não em todos: uma chave em base64 tem padding, e cortá-la ali produziria uma
+credencial inválida. As chaves também são comparadas sem diferenciar caixa, porque o portal gera
+`AccountName` e a CLI gera `accountname`.
+
+**A chave do host SSH não é verificada — e isso está registrado, não escondido.** O `ssh2` do
+Adonis também não a verifica: não há `known_hosts` em lugar nenhum, e `storage_destinations` não
+tem coluna para a impressão digital do servidor. Reproduzir é o contrato desta fase; **passar a
+verificar** exigiria coluna nova, tela para o operador aceitar a chave no primeiro uso e migração
+dos destinos já cadastrados. Fica para a revisão de segurança da **12.8** decidir, com o motivo
+escrito no `check_server_key` em vez de um `Ok(true)` mudo.
+
+**Três adapters do TypeScript viraram um arquivo.** `s3_explorer_adapter.ts`,
+`gcs_explorer_adapter.ts` e `azure_explorer_adapter.ts` somam ~540 linhas com a mesma lógica
+repetida três vezes, porque cada SDK tem a sua API. Com o `opendal` a diferença entre os três é o
+**mapa de configuração**; o resto — listar com delimitador, montar chave com prefixo, traduzir erro
+— é um código só.
+
+**O adapter nasce da config, em vez de recebê-la a cada chamada.** No TypeScript todo método de
+todo adapter começa com um `assertLocalConfig` — a mesma checagem de runtime repetida vinte vezes,
+porque a config viaja como parâmetro. Aqui a config é consumida na construção, e o compilador
+garante o resto: não existe caminho em que o adapter de S3 receba credencial de SFTP.
+
+**Sem cache de adapter por provider.** O `bucket_explorer_service` cacheia a instância por
+provider, e faz sentido lá: os adapters dele são *stateless*. Aqui o adapter **carrega** a
+credencial — cachear por provider entregaria a credencial de um destino a outro.
 
 ---
 
@@ -1161,7 +1256,7 @@ frontend atual consome o stream do `back-roco` sem alteração.
 | 5 | Auth/Users/Audit/System | 1–2 semanas | 🟢 | ✅ concluída |
 | 6 | Connections + drivers | 2–3 semanas | 🟡 | ✅ concluída |
 | 7 | Backups/dump/restore | 3–4 semanas | 🔴 | ✅ concluída (7.9 parcial → Fase 8) |
-| 8 | Storages multi-provider | 3–4 semanas | 🔴 | ⬜ próxima |
+| 8 | Storages multi-provider | 3–4 semanas | 🔴 | 🟡 em andamento (6/16) |
 | 9 | Docker Manager | 2–3 semanas | 🔴 | ⬜ pode entrar em paralelo |
 | 10 | SSE/scheduler/workers | 2 semanas | 🟡 | ⬜ pode entrar em paralelo |
 | 11 | System avançado | 1–2 semanas | 🟡 | ⬜ depende de 9 e 10 |
@@ -1394,12 +1489,12 @@ contrato.
 | `mysql2` | driver MySQL/MariaDB | `sqlx` (mysql) ou `mysql_async` | ✅ direto |
 | `pg` | driver PostgreSQL | `sqlx` (postgres) ou `tokio-postgres` | ✅ direto |
 | `better-sqlite3` | SQLite de controle | `sqlx` (sqlite) via Sea-ORM | ✅ direto |
-| `@aws-sdk/client-s3` | S3/MinIO/R2 | `aws-sdk-s3` | ✅ direto |
-| `@aws-sdk/s3-request-presigner` | URLs assinadas | `aws-sdk-s3` (presigning) | ✅ direto |
-| `@google-cloud/storage` | GCS | `google-cloud-storage` **1.17 — SDK oficial do Google** | ✅ direto |
-| — | alternativa unificada S3+GCS+Azure+local | `object_store` 0.14 | 💡 avaliar na Fase 8 |
-| `@azure/storage-blob` | Azure Blob | `azure_storage_blobs` | ⚠️ SDK em preview |
-| `ssh2-sftp-client` | SFTP | `russh-sftp` ou `ssh2` | ⚠️ avaliar |
+| `@aws-sdk/client-s3` | S3/MinIO/R2 | ~~`aws-sdk-s3`~~ → **`opendal/services-s3`** | ✅ **decidido na 8.3** |
+| `@aws-sdk/s3-request-presigner` | URLs assinadas | `opendal` (`presign_read_with`) | ✅ decidido na 8.3 |
+| `@google-cloud/storage` | GCS | ~~`google-cloud-storage`~~ → **`opendal/services-gcs`** | ✅ **decidido na 8.4** |
+| — | alternativa unificada S3+GCS+Azure+local | ~~`object_store` 0.14~~ | ❌ **descartado**: o `opendal` já vem com o Loco |
+| `@azure/storage-blob` | Azure Blob | ~~`azure_storage_blobs`~~ → **`opendal/services-azblob`** | ✅ **decidido na 8.5** |
+| `ssh2-sftp-client` | SFTP | **`russh` + `russh-sftp`** | ✅ **decidido na 8.6** — `ssh2` exigiria OpenSSL no Windows |
 | `archiver` | tar/zip streaming | `tar` + `flate2` / `zip` | ✅ direto |
 | `node-cron` | agendamento | scheduler do Loco | ✅ direto |
 | `luxon` | datas | `chrono` | ✅ direto |

@@ -74,6 +74,21 @@ async-compression = { version = "0.4", default-features = false, features = ["to
 # `ReaderStream` converte o arquivo aberto no corpo de `GET /:id/download` sem
 # ler o backup inteiro para a memoria.
 tokio-util = { version = "0.7", default-features = false, features = ["io"] }
+# Fase 8 — S3, GCS e Azure. **Nao** e' crate nova: o `opendal` ja' esta' na
+# arvore como base do `ctx.storage` do Loco; aqui so' se ligam tres services que
+# vinham desligados. Ver "A avaliacao do `object_store`" na Fase 8 do roadmap.
+opendal = { version = "0.57", default-features = false, features = [
+  "executors-tokio",
+  "layers-retry",
+  "services-s3",
+  "services-gcs",
+  "services-azblob",
+] }
+# SFTP fica de fora do `opendal`: o service dele delega ao binario `ssh` da
+# maquina. `russh` e' Rust puro; o `ssh2` liga no libssh2 em C e exigiria
+# OpenSSL no build do Windows, onde este projeto e' desenvolvido.
+russh = { version = "0.55", default-features = false, features = ["ring", "flate2", "rsa"] }
+russh-sftp = "2.4"
 
 [[bin]]
 name = "back_roco-cli"

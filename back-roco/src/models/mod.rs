@@ -18,6 +18,7 @@ pub mod process_output;
 pub mod progress;
 pub mod resource_metric_history;
 pub mod restore;
+pub mod storage;
 pub mod storage_destinations;
 pub mod system_monitor;
 pub mod system_settings;

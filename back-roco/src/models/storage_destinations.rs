@@ -143,7 +143,7 @@ impl FromStr for StorageProvider {
 ///
 /// Linhas anteriores a' migration `6_extend_storage_destinations` nao tem
 /// `provider`. O mapa escolhe o provider mais generico de cada tipo.
-const fn provider_from_type(storage_type: StorageType) -> StorageProvider {
+pub const fn provider_from_type(storage_type: StorageType) -> StorageProvider {
     match storage_type {
         StorageType::Local => StorageProvider::Local,
         StorageType::S3 => StorageProvider::AwsS3,
