@@ -14,7 +14,9 @@ use migration::Migrator;
 use std::path::Path;
 
 #[allow(unused_imports)]
-use crate::{controllers, models::_entities::users, tasks, workers::downloader::DownloadWorker};
+use crate::{
+    controllers, initializers, models::_entities::users, tasks, workers::downloader::DownloadWorker,
+};
 
 pub struct App;
 #[async_trait]
@@ -42,7 +44,17 @@ impl Hooks for App {
     }
 
     async fn initializers(_ctx: &AppContext) -> Result<Vec<Box<dyn Initializer>>> {
-        Ok(vec![])
+        // Valida o bloco `settings:` antes da primeira requisicao. Sem isto,
+        // uma `db_encryption_key` ausente so' apareceria na primeira tentativa
+        // de descriptografar uma senha — possivelmente semanas apos o deploy.
+        Ok(vec![Box::new(initializers::settings::SettingsInitializer)])
+    }
+
+    async fn after_routes(router: axum::Router, ctx: &AppContext) -> Result<axum::Router> {
+        // Camadas globais: `force_json` e o limitador de 600 req/min por IP.
+        // Os limitadores por rota (`auth`, `strict`, `backup`) entram junto com
+        // as rotas que os usam, nas fases seguintes.
+        controllers::middlewares::layers::apply(router, ctx)
     }
 
     fn routes(_ctx: &AppContext) -> AppRoutes {

@@ -507,7 +507,10 @@ começar, e aí a suíte garante que o back-roco não implemente a correção pe
 
 **Duração estimada:** 1–2 semanas · **Depende de:** Fase 0 · **Paralela às Fases 1–2**
 
-- [ ] 3.1 — Configuração `config/*.yaml` equivalente ao `.env` do Adonis (portas, DB, chave de cripto, TTL de token, limites). Segredos via `get_env`.
+- [x] 3.1 — ✅ **Bloco `settings:`** nos três `config/*.yaml`, com segredos via `get_env`, tipado em `src/initializers/settings.rs`.
+  - a validação roda num **`Initializer` do Loco**, não numa função avulsa: o Adonis derruba o processo no `start/env.ts` quando falta `DB_ENCRYPTION_KEY`, e reproduzir isso é o que evita trocar um erro de configuração óbvio por uma falha semanas depois;
+  - a chave é conferida no boot (64 caracteres hex) e o TTL do token é parseado (`7d`/`12h`/`30m`) — sufixo desconhecido é **recusado**, não chutado;
+  - os quatro limitadores têm default **no código**, não só no YAML: um arquivo incompleto não pode afrouxar um limite em silêncio.
 - [x] 3.2 — ✅ **`EncryptionService` em Rust** — `src/models/encryption.rs`. **Go/no-go de D3 aprovado.**
   - `AesGcm<Aes256, U16>` (o alias `Aes256Gcm` usa nonce de 12 e não serviria);
   - `DB_ENCRYPTION_KEY` usada direto como chave de 32 bytes, sem KDF;
@@ -525,13 +528,29 @@ começar, e aí a suíte garante que o back-roco não implemente a correção pe
   - coluna `hash` = SHA-256 **hex** do secret; comparação em tempo constante;
   - **14 testes**: 8 unitários + 6 de compatibilidade contra tokens emitidos pelo `AccessToken.createTransientToken` real. Inclui confirmação de que o CRC-32 do `crc32fast` (IEEE) é o mesmo do `@poppinss/utils`;
   - **falta (depende da Fase 4):** consulta à tabela `auth_access_tokens`, checagem de `expires_at`, atualização de `last_used_at`, `abilities`, revogação no logout, e o extractor Axum equivalente ao `middleware.auth()`.
-- [ ] 3.5 — **Middleware de rate limit** — 4 limiters, `keyBy` por IP e por IP+email, headers `X-RateLimit-*` e `Retry-After` idênticos.
-- [ ] 3.6 — **Formato de erro unificado** (D9) — `impl IntoResponse` traduzindo erros do `validator` e do `loco_rs` para o shape do VineJS.
-- [ ] 3.7 — Middleware equivalente ao `force_json_response` + CORS com a mesma config.
-- [ ] 3.8 — **`AuditService`** em Rust — mesma assinatura de ações e enums; usado por todos os domínios seguintes.
-- [ ] 3.9 — Estrutura de `src/dtos/` com política de serialização definida em D5 e export `ts-rs` para o frontend.
-- [ ] 3.10 — Fixtures YAML em `src/fixtures/` espelhando os seeds da tarefa 1.5.
-- [ ] 3.11 — `Dockerfile` e entrada no `docker-compose.dev.yml` para o `back-roco`.
+- [~] 3.5 — **Rate limit** — algoritmo pronto em `src/controllers/middlewares/rate_limit.rs`; o limitador **global** já está ligado ao router.
+  - **janela fixa**, não deslizante: é o que o `rate-limiter-flexible` faz por baixo do Adonis, e o `Retry-After` de uma deslizante não bateria com o golden gravado;
+  - requisição já bloqueada **não incrementa** o contador — bater na porta durante o castigo não pode prolongá-lo;
+  - o e-mail entra na chave **normalizado**; sem isso `Admin@X.com` e `admin@x.com` teriam contadores separados e o limitador de login deixaria de limitar;
+  - limpeza preguiçosa das entradas expiradas: sem ela, variar o IP transformaria o limitador num vazamento de memória;
+  - o IP vem de `X-Forwarded-For` antes do socket — atrás de um proxy, o socket veria sempre o mesmo endereço e o limite viraria global para o mundo inteiro;
+  - **falta:** os limitadores `auth`, `strict` e `backup` são *por rota*; entram junto com as rotas que os usam (Fases 5+).
+- [x] 3.6 — ✅ **Formato de erro** (D9 **corrigida**) — `src/views/errors.rs`, com `impl IntoResponse`.
+  - as **duas** famílias, e não uma: `{ errors: [...] }` do framework e `{ success, message }` dos controllers;
+  - o item de `errors` é um enum `untagged` — modelar como struct única com campos `Option` emitiria `"field": null` onde o Adonis **omite** a chave, e o matcher da suíte reprova chave a mais;
+  - `error` e chaves ausentes usam `skip_serializing_if`, pelo mesmo motivo;
+  - os erros do `validator` são ordenados por campo: a iteração de mapa não é estável e a suíte compara a lista de campos.
+- [x] 3.7 — ✅ **`force_json`** em `src/controllers/middlewares/force_json.rs` — força `Accept: application/json` na entrada e converte qualquer resposta não-JSON de `/api` em JSON, preservando o status.
+- [~] 3.8 — **Auditoria** — enums e tabelas de tradução em `src/models/audit_log.rs`; a persistência espera a Fase 4.
+  - `actionDescription`, `actionIcon` e `statusColor` são **derivados**, nunca gravados — sem as mesmas tabelas a interface fica sem rótulo e sem ícone;
+  - teste garante que descrições e ícones são **únicos**: dois iguais seriam indistinguíveis na tela de auditoria, e o erro só apareceria durante um incidente;
+  - `failure` mapeia para a cor **`error`** — copiar o status como cor é o engano natural aqui.
+- [x] 3.9 — ✅ **`ts-rs` corrigido** — `export_to` passou a `../../frontend/src/bindings/`; os bindings agora caem no `frontend/` real da raiz e o diretório fantasma `back-roco/frontend/` foi removido.
+- [ ] 3.10 — **Bloqueada pela Fase 4.** As fixtures teriam de descrever entidades que ainda não existem: a decisão D4 é schema novo, e `src/models/_entities/` hoje só tem o `users` do scaffold do Loco (com `pid`/`api_key`/argon2), que não é o schema do Adonis. Escrever o YAML agora seria escrever contra um schema imaginário.
+- [x] 3.11 — ✅ **`back-roco/Dockerfile`** (multi-stage com `cargo-chef`, usuário sem privilégios, clientes MySQL/PostgreSQL na imagem) e serviço `back-roco` no `docker-compose.dev.yml`, sob o profile `roco`.
+  - sobe **lado a lado** com o Adonis, em porta e banco próprios — é o que viabiliza o tráfego-sombra da 12.13 trocando só `CONTRACT_BASE_URL`;
+  - **não** compartilha o SQLite do backend: D4 é schema novo, e apontar os dois para o mesmo arquivo corromperia produção;
+  - usa a **mesma** `DB_ENCRYPTION_KEY`, senão os ciphertexts já gravados ficam ilegíveis (D3).
 
 ### Achados da Fase 3 (em andamento)
 
@@ -555,18 +574,37 @@ qualquer outro ponto de compatibilidade binária que apareça.
 `created_at` e `expires_at` são `1785928191780`, não texto ISO. O migrador de dados (4.9) e as
 entidades Sea-ORM precisam tratar isso; ler como `DateTime` direto vai falhar ou, pior, silenciar.
 
-**⚠️ Pendência para a 3.9 — o `export_to` do `ts-rs` aponta para o lugar errado.**
-`src/dtos/common.rs` declara `export_to = "../frontend/src/bindings/"`, mas o caminho é resolvido
-a partir de um diretório `bindings/` implícito dentro do crate — o resultado vai para
-`back-roco/frontend/src/bindings/`, e **não** para o `frontend/` da raiz que o SPA consome.
-Para alcançar o frontend real o caminho precisa ser `../../frontend/src/bindings/`.
-Corrigir junto com a definição da política de serialização (D5).
+**✅ Resolvido na 3.9 — o `export_to` do `ts-rs` apontava para o lugar errado.**
+`src/dtos/common.rs` declarava `export_to = "../frontend/src/bindings/"`, mas o caminho é
+resolvido a partir de um diretório `bindings/` implícito dentro do crate, e o resultado ia para
+`back-roco/frontend/src/bindings/` em vez do `frontend/` da raiz que o SPA consome. Corrigido
+para `../../frontend/src/bindings/`; o diretório fantasma foi removido e os bindings agora são
+gerados em `frontend/src/bindings/`.
 
-**Pronto quando:** `cargo test` verde, `GET /api/health` responde idêntico ao Adonis no contrato,
-e um token emitido pelo Adonis é aceito pelo Rust (D1 = token opaco).
+**O `SettingsInitializer` pagou o próprio custo no primeiro `cargo test`.** Um `get_env` com
+default vazio renderiza uma linha sem valor, e o YAML lê isso como `null`, não como string vazia —
+`initial_admin_bootstrap_token` chegava nulo e o boot falhava. Sem a validação no boot, o erro
+teria aparecido em produção, na primeira tentativa de criar o admin inicial.
 
-Estado atual da suíte: **67 testes, 0 falhas, 2 ignorados** (os de dados de produção).
+**Desvio de padrão registrado (seção 12 do `AGENTS.md`).** Os arquivos novos foram acomodados no
+mapa da seção 2 em vez de criar pasta nova na raiz de `src/`:
+
+| Conteúdo | Onde ficou | Por quê |
+|---|---|---|
+| Formato de erro | `src/views/errors.rs` | é serialização de resposta |
+| Enums de auditoria | `src/models/audit_log.rs` | é lógica de domínio de um model, e será a casa da persistência na Fase 4 |
+| Rate limit e `force_json` | `src/controllers/middlewares/` | mesma pasta que o `loco_rs` usa para middleware |
+| Settings | `src/initializers/settings.rs` | a validação **é** um `Initializer` do framework |
+
+**Pronto quando:** ~~`cargo test` verde, `GET /api/health` responde idêntico ao Adonis no contrato,
+e um token emitido pelo Adonis é aceito pelo Rust (D1 = token opaco).~~ ✅ para o que não depende
+da Fase 4.
+
+Estado atual da suíte: **117 testes, 0 falhas, 2 ignorados** (os de dados de produção).
 `cargo fmt --check` e `cargo clippy --all-targets -- -D warnings` limpos.
+
+Restam **3.4 (camada de banco)**, **3.5 (limitadores por rota)**, **3.8 (persistência)** e
+**3.10 (fixtures)** — todos bloqueados pelas entidades Sea-ORM da Fase 4.
 
 ---
 
@@ -1033,8 +1071,9 @@ Legenda: **T** = teste de contrato escrito (Fase 2) · **P** = portado no `back-
 Fase 0  ████████████████████  100%   decisões + baselines + ambiente
 Fase 1  ████████████████████  100%   harness de contrato
 Fase 2  ████████████████████  100%   91/91 rotas · 266 testes · 63 goldens ✅
-Fase 3  █████░░░░░░░░░░░░░░░   23%   fundação back-roco (2,5/11)  ← próxima
-Fases 4–12                      0%
+Fase 3  ██████████████░░░░░░   70%   fundação back-roco (7,5/11 — resto na Fase 4)
+Fase 4  ░░░░░░░░░░░░░░░░░░░░    0%   entidades Sea-ORM + migrador  ← próxima
+Fases 5–12                      0%
 ```
 
 Concluído até aqui: **Fase 0** (exceto 0.2, que depende do time), **Fase 1**, **Fase 2 inteira** e
@@ -1054,3 +1093,8 @@ Números da suíte de contrato:
 A especificação executável do back-roco está pronta. **A Fase 2 rendeu sete achados** — de uma
 decisão errada no próprio roadmap a um endpoint que devolve HTML com status 200 — todos fixados
 por teste e listados na seção da Fase 2.
+
+No lado Rust, a Fase 3 fechou tudo que não depende de banco: **117 testes**, `fmt` e
+`clippy -D warnings` limpos. O que resta da Fase 3 (camada de banco do token, limitadores por
+rota, persistência da auditoria e fixtures) está bloqueado pelas entidades da Fase 4 — não é
+trabalho adiado por escolha, é dependência real.

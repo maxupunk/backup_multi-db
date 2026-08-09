@@ -1,7 +1,7 @@
 use ts_rs::TS;
 
 #[derive(serde::Serialize, serde::Deserialize, TS)]
-#[ts(export, export_to = "../frontend/src/bindings/")]
+#[ts(export, export_to = "../../frontend/src/bindings/")]
 pub struct Page<T: TS> {
     pub items: Vec<T>,
     #[ts(type = "number")]
@@ -13,7 +13,7 @@ pub struct Page<T: TS> {
 }
 
 #[derive(serde::Serialize, serde::Deserialize, TS)]
-#[ts(export, export_to = "../frontend/src/bindings/")]
+#[ts(export, export_to = "../../frontend/src/bindings/")]
 pub struct ApiError {
     pub code: String,
     pub message: String,

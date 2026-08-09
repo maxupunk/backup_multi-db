@@ -86,3 +86,29 @@ auth:
     secret: BaQtKmr3CE13kDGbVCeI
     # Token expiration time in seconds
     expiration: 604800 # 7 days
+
+# Configuracao especifica da aplicacao (tarefa 3.1 do roadmap).
+#
+# Validada no boot pelo `SettingsInitializer`: uma chave ausente ou malformada
+# derruba o processo na hora, e nao na primeira requisicao que tentar
+# descriptografar uma senha.
+settings:
+  # Chave AES-256-GCM em hex (64 caracteres). Deve ser IDENTICA a
+  # `DB_ENCRYPTION_KEY` do Adonis — e' com ela que os ciphertexts ja' gravados
+  # continuam legiveis apos o cutover (decisao D3).
+  db_encryption_key: "{{ get_env(name="DB_ENCRYPTION_KEY", default="000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f") }}"
+  # TTL do access token. Mesmo formato do Adonis: `7d`, `12h`, `30m`.
+  auth_access_token_expires_in: "{{ get_env(name="AUTH_ACCESS_TOKEN_EXPIRES_IN", default="7d") }}"
+  # Token exigido para criar o primeiro administrador.
+  initial_admin_bootstrap_token: "{{ get_env(name="INITIAL_ADMIN_BOOTSTRAP_TOKEN", default="") }}"
+  backup_storage_path: "{{ get_env(name="BACKUP_STORAGE_PATH", default="/storage/backups") }}"
+  diagnostics_path: "{{ get_env(name="DIAGNOSTICS_PATH", default="/storage/diagnostics") }}"
+  # 0 desliga a poda de logs de auditoria.
+  audit_retention_days: {{ get_env(name="AUDIT_RETENTION_DAYS", default="30") }}
+  # Os quatro limitadores do `app/middleware/rate_limit_middleware.ts`.
+  # `duration` em segundos.
+  rate_limits:
+    global: { requests: 600, duration: 60 }
+    auth: { requests: 5, duration: 60 }
+    strict: { requests: 60, duration: 60 }
+    backup: { requests: 60, duration: 60 }
