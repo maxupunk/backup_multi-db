@@ -1,10 +1,10 @@
 {
-  "name": "users/toggle-status",
+  "name": "storages/test-ok",
   "recordedFrom": "adonis",
   "request": {
-    "method": "PATCH",
-    "route": "PATCH /api/users/:id/status",
-    "path": "/api/users/11/status",
+    "method": "POST",
+    "route": "POST /api/storages/:id/test",
+    "path": "/api/storages/2/test",
     "as": "admin"
   },
   "response": {
@@ -17,24 +17,11 @@
     ],
     "headers": {
       "content-type": "application/json; charset=utf-8",
-      "x-ratelimit-limit": "600"
+      "x-ratelimit-limit": "60"
     },
     "shape": {
       "kind": "object",
       "fields": {
-        "data": {
-          "kind": "object",
-          "fields": {
-            "id": {
-              "kind": "primitive",
-              "type": "number"
-            },
-            "isActive": {
-              "kind": "primitive",
-              "type": "boolean"
-            }
-          }
-        },
         "message": {
           "kind": "primitive",
           "type": "string"
@@ -46,11 +33,7 @@
       }
     },
     "body": {
-      "data": {
-        "id": "<id>",
-        "isActive": true
-      },
-      "message": "Usuário ativado com sucesso.",
+      "message": "Conexão testada com sucesso",
       "success": true
     }
   }

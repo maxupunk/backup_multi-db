@@ -1,0 +1,137 @@
+{
+  "name": "system/containers-resources",
+  "recordedFrom": "adonis",
+  "request": {
+    "method": "GET",
+    "route": "GET /api/system/containers/resources",
+    "path": "/api/system/containers/resources",
+    "as": "admin"
+  },
+  "response": {
+    "status": 200,
+    "mime": "application/json",
+    "contentType": "application/json; charset=utf-8",
+    "headerNames": [
+      "content-type",
+      "x-ratelimit-limit"
+    ],
+    "headers": {
+      "content-type": "application/json; charset=utf-8",
+      "x-ratelimit-limit": "600"
+    },
+    "shape": {
+      "kind": "object",
+      "fields": {
+        "data": {
+          "kind": "object",
+          "fields": {
+            "collectedAt": {
+              "kind": "primitive",
+              "type": "string"
+            },
+            "containers": {
+              "kind": "array",
+              "element": {
+                "kind": "object",
+                "fields": {
+                  "blockIo": {
+                    "kind": "object",
+                    "fields": {
+                      "readBytes": {
+                        "kind": "primitive",
+                        "type": "number"
+                      },
+                      "writeBytes": {
+                        "kind": "primitive",
+                        "type": "number"
+                      }
+                    }
+                  },
+                  "containerId": {
+                    "kind": "primitive",
+                    "type": "string"
+                  },
+                  "containerName": {
+                    "kind": "primitive",
+                    "type": "string"
+                  },
+                  "cpu": {
+                    "kind": "object",
+                    "fields": {
+                      "usagePercent": {
+                        "kind": "primitive",
+                        "type": "number"
+                      }
+                    }
+                  },
+                  "imageName": {
+                    "kind": "primitive",
+                    "type": "string"
+                  },
+                  "memory": {
+                    "kind": "object",
+                    "fields": {
+                      "limitBytes": {
+                        "kind": "primitive",
+                        "type": "number"
+                      },
+                      "usageBytes": {
+                        "kind": "primitive",
+                        "type": "number"
+                      },
+                      "usagePercent": {
+                        "kind": "primitive",
+                        "type": "number"
+                      }
+                    }
+                  },
+                  "network": {
+                    "kind": "object",
+                    "fields": {
+                      "rxBytes": {
+                        "kind": "primitive",
+                        "type": "number"
+                      },
+                      "txBytes": {
+                        "kind": "primitive",
+                        "type": "number"
+                      }
+                    }
+                  },
+                  "pids": {
+                    "kind": "primitive",
+                    "type": "number"
+                  },
+                  "projectName": {
+                    "kind": "primitive",
+                    "type": "string"
+                  },
+                  "status": {
+                    "kind": "primitive",
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "dockerAvailable": {
+              "kind": "primitive",
+              "type": "boolean"
+            },
+            "unavailableReason": {
+              "kind": "primitive",
+              "type": "null"
+            }
+          }
+        },
+        "success": {
+          "kind": "primitive",
+          "type": "boolean"
+        }
+      }
+    },
+    "body": {
+      "data": "<nao-comparado>",
+      "success": true
+    }
+  }
+}

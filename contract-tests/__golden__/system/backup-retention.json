@@ -1,10 +1,10 @@
 {
-  "name": "users/toggle-status",
+  "name": "system/backup-retention",
   "recordedFrom": "adonis",
   "request": {
-    "method": "PATCH",
-    "route": "PATCH /api/users/:id/status",
-    "path": "/api/users/11/status",
+    "method": "GET",
+    "route": "GET /api/system/backup-retention",
+    "path": "/api/system/backup-retention",
     "as": "admin"
   },
   "response": {
@@ -25,19 +25,31 @@
         "data": {
           "kind": "object",
           "fields": {
-            "id": {
+            "daily": {
               "kind": "primitive",
               "type": "number"
             },
-            "isActive": {
+            "defaultPruneCron": {
               "kind": "primitive",
-              "type": "boolean"
+              "type": "string"
+            },
+            "monthly": {
+              "kind": "primitive",
+              "type": "number"
+            },
+            "pruneCron": {
+              "kind": "primitive",
+              "type": "string"
+            },
+            "weekly": {
+              "kind": "primitive",
+              "type": "number"
+            },
+            "yearly": {
+              "kind": "primitive",
+              "type": "number"
             }
           }
-        },
-        "message": {
-          "kind": "primitive",
-          "type": "string"
         },
         "success": {
           "kind": "primitive",
@@ -47,10 +59,13 @@
     },
     "body": {
       "data": {
-        "id": "<id>",
-        "isActive": true
+        "daily": 7,
+        "defaultPruneCron": "0 2 * * *",
+        "monthly": 12,
+        "pruneCron": "0 2 * * *",
+        "weekly": 4,
+        "yearly": 5
       },
-      "message": "Usuário ativado com sucesso.",
       "success": true
     }
   }

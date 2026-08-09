@@ -91,3 +91,28 @@ describe('redactHeaders', () => {
     })
   })
 })
+
+describe('notComparedPaths', () => {
+  it('substitui por um marcador unico', () => {
+    // O que a comparacao ignora nao pode virar ruido no golden: uso de CPU e
+    // memoria livre mudam a cada leitura e fariam o arquivo mudar sozinho.
+    expect(
+      redact(
+        { data: { cpu: { usagePercent: 51.35 }, freeBytes: 4004847616 }, success: true },
+        { notComparedPaths: ['data'] }
+      )
+    ).toEqual({ data: REDACTED.notCompared, success: true })
+  })
+
+  it('e idempotente como o resto da redacao', () => {
+    const once = redact({ data: { x: 1 } }, { notComparedPaths: ['data'] })
+    expect(redact(once, { notComparedPaths: ['data'] })).toEqual(once)
+  })
+
+  it('nao engole o que esta fora do caminho', () => {
+    expect(redact({ data: { x: 1 }, nome: 'fica' }, { notComparedPaths: ['data'] })).toEqual({
+      data: REDACTED.notCompared,
+      nome: 'fica',
+    })
+  })
+})

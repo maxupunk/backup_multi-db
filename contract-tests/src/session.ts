@@ -11,6 +11,8 @@
 
 import { createClient, describeResponse, type ContractClient, type ContractResponse } from './http.ts'
 import { readState, type SeedState } from './seed.ts'
+import { recordCoverage } from './coverage.ts'
+import { matchRoute } from './routes.ts'
 
 export type Role = 'admin' | 'member' | 'inactive'
 
@@ -41,6 +43,33 @@ export function as(role: Role): ContractClient {
 /** Cliente sem `Authorization` — para os casos de 401. */
 export function unauth(): ContractClient {
   return createClient(null)
+}
+
+/**
+ * Registra manualmente uma rota exercitada fora do cliente HTTP.
+ *
+ * Escape hatch com um unico usuario legitimo hoje: `GET /__transmit/events` e'
+ * um stream SSE que nunca fecha, entao o teste dele fala direto com o `undici`
+ * e aborta a conexao — o cliente da suite leria o corpo inteiro e travaria ate'
+ * o timeout. Sem esta chamada, a rota apareceria como "sem teste" tendo sido
+ * testada.
+ *
+ * Use com parcimonia: cada chamada aqui e' cobertura afirmada por decreto, nao
+ * observada.
+ */
+export function markCovered(method: string, path: string, status: number, test: string): void {
+  const route = matchRoute(method, path)
+  recordCoverage({ key: route?.key ?? null, method, path, status, test })
+}
+
+/**
+ * O que o ambiente desta execucao consegue testar de verdade.
+ *
+ * Use com `it.skipIf(!can('mysql'))`. O globalSetup ja' avisou em letras
+ * grandes o que esta' faltando, entao o skip aqui nao e' silencioso.
+ */
+export function can(capability: keyof SeedState['capabilities']): boolean {
+  return state().capabilities[capability]
 }
 
 /** Cliente com um token sintaticamente valido mas que nao existe no banco. */

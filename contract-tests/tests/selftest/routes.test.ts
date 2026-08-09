@@ -52,11 +52,15 @@ describe('matchRoute', () => {
   })
 
   it('devolve null para caminho desconhecido', () => {
-    expect(matchRoute('GET', '/api/nao-existe')).toBeNull()
+    // Em POST, porque em GET o catch-all `/*` casa com tudo — e isso reflete o
+    // servidor de verdade, nao uma falha do casador (ver o achado sobre o
+    // catch-all em `tests/global.contract.test.ts`).
+    expect(matchRoute('POST', '/api/nao-existe')).toBeNull()
+    expect(matchRoute('GET', '/api/nao-existe')?.pattern).toBe('/*')
   })
 
   it('nao casa com numero de segmentos diferente', () => {
-    expect(matchRoute('GET', '/api/connections/12/nao-existe')).toBeNull()
+    expect(matchRoute('DELETE', '/api/connections/12/nao-existe')).toBeNull()
   })
 })
 
@@ -79,5 +83,26 @@ describe('baseline do repositorio', () => {
     const withAuth = protectedRoutes()
     expect(withAuth.length).toBeGreaterThan(70)
     expect(withAuth.every((route) => route.middleware.includes('auth'))).toBe(true)
+  })
+})
+
+describe('catch-all da SPA', () => {
+  it('`*` engole qualquer numero de segmentos', () => {
+    // `GET /*` e' o fallback que serve o index.html. Sem tratar o curinga, a
+    // rota nunca casaria e ficaria eternamente listada como "sem teste".
+    expect(matchRoute('GET', '/qualquer')?.pattern).toBe('/*')
+    expect(matchRoute('GET', '/uma/rota/do/frontend')?.pattern).toBe('/*')
+  })
+
+  it('nao rouba rotas mais especificas', () => {
+    // O desempate por segmentos literais tem que continuar valendo: `/*` tem
+    // zero literais e perde para qualquer rota de verdade.
+    expect(matchRoute('GET', '/api/health')?.pattern).toBe('/api/health')
+    expect(matchRoute('GET', '/api/connections/7')?.pattern).toBe('/api/connections/:id')
+  })
+
+  it('nao vale para outros metodos', () => {
+    // O catch-all e' so' GET; POST num caminho desconhecido nao casa com nada.
+    expect(matchRoute('POST', '/rota-inexistente')).toBeNull()
   })
 })

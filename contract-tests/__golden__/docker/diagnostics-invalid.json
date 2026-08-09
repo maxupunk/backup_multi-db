@@ -1,0 +1,62 @@
+{
+  "name": "docker/diagnostics-invalid",
+  "recordedFrom": "adonis",
+  "request": {
+    "method": "POST",
+    "route": "POST /api/docker/diagnostics",
+    "path": "/api/docker/diagnostics",
+    "as": "admin"
+  },
+  "response": {
+    "status": 422,
+    "mime": "application/json",
+    "contentType": "application/json; charset=utf-8",
+    "headerNames": [
+      "content-type",
+      "x-ratelimit-limit"
+    ],
+    "headers": {
+      "content-type": "application/json; charset=utf-8",
+      "x-ratelimit-limit": "60"
+    },
+    "shape": {
+      "kind": "object",
+      "fields": {
+        "errors": {
+          "kind": "array",
+          "element": {
+            "kind": "object",
+            "fields": {
+              "field": {
+                "kind": "primitive",
+                "type": "string"
+              },
+              "message": {
+                "kind": "primitive",
+                "type": "string"
+              },
+              "rule": {
+                "kind": "primitive",
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "body": {
+      "errors": [
+        {
+          "field": "tool",
+          "message": "The tool field must be defined",
+          "rule": "required"
+        },
+        {
+          "field": "target",
+          "message": "The target field must be defined",
+          "rule": "required"
+        }
+      ]
+    }
+  }
+}

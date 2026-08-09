@@ -102,71 +102,7 @@
       }
     },
     "body": {
-      "data": [
-        {
-          "createdAt": "<timestamp>",
-          "email": "desativado@contract.test",
-          "fullName": "Contract Disposable",
-          "id": "<id>",
-          "isActive": false,
-          "isAdmin": false,
-          "updatedAt": "<timestamp>"
-        },
-        {
-          "createdAt": "<timestamp>",
-          "email": "logout@contract.test",
-          "fullName": "Contract Disposable",
-          "id": "<id>",
-          "isActive": true,
-          "isAdmin": false,
-          "updatedAt": "<timestamp>"
-        },
-        {
-          "createdAt": "<timestamp>",
-          "email": "logout-multi@contract.test",
-          "fullName": "Contract Disposable",
-          "id": "<id>",
-          "isActive": true,
-          "isAdmin": false,
-          "updatedAt": "<timestamp>"
-        },
-        {
-          "createdAt": "<timestamp>",
-          "email": "logout-duplo@contract.test",
-          "fullName": "Contract Disposable",
-          "id": "<id>",
-          "isActive": true,
-          "isAdmin": false,
-          "updatedAt": "<timestamp>"
-        },
-        {
-          "createdAt": "<timestamp>",
-          "email": "admin@contract.test",
-          "fullName": "Contract Admin",
-          "id": "<id>",
-          "isActive": true,
-          "isAdmin": true,
-          "updatedAt": "<timestamp>"
-        },
-        {
-          "createdAt": "<timestamp>",
-          "email": "member@contract.test",
-          "fullName": "Contract Member",
-          "id": "<id>",
-          "isActive": true,
-          "isAdmin": false,
-          "updatedAt": "<timestamp>"
-        },
-        {
-          "createdAt": "<timestamp>",
-          "email": "inactive@contract.test",
-          "fullName": "Contract Inactive",
-          "id": "<id>",
-          "isActive": false,
-          "isAdmin": false,
-          "updatedAt": "<timestamp>"
-        }
-      ],
+      "data": "<nao-comparado>",
       "meta": {
         "currentPage": 1,
         "firstPage": 1,
@@ -176,7 +112,7 @@
         "nextPageUrl": null,
         "perPage": 10,
         "previousPageUrl": null,
-        "total": 7
+        "total": 9
       }
     }
   }

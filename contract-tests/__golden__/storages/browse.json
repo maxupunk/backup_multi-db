@@ -1,10 +1,10 @@
 {
-  "name": "users/toggle-status",
+  "name": "storages/browse",
   "recordedFrom": "adonis",
   "request": {
-    "method": "PATCH",
-    "route": "PATCH /api/users/:id/status",
-    "path": "/api/users/11/status",
+    "method": "GET",
+    "route": "GET /api/storages/:id/browse",
+    "path": "/api/storages/2/browse",
     "as": "admin"
   },
   "response": {
@@ -25,19 +25,19 @@
         "data": {
           "kind": "object",
           "fields": {
-            "id": {
-              "kind": "primitive",
-              "type": "number"
-            },
-            "isActive": {
+            "isTruncated": {
               "kind": "primitive",
               "type": "boolean"
+            },
+            "nextCursor": {
+              "kind": "primitive",
+              "type": "null"
+            },
+            "objects": {
+              "kind": "array",
+              "element": null
             }
           }
-        },
-        "message": {
-          "kind": "primitive",
-          "type": "string"
         },
         "success": {
           "kind": "primitive",
@@ -46,11 +46,7 @@
       }
     },
     "body": {
-      "data": {
-        "id": "<id>",
-        "isActive": true
-      },
-      "message": "Usuário ativado com sucesso.",
+      "data": "<nao-comparado>",
       "success": true
     }
   }

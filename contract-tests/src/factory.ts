@@ -14,6 +14,7 @@
 import { httpRequest } from './http.ts'
 import { describeResponse, type ContractResponse } from './http.ts'
 import { state } from './session.ts'
+import { connectionPayload, MYSQL } from './fixtures.ts'
 
 const PASSWORD = 'contract-pass-123'
 
@@ -125,16 +126,7 @@ export async function createConnection(
   const response = must(
     await call('POST', '/api/connections', {
       token: adminToken,
-      json: {
-        name,
-        type: 'mysql',
-        host: '127.0.0.1',
-        port: 13306,
-        databases: ['fixture_primary'],
-        username: 'root',
-        password: 'contract-root-pass',
-        ...overrides,
-      },
+      json: connectionPayload(MYSQL, { name, ...overrides }),
     }),
     [200, 201],
     `criacao da conexao ${name}`

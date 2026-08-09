@@ -1,0 +1,45 @@
+{
+  "name": "connections/test-unreachable",
+  "recordedFrom": "adonis",
+  "request": {
+    "method": "POST",
+    "route": "POST /api/connections/:id/test",
+    "path": "/api/connections/19/test",
+    "as": "admin"
+  },
+  "response": {
+    "status": 422,
+    "mime": "application/json",
+    "contentType": "application/json; charset=utf-8",
+    "headerNames": [
+      "content-type",
+      "x-ratelimit-limit"
+    ],
+    "headers": {
+      "content-type": "application/json; charset=utf-8",
+      "x-ratelimit-limit": "60"
+    },
+    "shape": {
+      "kind": "object",
+      "fields": {
+        "error": {
+          "kind": "primitive",
+          "type": "string"
+        },
+        "message": {
+          "kind": "primitive",
+          "type": "string"
+        },
+        "success": {
+          "kind": "primitive",
+          "type": "boolean"
+        }
+      }
+    },
+    "body": {
+      "error": "connect ECONNREFUSED 127.0.0.1:1",
+      "message": "Falha ao conectar ao banco de dados",
+      "success": false
+    }
+  }
+}

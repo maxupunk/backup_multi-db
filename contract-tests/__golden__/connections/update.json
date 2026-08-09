@@ -1,0 +1,154 @@
+{
+  "name": "connections/update",
+  "recordedFrom": "adonis",
+  "request": {
+    "method": "PUT",
+    "route": "PUT /api/connections/:id",
+    "path": "/api/connections/10",
+    "as": "admin"
+  },
+  "response": {
+    "status": 200,
+    "mime": "application/json",
+    "contentType": "application/json; charset=utf-8",
+    "headerNames": [
+      "content-type",
+      "x-ratelimit-limit"
+    ],
+    "headers": {
+      "content-type": "application/json; charset=utf-8",
+      "x-ratelimit-limit": "600"
+    },
+    "shape": {
+      "kind": "object",
+      "fields": {
+        "data": {
+          "kind": "object",
+          "fields": {
+            "createdAt": {
+              "kind": "primitive",
+              "type": "string"
+            },
+            "databases": {
+              "kind": "array",
+              "element": {
+                "kind": "object",
+                "fields": {
+                  "databaseName": {
+                    "kind": "primitive",
+                    "type": "string"
+                  },
+                  "enabled": {
+                    "kind": "primitive",
+                    "type": "number"
+                  },
+                  "id": {
+                    "kind": "primitive",
+                    "type": "number"
+                  }
+                }
+              }
+            },
+            "host": {
+              "kind": "primitive",
+              "type": "string"
+            },
+            "id": {
+              "kind": "primitive",
+              "type": "number"
+            },
+            "lastBackupAt": {
+              "kind": "primitive",
+              "type": "null"
+            },
+            "lastError": {
+              "kind": "primitive",
+              "type": "null"
+            },
+            "lastTestedAt": {
+              "kind": "primitive",
+              "type": "null"
+            },
+            "name": {
+              "kind": "primitive",
+              "type": "string"
+            },
+            "options": {
+              "kind": "primitive",
+              "type": "null"
+            },
+            "port": {
+              "kind": "primitive",
+              "type": "number"
+            },
+            "scheduleEnabled": {
+              "kind": "primitive",
+              "type": "number"
+            },
+            "scheduleFrequency": {
+              "kind": "primitive",
+              "type": "null"
+            },
+            "status": {
+              "kind": "primitive",
+              "type": "string"
+            },
+            "storageDestinationId": {
+              "kind": "primitive",
+              "type": "null"
+            },
+            "type": {
+              "kind": "primitive",
+              "type": "string"
+            },
+            "updatedAt": {
+              "kind": "primitive",
+              "type": "string"
+            },
+            "username": {
+              "kind": "primitive",
+              "type": "string"
+            }
+          }
+        },
+        "message": {
+          "kind": "primitive",
+          "type": "string"
+        },
+        "success": {
+          "kind": "primitive",
+          "type": "boolean"
+        }
+      }
+    },
+    "body": {
+      "data": {
+        "createdAt": "<timestamp>",
+        "databases": [
+          {
+            "databaseName": "app_fixture",
+            "enabled": 1,
+            "id": "<id>"
+          }
+        ],
+        "host": "127.0.0.1",
+        "id": "<id>",
+        "lastBackupAt": "<timestamp>",
+        "lastError": null,
+        "lastTestedAt": "<timestamp>",
+        "name": "Depois Do Update",
+        "options": null,
+        "port": 13307,
+        "scheduleEnabled": 0,
+        "scheduleFrequency": null,
+        "status": "active",
+        "storageDestinationId": "<id>",
+        "type": "mysql",
+        "updatedAt": "<timestamp>",
+        "username": "tester"
+      },
+      "message": "Conexão atualizada com sucesso",
+      "success": true
+    }
+  }
+}

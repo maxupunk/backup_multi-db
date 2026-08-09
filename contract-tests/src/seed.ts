@@ -17,6 +17,8 @@ import { dirname } from 'node:path'
 import { loadConfig, stateFilePath } from './config.ts'
 import { describeResponse, httpRequest, type ContractResponse } from './http.ts'
 import { TEST_BOOTSTRAP_TOKEN } from './server.ts'
+import { connectionPayload, MINIO, MYSQL, POSTGRES } from './fixtures.ts'
+import type { Capabilities } from './capabilities.ts'
 
 export interface SeededUser {
   email: string
@@ -52,6 +54,8 @@ export interface SeedState {
    * de backups, onde o custo se paga porque ha' teste consumindo.
    */
   backups: Record<string, never>
+  /** O que o ambiente desta execucao consegue testar de verdade. */
+  capabilities: Capabilities
 }
 
 const PASSWORD = 'contract-pass-123'
@@ -225,11 +229,11 @@ async function seedStorages(token: string): Promise<SeedState['storages']> {
       name: 'Contract MinIO',
       provider: 'minio',
       config: {
-        bucket: 'backups-primary',
-        accessKeyId: 'contract-access-key',
-        secretAccessKey: 'contract-secret-key',
-        endpoint: 'http://127.0.0.1:19000',
-        region: 'us-east-1',
+        bucket: MINIO.buckets.primary,
+        accessKeyId: MINIO.accessKeyId,
+        secretAccessKey: MINIO.secretAccessKey,
+        endpoint: MINIO.endpoint,
+        region: MINIO.region,
         forcePathStyle: true,
       },
     },
@@ -245,7 +249,7 @@ async function seedStorages(token: string): Promise<SeedState['storages']> {
   }
 }
 
-export async function seedAll(baseUrl: string): Promise<SeedState> {
+export async function seedAll(baseUrl: string, capabilities: Capabilities): Promise<SeedState> {
   const config = loadConfig()
 
   const admin = await registerAdmin()
@@ -261,27 +265,21 @@ export async function seedAll(baseUrl: string): Promise<SeedState> {
 
   const storages = await seedStorages(adminToken)
 
+  // Credenciais reais do `docker-compose.test.yml`: assim `POST
+  // /api/connections/:id/test` tem chance de dar certo de verdade quando o
+  // stack esta' de pe'.
   const connections = {
-    mysql: await seedConnection(adminToken, {
-      name: 'Contract MySQL',
-      type: 'mysql',
-      host: '127.0.0.1',
-      port: 13306,
-      databases: ['fixture_primary'],
-      username: 'root',
-      password: 'contract-root-pass',
-      storageDestinationId: storages.local,
-    }),
-    postgres: await seedConnection(adminToken, {
-      name: 'Contract Postgres',
-      type: 'postgresql',
-      host: '127.0.0.1',
-      port: 15432,
-      databases: ['fixture_primary'],
-      username: 'postgres',
-      password: 'contract-root-pass',
-      storageDestinationId: storages.local,
-    }),
+    mysql: await seedConnection(
+      adminToken,
+      connectionPayload(MYSQL, { name: 'Contract MySQL', storageDestinationId: storages.local })
+    ),
+    postgres: await seedConnection(
+      adminToken,
+      connectionPayload(POSTGRES, {
+        name: 'Contract Postgres',
+        storageDestinationId: storages.local,
+      })
+    ),
   }
 
   return {
@@ -293,6 +291,7 @@ export async function seedAll(baseUrl: string): Promise<SeedState> {
     connections,
     storages,
     backups: {},
+    capabilities,
   }
 }
 

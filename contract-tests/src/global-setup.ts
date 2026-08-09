@@ -11,6 +11,7 @@ import { loadConfig, setBaseUrl, coverageFilePath, diffFilePath } from './config
 import { startServer } from './server.ts'
 import { seedAll, writeState } from './seed.ts'
 import { buildCoverageReport, buildDiffReport } from './report.ts'
+import { missingCapabilityWarnings, probeCapabilities } from './capabilities.ts'
 
 export default async function setup(): Promise<() => Promise<void>> {
   const config = loadConfig()
@@ -27,7 +28,17 @@ export default async function setup(): Promise<() => Promise<void>> {
   setBaseUrl(server.baseUrl)
   console.log(`[contract] servidor pronto em ${server.baseUrl}`)
 
-  const state = await seedAll(server.baseUrl)
+  const capabilities = await probeCapabilities(server.baseUrl)
+  const warnings = missingCapabilityWarnings(capabilities)
+  if (warnings.length > 0) {
+    // Alto e claro. Pular em silencio deixaria a suite verde exatamente onde
+    // ela nao mediu nada — a pior leitura possivel de um relatorio de testes.
+    console.warn('\n[contract] ==================== AMBIENTE INCOMPLETO ====================')
+    for (const warning of warnings) console.warn(`[contract]  ! ${warning}`)
+    console.warn('[contract] =============================================================\n')
+  }
+
+  const state = await seedAll(server.baseUrl, capabilities)
   writeState(state)
   console.log(
     `[contract] seed ok: admin#${state.users.admin.id} member#${state.users.member.id} ` +

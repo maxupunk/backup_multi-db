@@ -1,4 +1,26 @@
 import { defineConfig } from 'vitest/config'
+import type { TestSpecification } from 'vitest/node'
+
+/**
+ * Ordena os arquivos de teste por nome, sempre.
+ *
+ * O sequenciador padrão do vitest ordena por tamanho e por duração das
+ * execuções anteriores, então a ordem muda entre rodadas. Numa suíte que
+ * compartilha **um** banco isso torna o resultado irreprodutível: `GET
+ * /api/users` devolve "os usuários criados até agora", e quais são depende de
+ * quais arquivos rodaram antes. Os golden files passariam a mudar sozinhos, e
+ * um arquivo que muda sozinho para de servir como registro de mudança de
+ * contrato.
+ */
+class AlphabeticalSequencer {
+  async shard(files: TestSpecification[]): Promise<TestSpecification[]> {
+    return files
+  }
+
+  async sort(files: TestSpecification[]): Promise<TestSpecification[]> {
+    return [...files].sort((a, b) => a.moduleId.localeCompare(b.moduleId))
+  }
+}
 
 export default defineConfig({
   test: {
@@ -12,6 +34,7 @@ export default defineConfig({
     fileParallelism: false,
     pool: 'forks',
     poolOptions: { forks: { singleFork: true } },
+    sequence: { sequencer: AlphabeticalSequencer },
     testTimeout: 30_000,
     hookTimeout: 180_000,
     teardownTimeout: 60_000,

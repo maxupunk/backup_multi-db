@@ -1,10 +1,10 @@
 {
-  "name": "users/toggle-status",
+  "name": "system/backup-retention-run",
   "recordedFrom": "adonis",
   "request": {
-    "method": "PATCH",
-    "route": "PATCH /api/users/:id/status",
-    "path": "/api/users/11/status",
+    "method": "POST",
+    "route": "POST /api/system/backup-retention/run",
+    "path": "/api/system/backup-retention/run",
     "as": "admin"
   },
   "response": {
@@ -17,7 +17,7 @@
     ],
     "headers": {
       "content-type": "application/json; charset=utf-8",
-      "x-ratelimit-limit": "600"
+      "x-ratelimit-limit": "60"
     },
     "shape": {
       "kind": "object",
@@ -25,13 +25,25 @@
         "data": {
           "kind": "object",
           "fields": {
-            "id": {
+            "deleted": {
               "kind": "primitive",
               "type": "number"
             },
-            "isActive": {
+            "deletedBackups": {
+              "kind": "array",
+              "element": null
+            },
+            "errors": {
+              "kind": "array",
+              "element": null
+            },
+            "promoted": {
               "kind": "primitive",
-              "type": "boolean"
+              "type": "number"
+            },
+            "protected": {
+              "kind": "primitive",
+              "type": "number"
             }
           }
         },
@@ -46,11 +58,8 @@
       }
     },
     "body": {
-      "data": {
-        "id": "<id>",
-        "isActive": true
-      },
-      "message": "Usuário ativado com sucesso.",
+      "data": "<nao-comparado>",
+      "message": "Prune de backups executado com sucesso",
       "success": true
     }
   }

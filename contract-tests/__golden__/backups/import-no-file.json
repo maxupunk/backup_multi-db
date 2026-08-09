@@ -1,0 +1,40 @@
+{
+  "name": "backups/import-no-file",
+  "recordedFrom": "adonis",
+  "request": {
+    "method": "POST",
+    "route": "POST /api/backups/import",
+    "path": "/api/backups/import",
+    "as": "admin"
+  },
+  "response": {
+    "status": 422,
+    "mime": "application/json",
+    "contentType": "application/json; charset=utf-8",
+    "headerNames": [
+      "content-type",
+      "x-ratelimit-limit"
+    ],
+    "headers": {
+      "content-type": "application/json; charset=utf-8",
+      "x-ratelimit-limit": "60"
+    },
+    "shape": {
+      "kind": "object",
+      "fields": {
+        "message": {
+          "kind": "primitive",
+          "type": "string"
+        },
+        "success": {
+          "kind": "primitive",
+          "type": "boolean"
+        }
+      }
+    },
+    "body": {
+      "message": "Nenhum arquivo enviado. Inclua o campo \"file\" no formulário multipart.",
+      "success": false
+    }
+  }
+}

@@ -1,10 +1,10 @@
 {
-  "name": "users/toggle-status",
+  "name": "connections/discover-databases",
   "recordedFrom": "adonis",
   "request": {
-    "method": "PATCH",
-    "route": "PATCH /api/users/:id/status",
-    "path": "/api/users/11/status",
+    "method": "POST",
+    "route": "POST /api/connections/discover-databases",
+    "path": "/api/connections/discover-databases",
     "as": "admin"
   },
   "response": {
@@ -17,7 +17,7 @@
     ],
     "headers": {
       "content-type": "application/json; charset=utf-8",
-      "x-ratelimit-limit": "600"
+      "x-ratelimit-limit": "60"
     },
     "shape": {
       "kind": "object",
@@ -25,13 +25,12 @@
         "data": {
           "kind": "object",
           "fields": {
-            "id": {
-              "kind": "primitive",
-              "type": "number"
-            },
-            "isActive": {
-              "kind": "primitive",
-              "type": "boolean"
+            "databases": {
+              "kind": "array",
+              "element": {
+                "kind": "primitive",
+                "type": "string"
+              }
             }
           }
         },
@@ -47,10 +46,12 @@
     },
     "body": {
       "data": {
-        "id": "<id>",
-        "isActive": true
+        "databases": [
+          "app_fixture",
+          "fixture_secondary"
+        ]
       },
-      "message": "Usuário ativado com sucesso.",
+      "message": "Bancos de dados descobertos com sucesso",
       "success": true
     }
   }

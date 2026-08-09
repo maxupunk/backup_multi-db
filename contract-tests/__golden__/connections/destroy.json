@@ -1,10 +1,10 @@
 {
-  "name": "users/toggle-status",
+  "name": "connections/destroy",
   "recordedFrom": "adonis",
   "request": {
-    "method": "PATCH",
-    "route": "PATCH /api/users/:id/status",
-    "path": "/api/users/11/status",
+    "method": "DELETE",
+    "route": "DELETE /api/connections/:id",
+    "path": "/api/connections/14",
     "as": "admin"
   },
   "response": {
@@ -22,19 +22,6 @@
     "shape": {
       "kind": "object",
       "fields": {
-        "data": {
-          "kind": "object",
-          "fields": {
-            "id": {
-              "kind": "primitive",
-              "type": "number"
-            },
-            "isActive": {
-              "kind": "primitive",
-              "type": "boolean"
-            }
-          }
-        },
         "message": {
           "kind": "primitive",
           "type": "string"
@@ -46,11 +33,7 @@
       }
     },
     "body": {
-      "data": {
-        "id": "<id>",
-        "isActive": true
-      },
-      "message": "Usuário ativado com sucesso.",
+      "message": "Conexão removida com sucesso",
       "success": true
     }
   }

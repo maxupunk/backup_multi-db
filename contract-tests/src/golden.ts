@@ -126,7 +126,14 @@ function buildRecord(
       // Formato do corpo CRU: a redacao troca tipos (number -> "<id>") e
       // destruiria a informacao que a comparacao precisa.
       shape: shapeOf(response.body),
-      body: redact(response.body, options),
+      // Os caminhos que a comparacao ignora tambem saem do corpo gravado. Sao
+      // justamente os que dependem da maquina — uso de CPU, memoria livre,
+      // latencia —, e mante-los faria o golden mudar a cada execucao sem que
+      // nada de contrato tivesse mudado.
+      body: redact(response.body, {
+        ...options,
+        notComparedPaths: [...(options.notComparedPaths ?? []), ...(options.compare?.ignorePaths ?? [])],
+      }),
     },
   }
 }

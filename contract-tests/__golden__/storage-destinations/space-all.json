@@ -1,0 +1,88 @@
+{
+  "name": "storage-destinations/space-all",
+  "recordedFrom": "adonis",
+  "request": {
+    "method": "GET",
+    "route": "GET /api/storage-destinations-space",
+    "path": "/api/storage-destinations-space",
+    "as": "admin"
+  },
+  "response": {
+    "status": 200,
+    "mime": "application/json",
+    "contentType": "application/json; charset=utf-8",
+    "headerNames": [
+      "content-type",
+      "x-ratelimit-limit"
+    ],
+    "headers": {
+      "content-type": "application/json; charset=utf-8",
+      "x-ratelimit-limit": "600"
+    },
+    "shape": {
+      "kind": "object",
+      "fields": {
+        "data": {
+          "kind": "array",
+          "element": {
+            "kind": "object",
+            "fields": {
+              "destinationId": {
+                "kind": "primitive",
+                "type": "number"
+              },
+              "destinationName": {
+                "kind": "primitive",
+                "type": "string"
+              },
+              "freeBytes": {
+                "kind": "primitive",
+                "type": "number"
+              },
+              "freePercent": {
+                "kind": "primitive",
+                "type": "number"
+              },
+              "isLowSpace": {
+                "kind": "primitive",
+                "type": "boolean"
+              },
+              "lowSpaceThreshold": {
+                "kind": "primitive",
+                "type": "number"
+              },
+              "spaceAvailable": {
+                "kind": "primitive",
+                "type": "boolean"
+              },
+              "totalBytes": {
+                "kind": "primitive",
+                "type": "number"
+              },
+              "type": {
+                "kind": "primitive",
+                "type": "string"
+              },
+              "usedBytes": {
+                "kind": "primitive",
+                "type": "number"
+              },
+              "usedPercent": {
+                "kind": "primitive",
+                "type": "number"
+              }
+            }
+          }
+        },
+        "success": {
+          "kind": "primitive",
+          "type": "boolean"
+        }
+      }
+    },
+    "body": {
+      "data": "<nao-comparado>",
+      "success": true
+    }
+  }
+}

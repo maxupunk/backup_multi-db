@@ -1,0 +1,162 @@
+{
+  "name": "storages/index",
+  "recordedFrom": "adonis",
+  "request": {
+    "method": "GET",
+    "route": "GET /api/storages",
+    "path": "/api/storages",
+    "as": "admin"
+  },
+  "response": {
+    "status": 200,
+    "mime": "application/json",
+    "contentType": "application/json; charset=utf-8",
+    "headerNames": [
+      "content-type",
+      "x-ratelimit-limit"
+    ],
+    "headers": {
+      "content-type": "application/json; charset=utf-8",
+      "x-ratelimit-limit": "600"
+    },
+    "shape": {
+      "kind": "object",
+      "fields": {
+        "data": {
+          "kind": "object",
+          "fields": {
+            "data": {
+              "kind": "array",
+              "element": {
+                "kind": "object",
+                "fields": {
+                  "createdAt": {
+                    "kind": "primitive",
+                    "type": "string"
+                  },
+                  "id": {
+                    "kind": "primitive",
+                    "type": "number"
+                  },
+                  "isDefault": {
+                    "kind": "primitive",
+                    "type": "boolean"
+                  },
+                  "name": {
+                    "kind": "primitive",
+                    "type": "string"
+                  },
+                  "provider": {
+                    "kind": "primitive",
+                    "type": "string"
+                  },
+                  "providerLabel": {
+                    "kind": "primitive",
+                    "type": "string"
+                  },
+                  "status": {
+                    "kind": "primitive",
+                    "type": "string"
+                  },
+                  "type": {
+                    "kind": "primitive",
+                    "type": "string"
+                  },
+                  "updatedAt": {
+                    "kind": "primitive",
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "meta": {
+              "kind": "object",
+              "fields": {
+                "currentPage": {
+                  "kind": "primitive",
+                  "type": "number"
+                },
+                "firstPage": {
+                  "kind": "primitive",
+                  "type": "number"
+                },
+                "firstPageUrl": {
+                  "kind": "primitive",
+                  "type": "string"
+                },
+                "lastPage": {
+                  "kind": "primitive",
+                  "type": "number"
+                },
+                "lastPageUrl": {
+                  "kind": "primitive",
+                  "type": "string"
+                },
+                "nextPageUrl": {
+                  "kind": "primitive",
+                  "type": "null"
+                },
+                "perPage": {
+                  "kind": "primitive",
+                  "type": "number"
+                },
+                "previousPageUrl": {
+                  "kind": "primitive",
+                  "type": "null"
+                },
+                "total": {
+                  "kind": "primitive",
+                  "type": "number"
+                }
+              }
+            }
+          }
+        },
+        "success": {
+          "kind": "primitive",
+          "type": "boolean"
+        }
+      }
+    },
+    "body": {
+      "data": {
+        "data": [
+          {
+            "createdAt": "<timestamp>",
+            "id": "<id>",
+            "isDefault": false,
+            "name": "Contract MinIO",
+            "provider": "minio",
+            "providerLabel": "MinIO",
+            "status": "active",
+            "type": "s3",
+            "updatedAt": "<timestamp>"
+          },
+          {
+            "createdAt": "<timestamp>",
+            "id": "<id>",
+            "isDefault": true,
+            "name": "Local",
+            "provider": null,
+            "providerLabel": "Local",
+            "status": "active",
+            "type": "local",
+            "updatedAt": "<timestamp>"
+          }
+        ],
+        "meta": {
+          "currentPage": 1,
+          "firstPage": 1,
+          "firstPageUrl": "<path>",
+          "lastPage": 1,
+          "lastPageUrl": "<path>",
+          "nextPageUrl": null,
+          "perPage": 20,
+          "previousPageUrl": null,
+          "total": 2
+        }
+      },
+      "success": true
+    }
+  }
+}

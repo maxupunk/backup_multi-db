@@ -1,14 +1,14 @@
 {
-  "name": "users/toggle-status",
+  "name": "connections/show-not-found",
   "recordedFrom": "adonis",
   "request": {
-    "method": "PATCH",
-    "route": "PATCH /api/users/:id/status",
-    "path": "/api/users/11/status",
+    "method": "GET",
+    "route": "GET /api/connections/:id",
+    "path": "/api/connections/99999999",
     "as": "admin"
   },
   "response": {
-    "status": 200,
+    "status": 404,
     "mime": "application/json",
     "contentType": "application/json; charset=utf-8",
     "headerNames": [
@@ -22,19 +22,6 @@
     "shape": {
       "kind": "object",
       "fields": {
-        "data": {
-          "kind": "object",
-          "fields": {
-            "id": {
-              "kind": "primitive",
-              "type": "number"
-            },
-            "isActive": {
-              "kind": "primitive",
-              "type": "boolean"
-            }
-          }
-        },
         "message": {
           "kind": "primitive",
           "type": "string"
@@ -46,12 +33,8 @@
       }
     },
     "body": {
-      "data": {
-        "id": "<id>",
-        "isActive": true
-      },
-      "message": "Usuário ativado com sucesso.",
-      "success": true
+      "message": "Conexão não encontrada",
+      "success": false
     }
   }
 }

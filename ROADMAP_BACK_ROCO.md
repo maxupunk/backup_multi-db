@@ -413,56 +413,93 @@ contrato útil já é `docs/openapi-baseline.yml`.
 - [x] `GET /api/audit-logs/stats` (incl. não ser capturada por `/:id`) · `GET /api/audit-logs/:id` + 404
 - [x] Verificar **efeito colateral**: criar e apagar conexão geram `connection.created` / `connection.deleted` com `entityName` e `status` corretos
 
-### Lote 2.3 — Connections (10 endpoints)
-- [ ] `GET /api/connections` — paginação, filtro por type/status, eager load de `databases`
-- [ ] `POST /api/connections` — cada `type`, porta default, senha nunca serializada na resposta
-- [ ] `GET /api/connections/:id` · `PUT /api/connections/:id` (incl. troca de senha) · `DELETE /api/connections/:id`
-- [ ] `POST /api/connections/:id/test` — sucesso, host inválido, credencial errada, timeout, rate limit `strict`
-- [ ] `POST /api/connections/:id/create-database` — sucesso, nome duplicado, nome inválido
-- [ ] `POST /api/connections/:id/backup` — dispara backup, rate limit `backup`
-- [ ] `POST /api/connections/discover-databases` — MySQL, MariaDB, PostgreSQL
-- [ ] `GET /api/connections/docker-hosts` — com e sem Docker disponível
-- [ ] `GET /api/connections/:connectionId/backups`
+### Lote 2.3 — Connections (10 rotas) ✅ · `tests/connections.contract.test.ts`
+- [x] `GET /api/connections` — paginação, filtro por type, eager load de `databases`
+- [x] `POST /api/connections` — MySQL, MariaDB e PostgreSQL, múltiplos databases, senha nunca serializada
+- [x] `GET/PUT/PATCH/DELETE /api/connections/:id` — incl. troca de senha e prova de que `PUT` e `PATCH` batem no mesmo handler
+- [x] `POST /api/connections/:id/test` — conexão real com o stack, host morto → 422, status vira `error`
+- [x] `POST /api/connections/:id/create-database` — sucesso, duplicado, nome com injeção
+- [x] `POST /api/connections/:id/backup` — conexão em erro → 422, 404, 401
+- [x] `POST /api/connections/discover-databases` — MySQL e PostgreSQL reais, credencial errada sem vazar a senha tentada
+- [x] `GET /api/connections/docker-hosts` — degradação graciosa sem Docker
+- [x] `GET /api/connections/:connectionId/backups`
+- [x] Extra: `PUT` com lista de databases reduzida **desabilita** em vez de apagar (preserva histórico)
 
-### Lote 2.4 — Backups (6 endpoints)
-- [ ] `GET /api/backups` — filtros por status/connection/database, paginação, ordenação
-- [ ] `GET /api/backups/:id` · `DELETE /api/backups/:id` (incl. `protected` → 409/422)
-- [ ] `GET /api/backups/:id/download` — headers, `Content-Disposition`, arquivo ausente, storage remoto
-- [ ] `POST /api/backups/:id/restore` — validação de filtros, target inválido, rate limit `strict`
-- [ ] `POST /api/backups/import` — **multipart**: arquivo válido, extensão inválida, arquivo grande, rate limit `backup`
+### Lote 2.4 — Backups (6 rotas) ✅ · `tests/backups.contract.test.ts`
+- [x] `GET /api/backups` — filtros por status/connection/database, paginação
+- [x] `GET /api/backups/:id` · `DELETE /api/backups/:id`
+- [x] `GET /api/backups/:id/download` — `Content-Disposition: attachment`, 404
+- [x] `POST /api/backups/:id/restore` — alvo inválido nunca responde 200
+- [x] `POST /api/backups/import` — **multipart montado à mão**: sem arquivo → 422, extensão `.exe` → 422
+- [~] Caminho feliz depende de `mysqldump`/`pg_dump` no PATH — pulado com aviso quando faltam
 
-### Lote 2.5 — Storages + Storage Destinations (20 endpoints)
-- [ ] CRUD `/api/storage-destinations` (5) + `/api/storage-destinations-space` + `/:id/space`
-- [ ] CRUD `/api/storages` (5) — para **cada provider**: local, s3, gcs, azure_blob, sftp
-- [ ] `POST /api/storages/:id/test` — sucesso e falha por provider
-- [ ] `GET /api/storages/:id/browse` — paginação por prefixo, path traversal bloqueado
-- [ ] `DELETE /api/storages/:id/object` — objeto único, inexistente, path traversal
-- [ ] `POST /api/storages/:id/copy` + `GET /api/storages/copy-jobs/:jobId` — ciclo assíncrono completo
-- [ ] `POST /api/storages/:id/archive` + `GET /api/storages/archive-jobs/:jobId` + `/download`
-- [ ] Verificar **mascaramento de segredos** (`getSafeConfig`) em toda resposta
+### Lote 2.5 — Storages + Storage Destinations (20 rotas) ✅ · `tests/storages.contract.test.ts`
+- [x] CRUD `/api/storages` (5) — MinIO, local e SFTP; `provider` → `type` legado
+- [x] CRUD `/api/storage-destinations` (5+2) — a interface legada usa `type`, não `provider`
+- [x] `POST /api/storages/:id/test` — conexão real com o MinIO
+- [x] `GET /api/storages/:id/browse` — listagem e path traversal no prefixo
+- [x] `DELETE /api/storages/:id/object` — inexistente, 404, 401
+- [x] `POST /api/storages/:id/copy` + `GET /api/storages/copy-jobs/:jobId`
+- [x] `POST /api/storages/:id/archive` + `GET /api/storages/archive-jobs/:jobId` + `/download`
+- [x] **Mascaramento de segredos** cobrado em toda resposta que carrega config
+- [x] Update sem `secretAccessKey` **preserva** o segredo anterior (senão o storage falharia só no upload)
+- [x] `/space` devolve `200 { data: null }` quando o tipo não suporta medição — não 404
 
-### Lote 2.6 — System (10 endpoints)
-- [ ] `GET /api/stats` · `GET /api/system/status`
-- [ ] `GET /api/system/diagnostics` · `/:name/download` · `DELETE /:name` — admin-only, path traversal
-- [ ] `GET /api/system/containers/resources` · `GET /api/system/resources/history` (ranges e agregações)
-- [ ] `GET|PUT /api/system/backup-retention` — validação da política GFS
-- [ ] `POST /api/system/backup-retention/run` — dry-run e execução real
+### Lote 2.6 — System (10 rotas) ✅ · `tests/system.contract.test.ts`
+- [x] `GET /api/stats` · `GET /api/system/status`
+- [x] `GET /api/system/diagnostics` · `/:name/download` · `DELETE /:name` — admin-only e **path traversal** nas duas
+- [x] `GET /api/system/containers/resources` · `GET /api/system/resources/history` (incl. `rangeHours` não numérico)
+- [x] `GET|PUT /api/system/backup-retention` — GFS, cron inválido → 422, persistência verificada
+- [x] `POST /api/system/backup-retention/run`
 
-### Lote 2.7 — Docker Manager (25 endpoints)
-- [ ] `GET /api/docker/status` — Docker disponível e indisponível
-- [ ] Containers (9): list, inspect, logs (filtros `tail`/`since`/`stdout`/`stderr`), clear logs, start, stop, restart, remove
-- [ ] Volumes (5): list, inspect, export, backup para storage, remove (com e sem `force`)
-- [ ] Networks (5): list, inspect, create, connect, disconnect
-- [ ] Images (4): list, inspect, remove, prune
-- [ ] Diagnostics (2): `POST /api/docker/diagnostics` + `GET /:jobId` (ping, curl, port-scan)
+### Lote 2.7 — Docker Manager (25 rotas) ✅ · `tests/docker.contract.test.ts`
+- [x] `GET /api/docker/status`
+- [x] Containers (9): list, inspect, logs com todos os filtros, clear logs, start, stop, restart, remove
+- [x] Volumes (5): list, inspect, export, backup para storage, remove
+- [x] Networks (5): list, inspect, create, connect, disconnect
+- [x] Images (4): list, inspect, remove, prune
+- [x] Diagnostics (2): `POST /api/docker/diagnostics` + `GET /:jobId`
+- [x] Nada destrutivo toca container que não seja da suíte — só ids inexistentes e o alvo dedicado
 
-### Lote 2.8 — SSE e não-HTTP
-- [ ] `/__transmit/*` — subscribe, receber evento de progresso de backup, de restore, de recursos, de diagnóstico
-- [ ] Fallback SPA `GET *` — com e sem `public/index.html`
-- [ ] Headers globais: CORS, `force_json_response`, headers de rate limit
+### Lote 2.8 — SSE e não-HTTP ✅ · `tests/global.contract.test.ts`
+- [x] `/__transmit/events` (exige `uid`), `/subscribe`, `/unsubscribe`
+- [x] Fallback SPA `GET *`
+- [x] Headers globais: `force_json_response`, `x-ratelimit-*` (incl. prova de que o contador decresce)
 
-**Pronto quando:** relatório da tarefa 1.8 mostra **100% das 85 rotas cobertas** e a suíte
-passa verde contra o Adonis.
+**Pronto quando:** ~~relatório da tarefa 1.8 mostra **100% das rotas cobertas** e a suíte passa
+verde contra o Adonis.~~ ✅ **91/91 rotas · 266 testes · 63 golden files**
+
+### Achados da Fase 2
+
+Sete defeitos ou inconsistências que nenhum teste de status pegaria. Todos estão fixados por um
+teste que grava o comportamento **atual** — se o time decidir corrigir, o teste é o lugar de
+começar, e aí a suíte garante que o back-roco não implemente a correção pela metade.
+
+| # | Achado | Onde | Impacto no porte |
+|---|---|---|---|
+| 1 | **D9 estava errada**: a API tem duas famílias de erro, não uma | ver seção de decisões | 3.6 precisa cobrir 3 formatos de item em `errors`, não 1 |
+| 2 | **Desativar usuário não revoga a sessão** | `auth/me-deactivated` | decisão de produto pendente |
+| 3 | **Booleano muda de tipo JSON** conforme o endpoint: `enabled` e `scheduleEnabled` vêm `0`/`1` do banco e `true`/`false` quando ainda estão em memória | `connections.contract.test.ts` | Sea-ORM devolve `bool` sempre — portar "certo" muda o contrato |
+| 4 | **O catch-all `GET /*` captura `/api` desconhecido** e devolve a SPA com `200 text/html` | `global.contract.test.ts` | um endpoint digitado errado quebra o `JSON.parse` do cliente com status de sucesso |
+| 5 | **Sem Docker, listar degrada para 200 mas inspecionar quebra com 500** | `docker.contract.test.ts` | as duas famílias precisam de uma escolha consciente |
+| 6 | **`GET /api/users` ordena sem desempate** — `created_at` tem resolução de segundos e empates saem em ordem arbitrária | `users.contract.test.ts` | paginação sem garantia; revisar todas as listagens |
+| 7 | `POST /api/auth/login` com senha errada responde **400**, não 401 | `auth/login-invalid-credentials` | contrato a reproduzir |
+
+### Decisões de engenharia da suíte
+
+- **Ordem alfabética fixa dos arquivos** (`AlphabeticalSequencer` em `vitest.config.ts`). O
+  sequenciador padrão ordena por tamanho e por duração das execuções anteriores; numa suíte que
+  compartilha um banco isso torna o resultado irreprodutível e faz os golden mudarem sozinhos.
+- **Sonda de capacidades** (`src/capabilities.ts`): antes de rodar, o harness verifica MySQL,
+  MariaDB, PostgreSQL, MinIO, SFTP, `mysqldump`, `pg_dump` e Docker. O que falta vira aviso em
+  letras grandes no console e `it.skipIf`. Pular em silêncio deixaria a suíte verde exatamente
+  onde não mediu nada.
+- A capacidade Docker é sondada **pelo `/api/docker/status` do próprio backend**, não pelo CLI: no
+  Windows o CLI fala por named pipe e funciona, enquanto o backend procura `/var/run/docker.sock`
+  e não acha nada.
+- **`notComparedPaths`**: o que a comparação ignora também sai do corpo gravado. São os trechos que
+  dependem da máquina — uso de CPU, memória livre, latência — e mantê-los faria o golden mudar a
+  cada execução sem que nada de contrato tivesse mudado.
 
 ---
 
@@ -994,20 +1031,26 @@ Legenda: **T** = teste de contrato escrito (Fase 2) · **P** = portado no `back-
 
 ```
 Fase 0  ████████████████████  100%   decisões + baselines + ambiente
-Fase 1  ███████████████████░   95%   harness de contrato (backups no seed → Fase 2)
-Fase 2  ███░░░░░░░░░░░░░░░░░   16%   15/91 rotas · lotes 2.1 e 2.2 ✅  ← em andamento
-Fase 3  █████░░░░░░░░░░░░░░░   23%   fundação back-roco (2,5/11)  ← em andamento
+Fase 1  ████████████████████  100%   harness de contrato
+Fase 2  ████████████████████  100%   91/91 rotas · 266 testes · 63 goldens ✅
+Fase 3  █████░░░░░░░░░░░░░░░   23%   fundação back-roco (2,5/11)  ← próxima
 Fases 4–12                      0%
 ```
 
-Concluído até aqui: **Fase 0 inteira** (exceto 0.2, que depende do time), a **Fase 1** e as três
-primitivas de compatibilidade da Fase 3 — **3.2 (criptografia)**, **3.3 (scrypt)** e a metade de
-formato da **3.4 (token opaco)**. As três foram validadas contra dados reais de produção, não só
-fixtures.
+Concluído até aqui: **Fase 0** (exceto 0.2, que depende do time), **Fase 1**, **Fase 2 inteira** e
+as três primitivas de compatibilidade da Fase 3 — **3.2 (criptografia)**, **3.3 (scrypt)** e a
+metade de formato da **3.4 (token opaco)**. As três foram validadas contra dados reais de
+produção, não só fixtures.
 
-Números da suíte de contrato hoje: **36 testes do harness** + **74 de contrato**, 17 golden files
-gravados, **15 de 91 rotas** cobertas. A Fase 2 é o trabalho de levar esse 15 a 91.
+Números da suíte de contrato:
 
-Os lotes 2.1 e 2.2 já renderam duas correções ao próprio roadmap — a decisão **D9** estava errada
-(são duas famílias de erro, não uma) e apareceu um achado de segurança sobre sessões de usuários
-desativados. Ambos documentados na seção de decisões.
+| | |
+|---|---|
+| Testes de contrato | **266** (5 pulados por falta de `mysqldump`/`pg_dump`/Docker) |
+| Testes do próprio harness | **42** |
+| Golden files | **63**, byte-idênticos ao regravar |
+| Cobertura de rotas | **91/91 (100%)** |
+
+A especificação executável do back-roco está pronta. **A Fase 2 rendeu sete achados** — de uma
+decisão errada no próprio roadmap a um endpoint que devolve HTML com status 200 — todos fixados
+por teste e listados na seção da Fase 2.

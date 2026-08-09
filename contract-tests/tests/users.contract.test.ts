@@ -13,7 +13,14 @@ import { as, expectStatus, json, state, unauth } from '../src/session.ts'
 
 interface UsersPage {
   meta: { total: number; perPage: number; currentPage: number; lastPage: number }
-  data: Array<{ id: number; email: string; fullName: string | null; isActive: boolean; isAdmin: boolean }>
+  data: Array<{
+    id: number
+    email: string
+    fullName: string | null
+    isActive: boolean
+    isAdmin: boolean
+    createdAt: string
+  }>
 }
 
 describe('GET /api/users', () => {
@@ -24,7 +31,12 @@ describe('GET /api/users', () => {
     expect(body.data.length).toBeGreaterThan(0)
     expect(body.meta.total).toBeGreaterThanOrEqual(3)
 
-    expectGolden('users/index', response, { as: 'admin' })
+    // `notComparedPaths` tira a **lista** do corpo gravado, mas o `shape`
+    // continua sendo comparado — o formato do item de usuario e' contrato.
+    // O motivo esta' no ACHADO de ordenacao no fim deste arquivo: a ordem dos
+    // usuarios nao e' estavel, entao gravar a lista faria o golden mudar
+    // sozinho a cada execucao.
+    expectGolden('users/index', response, { as: 'admin', notComparedPaths: ['data'] })
   })
 
   it('nunca serializa o hash da senha', async () => {
@@ -136,5 +148,74 @@ describe('PATCH /api/users/:id/status', () => {
 
     const depois = json<UsersPage>(await as('admin').get('/api/users', { query: { limit: 100 } }))
     expect(depois.data.find((user) => user.id === alvo)!.isActive).toBe(estadoAntes)
+  })
+})
+
+/**
+ * ACHADO — `GET /api/users` ordena sem critério de desempate.
+ *
+ * A query é `orderBy('createdAt', 'desc')` e o `created_at` do SQLite tem
+ * resolução de segundos. Usuários criados dentro do mesmo segundo — o caso
+ * normal num cadastro em lote, ou nesta própria suíte — ficam empatados, e o
+ * SQLite devolve empates em ordem arbitrária, que pode mudar entre consultas
+ * idênticas.
+ *
+ * A consequência é a **paginação sem garantia**: se a ordem mudar entre a
+ * consulta da página 1 e a da página 2, um usuário pode aparecer nas duas ou
+ * em nenhuma, e quem varre a lista paginando processa alguém duas vezes e pula
+ * outro.
+ *
+ * Hoje a varredura funciona — o segundo teste abaixo prova isso — porque o
+ * SQLite tende a devolver empates na ordem do rowid. Mas isso é acidente de
+ * implementação, não garantia: outro motor, outro plano de query ou um índice
+ * novo mudam o resultado sem aviso. O primeiro teste prova que os empates
+ * existem de verdade; o segundo é o canário que grita se o acidente parar de
+ * ser favorável.
+ *
+ * A correção é um desempate estável (`orderBy('createdAt','desc').orderBy('id','desc')`).
+ * Não a apliquei porque o `backend/` está congelado pela decisão D8 — mas o
+ * back-roco não deveria copiar o defeito sem que a escolha seja consciente.
+ *
+ * O mesmo padrão aparece em outras listagens paginadas do projeto; vale
+ * revisar todas quando esta for decidida.
+ */
+describe('ACHADO: ordenacao de /api/users nao tem desempate', () => {
+  it('varios usuarios compartilham o mesmo createdAt', async () => {
+    const body = json<UsersPage>(
+      await as('admin').get('/api/users', { query: { limit: 100 } })
+    )
+
+    const porTimestamp = new Map<string, number>()
+    for (const user of body.data) {
+      porTimestamp.set(user.createdAt, (porTimestamp.get(user.createdAt) ?? 0) + 1)
+    }
+
+    const maiorEmpate = Math.max(...porTimestamp.values())
+    expect(
+      maiorEmpate,
+      'nenhum empate de createdAt: o achado pode ter sido corrigido — revise este teste'
+    ).toBeGreaterThan(1)
+  })
+
+  it('a lista completa nao perde nem duplica usuarios ao paginar', async () => {
+    // Este e' o efeito que realmente importa. Hoje passa na maioria das vezes;
+    // se um dia falhar de forma intermitente, e' o achado se manifestando, e
+    // nao um teste ruim.
+    const primeira = json<UsersPage>(
+      await as('admin').get('/api/users', { query: { page: 1, limit: 5 } })
+    )
+
+    // `lastPage` tem que vir da **mesma** paginacao que se esta' varrendo. Ler
+    // de uma consulta com outro `limit` daria 1 e a varredura pararia na
+    // primeira pagina, inventando uma falha que nao existe.
+    const paginados: number[] = [...primeira.data.map((user) => user.id)]
+    for (let page = 2; page <= primeira.meta.lastPage; page++) {
+      const parte = json<UsersPage>(
+        await as('admin').get('/api/users', { query: { page, limit: 5 } })
+      )
+      paginados.push(...parte.data.map((user) => user.id))
+    }
+
+    expect(new Set(paginados).size).toBe(primeira.meta.total)
   })
 })

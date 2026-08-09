@@ -85,16 +85,25 @@ function segmentsOf(path: string): string[] {
 }
 
 function patternMatches(patternSegments: string[], pathSegments: string[]): boolean {
+  const wildcardAt = patternSegments.indexOf('*')
+
+  if (wildcardAt !== -1) {
+    // `*` e' o catch-all da SPA (`GET /*`): engole todos os segmentos
+    // restantes, entao o caminho so' precisa ser pelo menos tao longo quanto o
+    // prefixo antes do curinga. Sem isso, `GET /*` nunca casaria com nada e
+    // apareceria eternamente como "rota sem teste".
+    if (pathSegments.length < wildcardAt) return false
+    return patternSegments
+      .slice(0, wildcardAt)
+      .every((segment, index) => segment === pathSegments[index])
+  }
+
   if (patternSegments.length !== pathSegments.length) return false
 
   return patternSegments.every((segment, index) => {
     const actual = pathSegments[index]!
-    if (segment.startsWith(':')) {
-      // Um parametro casa com qualquer segmento nao vazio. `*` nao aparece no
-      // baseline atual; se aparecer, o parse acima ainda o trata como literal
-      // e o casamento falha alto em vez de casar demais silenciosamente.
-      return actual !== ''
-    }
+    // Um parametro casa com qualquer segmento nao vazio.
+    if (segment.startsWith(':')) return actual !== ''
     return segment === actual
   })
 }

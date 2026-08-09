@@ -1,10 +1,10 @@
 {
-  "name": "users/toggle-status",
+  "name": "system/diagnostics",
   "recordedFrom": "adonis",
   "request": {
-    "method": "PATCH",
-    "route": "PATCH /api/users/:id/status",
-    "path": "/api/users/11/status",
+    "method": "GET",
+    "route": "GET /api/system/diagnostics",
+    "path": "/api/system/diagnostics",
     "as": "admin"
   },
   "response": {
@@ -25,19 +25,19 @@
         "data": {
           "kind": "object",
           "fields": {
-            "id": {
+            "directory": {
               "kind": "primitive",
-              "type": "number"
+              "type": "string"
             },
-            "isActive": {
+            "directoryExists": {
               "kind": "primitive",
               "type": "boolean"
+            },
+            "files": {
+              "kind": "array",
+              "element": null
             }
           }
-        },
-        "message": {
-          "kind": "primitive",
-          "type": "string"
         },
         "success": {
           "kind": "primitive",
@@ -47,10 +47,10 @@
     },
     "body": {
       "data": {
-        "id": "<id>",
-        "isActive": true
+        "directory": "<path>",
+        "directoryExists": true,
+        "files": "<nao-comparado>"
       },
-      "message": "Usuário ativado com sucesso.",
       "success": true
     }
   }

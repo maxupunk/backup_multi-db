@@ -1,0 +1,86 @@
+{
+  "name": "backups/index",
+  "recordedFrom": "adonis",
+  "request": {
+    "method": "GET",
+    "route": "GET /api/backups",
+    "path": "/api/backups",
+    "as": "admin"
+  },
+  "response": {
+    "status": 200,
+    "mime": "application/json",
+    "contentType": "application/json; charset=utf-8",
+    "headerNames": [
+      "content-type",
+      "x-ratelimit-limit"
+    ],
+    "headers": {
+      "content-type": "application/json; charset=utf-8",
+      "x-ratelimit-limit": "600"
+    },
+    "shape": {
+      "kind": "object",
+      "fields": {
+        "data": {
+          "kind": "object",
+          "fields": {
+            "data": {
+              "kind": "array",
+              "element": null
+            },
+            "meta": {
+              "kind": "object",
+              "fields": {
+                "currentPage": {
+                  "kind": "primitive",
+                  "type": "number"
+                },
+                "firstPage": {
+                  "kind": "primitive",
+                  "type": "number"
+                },
+                "firstPageUrl": {
+                  "kind": "primitive",
+                  "type": "string"
+                },
+                "lastPage": {
+                  "kind": "primitive",
+                  "type": "number"
+                },
+                "lastPageUrl": {
+                  "kind": "primitive",
+                  "type": "string"
+                },
+                "nextPageUrl": {
+                  "kind": "primitive",
+                  "type": "null"
+                },
+                "perPage": {
+                  "kind": "primitive",
+                  "type": "number"
+                },
+                "previousPageUrl": {
+                  "kind": "primitive",
+                  "type": "null"
+                },
+                "total": {
+                  "kind": "primitive",
+                  "type": "number"
+                }
+              }
+            }
+          }
+        },
+        "success": {
+          "kind": "primitive",
+          "type": "boolean"
+        }
+      }
+    },
+    "body": {
+      "data": "<nao-comparado>",
+      "success": true
+    }
+  }
+}

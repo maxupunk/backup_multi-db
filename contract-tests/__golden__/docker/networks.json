@@ -1,10 +1,10 @@
 {
-  "name": "users/toggle-status",
+  "name": "docker/networks",
   "recordedFrom": "adonis",
   "request": {
-    "method": "PATCH",
-    "route": "PATCH /api/users/:id/status",
-    "path": "/api/users/11/status",
+    "method": "GET",
+    "route": "GET /api/docker/networks",
+    "path": "/api/docker/networks",
     "as": "admin"
   },
   "response": {
@@ -22,22 +22,13 @@
     "shape": {
       "kind": "object",
       "fields": {
-        "data": {
-          "kind": "object",
-          "fields": {
-            "id": {
-              "kind": "primitive",
-              "type": "number"
-            },
-            "isActive": {
-              "kind": "primitive",
-              "type": "boolean"
-            }
-          }
-        },
-        "message": {
+        "available": {
           "kind": "primitive",
-          "type": "string"
+          "type": "boolean"
+        },
+        "data": {
+          "kind": "array",
+          "element": null
         },
         "success": {
           "kind": "primitive",
@@ -46,11 +37,8 @@
       }
     },
     "body": {
-      "data": {
-        "id": "<id>",
-        "isActive": true
-      },
-      "message": "Usuário ativado com sucesso.",
+      "available": "<nao-comparado>",
+      "data": "<nao-comparado>",
       "success": true
     }
   }

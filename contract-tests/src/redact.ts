@@ -21,6 +21,8 @@ export const REDACTED = {
   path: '<path>',
   secret: '<secret>',
   uuid: '<uuid>',
+  /** Trecho que a comparacao ignora — gravado so' como marcador. */
+  notCompared: '<nao-comparado>',
 } as const
 
 /**
@@ -38,7 +40,7 @@ const VOLATILE_KEYS: Array<{ test: RegExp; replacement: string }> = [
     replacement: REDACTED.timestamp,
   },
   {
-    test: /^(duration|durationMs|duration_ms|elapsed|elapsedMs|elapsed_ms|took|tookMs|took_ms|latency)$/,
+    test: /^(duration|durationMs|duration_ms|durationSeconds|elapsed|elapsedMs|elapsed_ms|took|tookMs|took_ms|latency|latencyMs|latency_ms|uptimeSeconds)$/,
     replacement: REDACTED.duration,
   },
   {
@@ -67,6 +69,15 @@ export interface RedactOptions {
    * Ex.: `version` do /api/health, que faz parte do contrato.
    */
   keepPaths?: string[]
+  /**
+   * Caminhos que a comparacao ignora e que por isso viram um marcador unico.
+   *
+   * Sao os trechos que dependem da maquina: uso de CPU, memoria livre, uptime,
+   * latencia de rede, espaco em disco. Gravar o valor real deles faria o
+   * golden mudar a cada execucao — e um arquivo que muda sozinho para de
+   * servir como registro de mudanca de contrato.
+   */
+  notComparedPaths?: string[]
 }
 
 function pathMatches(path: string, patterns: string[]): boolean {
@@ -99,9 +110,10 @@ function redactByValue(value: string): string | null {
 }
 
 export function redact(value: unknown, options: RedactOptions = {}, path = ''): unknown {
-  const { extraPaths = [], keepPaths = [] } = options
+  const { extraPaths = [], keepPaths = [], notComparedPaths = [] } = options
 
   if (path !== '' && pathMatches(path, keepPaths)) return value
+  if (path !== '' && pathMatches(path, notComparedPaths)) return REDACTED.notCompared
   if (path !== '' && pathMatches(path, extraPaths)) return REDACTED.secret
 
   if (value === null || value === undefined) return null

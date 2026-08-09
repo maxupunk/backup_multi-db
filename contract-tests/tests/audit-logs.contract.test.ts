@@ -81,8 +81,13 @@ describe('GET /api/audit-logs', () => {
   it('devolve lista vazia para filtro que nao casa com nada', async () => {
     // Filtro sem resultado tem que dar 200 com lista vazia, nao 404: o
     // recurso "lista de logs" existe, apenas nao tem itens sob esse recorte.
+    //
+    // O filtro e' por `entityId` inexistente, e nao por uma `action` que
+    // "ninguem usa": os testes do lote 2.6 alteram a politica de retencao e
+    // geram `settings.updated`, entao qualquer action real pode aparecer
+    // dependendo da ordem dos arquivos.
     const body = json<AuditPage>(
-      expectStatus(await as('admin').get('/api/audit-logs', { query: { action: 'settings.updated' } }), 200)
+      expectStatus(await as('admin').get('/api/audit-logs', { query: { entityId: 99999999 } }), 200)
     )
 
     expect(body.data).toEqual([])

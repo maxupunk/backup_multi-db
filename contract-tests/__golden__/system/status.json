@@ -1,0 +1,133 @@
+{
+  "name": "system/status",
+  "recordedFrom": "adonis",
+  "request": {
+    "method": "GET",
+    "route": "GET /api/system/status",
+    "path": "/api/system/status",
+    "as": "admin"
+  },
+  "response": {
+    "status": 200,
+    "mime": "application/json",
+    "contentType": "application/json; charset=utf-8",
+    "headerNames": [
+      "content-type",
+      "x-ratelimit-limit"
+    ],
+    "headers": {
+      "content-type": "application/json; charset=utf-8",
+      "x-ratelimit-limit": "600"
+    },
+    "shape": {
+      "kind": "object",
+      "fields": {
+        "data": {
+          "kind": "object",
+          "fields": {
+            "architecture": {
+              "kind": "primitive",
+              "type": "string"
+            },
+            "hostname": {
+              "kind": "primitive",
+              "type": "string"
+            },
+            "jobs": {
+              "kind": "object",
+              "fields": {
+                "activeJobs": {
+                  "kind": "primitive",
+                  "type": "number"
+                },
+                "isRunning": {
+                  "kind": "primitive",
+                  "type": "boolean"
+                },
+                "status": {
+                  "kind": "primitive",
+                  "type": "string"
+                }
+              }
+            },
+            "nodeVersion": {
+              "kind": "primitive",
+              "type": "string"
+            },
+            "platform": {
+              "kind": "primitive",
+              "type": "string"
+            },
+            "resources": {
+              "kind": "object",
+              "fields": {
+                "cpu": {
+                  "kind": "object",
+                  "fields": {
+                    "cores": {
+                      "kind": "primitive",
+                      "type": "number"
+                    },
+                    "model": {
+                      "kind": "primitive",
+                      "type": "string"
+                    },
+                    "usagePercent": {
+                      "kind": "primitive",
+                      "type": "number"
+                    }
+                  }
+                },
+                "memory": {
+                  "kind": "object",
+                  "fields": {
+                    "containerLimited": {
+                      "kind": "primitive",
+                      "type": "boolean"
+                    },
+                    "freeBytes": {
+                      "kind": "primitive",
+                      "type": "number"
+                    },
+                    "source": {
+                      "kind": "primitive",
+                      "type": "string"
+                    },
+                    "totalBytes": {
+                      "kind": "primitive",
+                      "type": "number"
+                    },
+                    "usagePercent": {
+                      "kind": "primitive",
+                      "type": "number"
+                    },
+                    "usedBytes": {
+                      "kind": "primitive",
+                      "type": "number"
+                    }
+                  }
+                }
+              }
+            },
+            "uptimeSeconds": {
+              "kind": "primitive",
+              "type": "number"
+            },
+            "version": {
+              "kind": "primitive",
+              "type": "string"
+            }
+          }
+        },
+        "success": {
+          "kind": "primitive",
+          "type": "boolean"
+        }
+      }
+    },
+    "body": {
+      "data": "<nao-comparado>",
+      "success": true
+    }
+  }
+}

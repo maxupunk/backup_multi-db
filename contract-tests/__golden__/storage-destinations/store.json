@@ -1,0 +1,124 @@
+{
+  "name": "storage-destinations/store",
+  "recordedFrom": "adonis",
+  "request": {
+    "method": "POST",
+    "route": "POST /api/storage-destinations",
+    "path": "/api/storage-destinations",
+    "as": "admin"
+  },
+  "response": {
+    "status": 201,
+    "mime": "application/json",
+    "contentType": "application/json; charset=utf-8",
+    "headerNames": [
+      "content-type",
+      "x-ratelimit-limit"
+    ],
+    "headers": {
+      "content-type": "application/json; charset=utf-8",
+      "x-ratelimit-limit": "600"
+    },
+    "shape": {
+      "kind": "object",
+      "fields": {
+        "data": {
+          "kind": "object",
+          "fields": {
+            "config": {
+              "kind": "object",
+              "fields": {
+                "accessKeyId": {
+                  "kind": "primitive",
+                  "type": "string"
+                },
+                "bucket": {
+                  "kind": "primitive",
+                  "type": "string"
+                },
+                "endpoint": {
+                  "kind": "primitive",
+                  "type": "string"
+                },
+                "forcePathStyle": {
+                  "kind": "primitive",
+                  "type": "boolean"
+                },
+                "region": {
+                  "kind": "primitive",
+                  "type": "string"
+                },
+                "secretAccessKey": {
+                  "kind": "primitive",
+                  "type": "string"
+                },
+                "type": {
+                  "kind": "primitive",
+                  "type": "string"
+                }
+              }
+            },
+            "createdAt": {
+              "kind": "primitive",
+              "type": "string"
+            },
+            "id": {
+              "kind": "primitive",
+              "type": "number"
+            },
+            "isDefault": {
+              "kind": "primitive",
+              "type": "boolean"
+            },
+            "name": {
+              "kind": "primitive",
+              "type": "string"
+            },
+            "status": {
+              "kind": "primitive",
+              "type": "string"
+            },
+            "type": {
+              "kind": "primitive",
+              "type": "string"
+            },
+            "updatedAt": {
+              "kind": "primitive",
+              "type": "string"
+            }
+          }
+        },
+        "message": {
+          "kind": "primitive",
+          "type": "string"
+        },
+        "success": {
+          "kind": "primitive",
+          "type": "boolean"
+        }
+      }
+    },
+    "body": {
+      "data": {
+        "config": {
+          "accessKeyId": "<id>",
+          "bucket": "backups-secondary",
+          "endpoint": "http://127.0.0.1:19000",
+          "forcePathStyle": true,
+          "region": "us-east-1",
+          "secretAccessKey": "***",
+          "type": "s3"
+        },
+        "createdAt": "<timestamp>",
+        "id": "<id>",
+        "isDefault": false,
+        "name": "Destino Legado S3",
+        "status": "active",
+        "type": "s3",
+        "updatedAt": "<timestamp>"
+      },
+      "message": "Destino de armazenamento criado com sucesso",
+      "success": true
+    }
+  }
+}
