@@ -39,6 +39,17 @@ uuid = { version = "1.6", features = ["v4"] }
 # and a headless app can still emit them for external consumers.
 ts-rs = { version = "12", features = ["chrono-impl", "serde-compat"] }
 include_dir = { version = "0.7" }
+aes-gcm = "0.11"
+aes = "0.9"
+typenum = "1"
+base64 = "0.23"
+hex = "0.4"
+getrandom = "0.3"
+thiserror = "2"
+subtle = "2"
+scrypt = { version = "0.12", default-features = false }
+sha2 = "0.11"
+crc32fast = "1"
 
 [[bin]]
 name = "back_roco-cli"

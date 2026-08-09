@@ -1,0 +1,26 @@
+{
+  "name": "contract-tests",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Suite de contrato black-box: roda identica contra o backend AdonisJS e contra o back-roco (Rust/Loco).",
+  "packageManager": "pnpm@10.33.0",
+  "scripts": {
+    "contract:record": "node scripts/run.mjs --target adonis --record",
+    "contract:adonis": "node scripts/run.mjs --target adonis",
+    "contract:roco": "node scripts/run.mjs --target roco",
+    "contract:diff": "node scripts/run.mjs --target roco --diff",
+    "contract:coverage": "node scripts/run.mjs --target adonis --enforce-coverage",
+    "contract:selftest": "vitest run --config vitest.selftest.config.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["esbuild"]
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.18",
+    "typescript": "~5.8",
+    "undici": "^7.10.0",
+    "vitest": "^3.1.4"
+  }
+}

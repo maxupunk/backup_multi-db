@@ -1,0 +1,139 @@
+# Ambiente de teste para a suíte de contrato (contract-tests/) e para as fases
+# 6–8 do port para o back-roco.
+#
+# Portas deslocadas para a faixa 1xxxx para não colidir com serviços de
+# desenvolvimento já em uso na máquina (3333, 5433, 8081 estão ocupadas).
+#
+#   docker compose -f docker-compose.test.yml up -d
+#   docker compose -f docker-compose.test.yml down -v
+#
+# Credenciais são fixas e triviais **de propósito**: este arquivo sobe apenas
+# alvos descartáveis de teste, ligados a 127.0.0.1. Nunca reutilizar em produção.
+
+name: backup-multi-db-test
+
+services:
+  # ==================== Bancos gerenciados ====================
+
+  mysql:
+    image: mysql:8.4
+    container_name: bmdb-test-mysql
+    # Sem `--default-authentication-plugin`: a flag foi REMOVIDA no MySQL 8.4
+    # (o server aborta no boot com "unknown variable"). O plugin em questão,
+    # caching_sha2_password, já é o default desde a 8.0.
+    environment:
+      MYSQL_ROOT_PASSWORD: test_root_pw
+      MYSQL_DATABASE: app_fixture
+      MYSQL_USER: tester
+      MYSQL_PASSWORD: test_pw
+    ports:
+      - '127.0.0.1:13306:3306'
+    volumes:
+      - ./tests-fixtures/mysql:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ['CMD', 'mysqladmin', 'ping', '-h', '127.0.0.1', '-ptest_root_pw']
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    tmpfs:
+      - /var/lib/mysql
+
+  mariadb:
+    image: mariadb:11.4
+    container_name: bmdb-test-mariadb
+    environment:
+      MARIADB_ROOT_PASSWORD: test_root_pw
+      MARIADB_DATABASE: app_fixture
+      MARIADB_USER: tester
+      MARIADB_PASSWORD: test_pw
+    ports:
+      - '127.0.0.1:13307:3306'
+    volumes:
+      - ./tests-fixtures/mariadb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ['CMD', 'healthcheck.sh', '--connect', '--innodb_initialized']
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    tmpfs:
+      - /var/lib/mysql
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: bmdb-test-postgres
+    environment:
+      POSTGRES_PASSWORD: test_root_pw
+      POSTGRES_USER: tester
+      POSTGRES_DB: app_fixture
+    ports:
+      - '127.0.0.1:15432:5432'
+    volumes:
+      - ./tests-fixtures/postgres:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U tester -d app_fixture']
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    tmpfs:
+      - /var/lib/postgresql/data
+
+  # ==================== Destinos de storage ====================
+
+  # MinIO cobre os providers s3 / minio / cloudflare_r2 (todos falam S3 API).
+  minio:
+    image: minio/minio:latest
+    container_name: bmdb-test-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: testaccesskey
+      MINIO_ROOT_PASSWORD: testsecretkey
+    ports:
+      - '127.0.0.1:19000:9000'
+      - '127.0.0.1:19001:9001'
+    healthcheck:
+      test: ['CMD', 'mc', 'ready', 'local']
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    tmpfs:
+      - /data
+
+  # Cria os buckets usados pelos seeds e encerra.
+  minio-init:
+    image: minio/mc:latest
+    container_name: bmdb-test-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set test http://minio:9000 testaccesskey testsecretkey &&
+      mc mb --ignore-existing test/backups-primary &&
+      mc mb --ignore-existing test/backups-secondary &&
+      mc mb --ignore-existing test/archives &&
+      echo 'buckets prontos'
+      "
+
+  sftp:
+    image: atmoz/sftp:alpine
+    container_name: bmdb-test-sftp
+    command: tester:test_pw:::backups
+    ports:
+      - '127.0.0.1:12222:22'
+    healthcheck:
+      test: ['CMD-SHELL', 'nc -z 127.0.0.1 22 || exit 1']
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  # ==================== Alvos descartáveis para o Docker Manager ====================
+
+  # Container ocioso e barato que os testes da Fase 9 podem inspecionar, parar,
+  # reiniciar e ler logs — sem tocar em nada que importe na máquina.
+  docker-target:
+    image: alpine:3.20
+    container_name: bmdb-test-docker-target
+    command: >
+      /bin/sh -c "while true; do echo \"tick $$(date -u +%FT%TZ)\"; sleep 5; done"
+    labels:
+      bmdb.test-target: 'true'

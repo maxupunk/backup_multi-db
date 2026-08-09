@@ -1,0 +1,2749 @@
+[
+  {
+    "domain": "root",
+    "routes": [
+      {
+        "name": "",
+        "pattern": "/api/swagger",
+        "methods": [
+          "GET"
+        ],
+        "handler": {
+          "type": "closure",
+          "name": "closure"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "",
+        "pattern": "/api/docs",
+        "methods": [
+          "GET"
+        ],
+        "handler": {
+          "type": "closure",
+          "name": "closure"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "",
+        "pattern": "/api/health",
+        "methods": [
+          "GET"
+        ],
+        "handler": {
+          "type": "closure",
+          "name": "closure"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "auth.check_status",
+        "pattern": "/api/auth/status",
+        "methods": [
+          "GET"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/auth_controller",
+          "method": "checkStatus"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "auth.register",
+        "pattern": "/api/auth/register",
+        "methods": [
+          "POST"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/auth_controller",
+          "method": "register"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "auth",
+              "keyBy": "ip-email"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "auth.login",
+        "pattern": "/api/auth/login",
+        "methods": [
+          "POST"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/auth_controller",
+          "method": "login"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "auth",
+              "keyBy": "ip-email"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "auth.me",
+        "pattern": "/api/auth/me",
+        "methods": [
+          "GET"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/auth_controller",
+          "method": "me"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "auth",
+            "moduleNameOrPath": "#middleware/auth_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "auth.logout",
+        "pattern": "/api/auth/logout",
+        "methods": [
+          "POST"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/auth_controller",
+          "method": "logout"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "auth",
+            "moduleNameOrPath": "#middleware/auth_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "connections.discover_databases",
+        "pattern": "/api/connections/discover-databases",
+        "methods": [
+          "POST"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/connections_controller",
+          "method": "discoverDatabases"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "auth",
+            "moduleNameOrPath": "#middleware/auth_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "strict"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "connections.docker_hosts",
+        "pattern": "/api/connections/docker-hosts",
+        "methods": [
+          "GET"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/connections_controller",
+          "method": "dockerHosts"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "auth",
+            "moduleNameOrPath": "#middleware/auth_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "connections.index",
+        "pattern": "/api/connections",
+        "methods": [
+          "GET"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/connections_controller",
+          "method": "index"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "auth",
+            "moduleNameOrPath": "#middleware/auth_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "connections.store",
+        "pattern": "/api/connections",
+        "methods": [
+          "POST"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/connections_controller",
+          "method": "store"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "auth",
+            "moduleNameOrPath": "#middleware/auth_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "connections.show",
+        "pattern": "/api/connections/:id",
+        "methods": [
+          "GET"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/connections_controller",
+          "method": "show"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "auth",
+            "moduleNameOrPath": "#middleware/auth_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "connections.update",
+        "pattern": "/api/connections/:id",
+        "methods": [
+          "PUT",
+          "PATCH"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/connections_controller",
+          "method": "update"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "auth",
+            "moduleNameOrPath": "#middleware/auth_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "connections.destroy",
+        "pattern": "/api/connections/:id",
+        "methods": [
+          "DELETE"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/connections_controller",
+          "method": "destroy"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "auth",
+            "moduleNameOrPath": "#middleware/auth_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "storage_destinations.index",
+        "pattern": "/api/storage-destinations",
+        "methods": [
+          "GET"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/storage_destinations_controller",
+          "method": "index"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "auth",
+            "moduleNameOrPath": "#middleware/auth_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "storage_destinations.store",
+        "pattern": "/api/storage-destinations",
+        "methods": [
+          "POST"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/storage_destinations_controller",
+          "method": "store"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "auth",
+            "moduleNameOrPath": "#middleware/auth_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "storage_destinations.show",
+        "pattern": "/api/storage-destinations/:id",
+        "methods": [
+          "GET"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/storage_destinations_controller",
+          "method": "show"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "auth",
+            "moduleNameOrPath": "#middleware/auth_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "storage_destinations.update",
+        "pattern": "/api/storage-destinations/:id",
+        "methods": [
+          "PUT",
+          "PATCH"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/storage_destinations_controller",
+          "method": "update"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "auth",
+            "moduleNameOrPath": "#middleware/auth_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "storage_destinations.destroy",
+        "pattern": "/api/storage-destinations/:id",
+        "methods": [
+          "DELETE"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/storage_destinations_controller",
+          "method": "destroy"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "auth",
+            "moduleNameOrPath": "#middleware/auth_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "storage_destinations.space_all",
+        "pattern": "/api/storage-destinations-space",
+        "methods": [
+          "GET"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/storage_destinations_controller",
+          "method": "spaceAll"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "auth",
+            "moduleNameOrPath": "#middleware/auth_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "storage_destinations.space",
+        "pattern": "/api/storage-destinations/:id/space",
+        "methods": [
+          "GET"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/storage_destinations_controller",
+          "method": "space"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "auth",
+            "moduleNameOrPath": "#middleware/auth_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "storages.index",
+        "pattern": "/api/storages",
+        "methods": [
+          "GET"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/storages_controller",
+          "method": "index"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "auth",
+            "moduleNameOrPath": "#middleware/auth_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "storages.store",
+        "pattern": "/api/storages",
+        "methods": [
+          "POST"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/storages_controller",
+          "method": "store"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "auth",
+            "moduleNameOrPath": "#middleware/auth_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "storages.copy_status",
+        "pattern": "/api/storages/copy-jobs/:jobId",
+        "methods": [
+          "GET"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/storages_controller",
+          "method": "copyStatus"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "auth",
+            "moduleNameOrPath": "#middleware/auth_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "storages.archive_job_status",
+        "pattern": "/api/storages/archive-jobs/:jobId",
+        "methods": [
+          "GET"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/storages_controller",
+          "method": "archiveJobStatus"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "auth",
+            "moduleNameOrPath": "#middleware/auth_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "storages.download_archive",
+        "pattern": "/api/storages/archive-jobs/:jobId/download",
+        "methods": [
+          "GET"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/storages_controller",
+          "method": "downloadArchive"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "auth",
+            "moduleNameOrPath": "#middleware/auth_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "storages.show",
+        "pattern": "/api/storages/:id",
+        "methods": [
+          "GET"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/storages_controller",
+          "method": "show"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "auth",
+            "moduleNameOrPath": "#middleware/auth_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "storages.update",
+        "pattern": "/api/storages/:id",
+        "methods": [
+          "PUT"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/storages_controller",
+          "method": "update"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "auth",
+            "moduleNameOrPath": "#middleware/auth_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "storages.destroy",
+        "pattern": "/api/storages/:id",
+        "methods": [
+          "DELETE"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/storages_controller",
+          "method": "destroy"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "auth",
+            "moduleNameOrPath": "#middleware/auth_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "storages.test",
+        "pattern": "/api/storages/:id/test",
+        "methods": [
+          "POST"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/storages_controller",
+          "method": "test"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "auth",
+            "moduleNameOrPath": "#middleware/auth_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "strict"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "storages.browse",
+        "pattern": "/api/storages/:id/browse",
+        "methods": [
+          "GET"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/storages_controller",
+          "method": "browse"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "auth",
+            "moduleNameOrPath": "#middleware/auth_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "storages.destroy_object",
+        "pattern": "/api/storages/:id/object",
+        "methods": [
+          "DELETE"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/storages_controller",
+          "method": "destroyObject"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "auth",
+            "moduleNameOrPath": "#middleware/auth_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "storages.start_copy",
+        "pattern": "/api/storages/:id/copy",
+        "methods": [
+          "POST"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/storages_controller",
+          "method": "startCopy"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "auth",
+            "moduleNameOrPath": "#middleware/auth_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "backup"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "storages.start_archive",
+        "pattern": "/api/storages/:id/archive",
+        "methods": [
+          "POST"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/storages_controller",
+          "method": "startArchive"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "auth",
+            "moduleNameOrPath": "#middleware/auth_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "backup"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "connections.test",
+        "pattern": "/api/connections/:id/test",
+        "methods": [
+          "POST"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/connections_controller",
+          "method": "test"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "auth",
+            "moduleNameOrPath": "#middleware/auth_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "strict"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "connections.create_database",
+        "pattern": "/api/connections/:id/create-database",
+        "methods": [
+          "POST"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/connections_controller",
+          "method": "createDatabase"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "auth",
+            "moduleNameOrPath": "#middleware/auth_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "strict"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "connections.backup",
+        "pattern": "/api/connections/:id/backup",
+        "methods": [
+          "POST"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/connections_controller",
+          "method": "backup"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "auth",
+            "moduleNameOrPath": "#middleware/auth_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "backup"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "backups.index",
+        "pattern": "/api/backups",
+        "methods": [
+          "GET"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/backups_controller",
+          "method": "index"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "auth",
+            "moduleNameOrPath": "#middleware/auth_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "backups.by_connection",
+        "pattern": "/api/connections/:connectionId/backups",
+        "methods": [
+          "GET"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/backups_controller",
+          "method": "byConnection"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "auth",
+            "moduleNameOrPath": "#middleware/auth_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "backups.show",
+        "pattern": "/api/backups/:id",
+        "methods": [
+          "GET"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/backups_controller",
+          "method": "show"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "auth",
+            "moduleNameOrPath": "#middleware/auth_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "backups.download",
+        "pattern": "/api/backups/:id/download",
+        "methods": [
+          "GET"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/backups_controller",
+          "method": "download"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "auth",
+            "moduleNameOrPath": "#middleware/auth_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "backups.restore",
+        "pattern": "/api/backups/:id/restore",
+        "methods": [
+          "POST"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/backups_controller",
+          "method": "restore"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "auth",
+            "moduleNameOrPath": "#middleware/auth_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "strict"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "backups.destroy",
+        "pattern": "/api/backups/:id",
+        "methods": [
+          "DELETE"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/backups_controller",
+          "method": "destroy"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "auth",
+            "moduleNameOrPath": "#middleware/auth_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "backups.import",
+        "pattern": "/api/backups/import",
+        "methods": [
+          "POST"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/backups_controller",
+          "method": "import"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "auth",
+            "moduleNameOrPath": "#middleware/auth_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "backup"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "system.stats",
+        "pattern": "/api/stats",
+        "methods": [
+          "GET"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/system_controller",
+          "method": "stats"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "auth",
+            "moduleNameOrPath": "#middleware/auth_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "system.status",
+        "pattern": "/api/system/status",
+        "methods": [
+          "GET"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/system_controller",
+          "method": "status"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "auth",
+            "moduleNameOrPath": "#middleware/auth_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "system.diagnostics",
+        "pattern": "/api/system/diagnostics",
+        "methods": [
+          "GET"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/system_controller",
+          "method": "diagnostics"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "auth",
+            "moduleNameOrPath": "#middleware/auth_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "system.download_diagnostic",
+        "pattern": "/api/system/diagnostics/:name/download",
+        "methods": [
+          "GET"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/system_controller",
+          "method": "downloadDiagnostic"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "auth",
+            "moduleNameOrPath": "#middleware/auth_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "strict"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "system.destroy_diagnostic",
+        "pattern": "/api/system/diagnostics/:name",
+        "methods": [
+          "DELETE"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/system_controller",
+          "method": "destroyDiagnostic"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "auth",
+            "moduleNameOrPath": "#middleware/auth_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "strict"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "system.container_resources",
+        "pattern": "/api/system/containers/resources",
+        "methods": [
+          "GET"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/system_controller",
+          "method": "containerResources"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "auth",
+            "moduleNameOrPath": "#middleware/auth_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "system.resources_history",
+        "pattern": "/api/system/resources/history",
+        "methods": [
+          "GET"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/system_controller",
+          "method": "resourcesHistory"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "auth",
+            "moduleNameOrPath": "#middleware/auth_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "system.backup_retention_policy",
+        "pattern": "/api/system/backup-retention",
+        "methods": [
+          "GET"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/system_controller",
+          "method": "backupRetentionPolicy"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "auth",
+            "moduleNameOrPath": "#middleware/auth_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "system.update_backup_retention_policy",
+        "pattern": "/api/system/backup-retention",
+        "methods": [
+          "PUT"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/system_controller",
+          "method": "updateBackupRetentionPolicy"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "auth",
+            "moduleNameOrPath": "#middleware/auth_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "strict"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "system.run_backup_retention",
+        "pattern": "/api/system/backup-retention/run",
+        "methods": [
+          "POST"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/system_controller",
+          "method": "runBackupRetention"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "auth",
+            "moduleNameOrPath": "#middleware/auth_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "strict"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "audit_logs.index",
+        "pattern": "/api/audit-logs",
+        "methods": [
+          "GET"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/audit_logs_controller",
+          "method": "index"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "auth",
+            "moduleNameOrPath": "#middleware/auth_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "audit_logs.stats",
+        "pattern": "/api/audit-logs/stats",
+        "methods": [
+          "GET"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/audit_logs_controller",
+          "method": "stats"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "auth",
+            "moduleNameOrPath": "#middleware/auth_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "audit_logs.show",
+        "pattern": "/api/audit-logs/:id",
+        "methods": [
+          "GET"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/audit_logs_controller",
+          "method": "show"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "auth",
+            "moduleNameOrPath": "#middleware/auth_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "users.index",
+        "pattern": "/api/users",
+        "methods": [
+          "GET"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/users_controller",
+          "method": "index"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "auth",
+            "moduleNameOrPath": "#middleware/auth_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "users.toggle_status",
+        "pattern": "/api/users/:id/status",
+        "methods": [
+          "PATCH"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/users_controller",
+          "method": "toggleStatus"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "auth",
+            "moduleNameOrPath": "#middleware/auth_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "docker_manager.status",
+        "pattern": "/api/docker/status",
+        "methods": [
+          "GET"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/docker_manager_controller",
+          "method": "status"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "auth",
+            "moduleNameOrPath": "#middleware/auth_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "docker_manager.list_containers",
+        "pattern": "/api/docker/containers",
+        "methods": [
+          "GET"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/docker_manager_controller",
+          "method": "listContainers"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "auth",
+            "moduleNameOrPath": "#middleware/auth_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "docker_manager.inspect_container",
+        "pattern": "/api/docker/containers/:id",
+        "methods": [
+          "GET"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/docker_manager_controller",
+          "method": "inspectContainer"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "auth",
+            "moduleNameOrPath": "#middleware/auth_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "docker_manager.container_logs",
+        "pattern": "/api/docker/containers/:id/logs",
+        "methods": [
+          "GET"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/docker_manager_controller",
+          "method": "containerLogs"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "auth",
+            "moduleNameOrPath": "#middleware/auth_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "docker_manager.clear_container_logs",
+        "pattern": "/api/docker/containers/:id/logs",
+        "methods": [
+          "DELETE"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/docker_manager_controller",
+          "method": "clearContainerLogs"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "auth",
+            "moduleNameOrPath": "#middleware/auth_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "strict"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "docker_manager.start_container",
+        "pattern": "/api/docker/containers/:id/start",
+        "methods": [
+          "POST"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/docker_manager_controller",
+          "method": "startContainer"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "auth",
+            "moduleNameOrPath": "#middleware/auth_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "strict"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "docker_manager.stop_container",
+        "pattern": "/api/docker/containers/:id/stop",
+        "methods": [
+          "POST"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/docker_manager_controller",
+          "method": "stopContainer"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "auth",
+            "moduleNameOrPath": "#middleware/auth_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "strict"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "docker_manager.restart_container",
+        "pattern": "/api/docker/containers/:id/restart",
+        "methods": [
+          "POST"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/docker_manager_controller",
+          "method": "restartContainer"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "auth",
+            "moduleNameOrPath": "#middleware/auth_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "strict"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "docker_manager.remove_container",
+        "pattern": "/api/docker/containers/:id",
+        "methods": [
+          "DELETE"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/docker_manager_controller",
+          "method": "removeContainer"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "auth",
+            "moduleNameOrPath": "#middleware/auth_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "strict"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "docker_manager.list_volumes",
+        "pattern": "/api/docker/volumes",
+        "methods": [
+          "GET"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/docker_manager_controller",
+          "method": "listVolumes"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "auth",
+            "moduleNameOrPath": "#middleware/auth_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "docker_manager.inspect_volume",
+        "pattern": "/api/docker/volumes/:name",
+        "methods": [
+          "GET"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/docker_manager_controller",
+          "method": "inspectVolume"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "auth",
+            "moduleNameOrPath": "#middleware/auth_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "docker_manager.export_volume",
+        "pattern": "/api/docker/volumes/:name/export",
+        "methods": [
+          "GET"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/docker_manager_controller",
+          "method": "exportVolume"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "auth",
+            "moduleNameOrPath": "#middleware/auth_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "strict"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "docker_manager.backup_volume_to_storage",
+        "pattern": "/api/docker/volumes/:name/backup",
+        "methods": [
+          "POST"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/docker_manager_controller",
+          "method": "backupVolumeToStorage"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "auth",
+            "moduleNameOrPath": "#middleware/auth_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "backup"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "docker_manager.remove_volume",
+        "pattern": "/api/docker/volumes/:name",
+        "methods": [
+          "DELETE"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/docker_manager_controller",
+          "method": "removeVolume"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "auth",
+            "moduleNameOrPath": "#middleware/auth_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "strict"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "docker_manager.list_networks",
+        "pattern": "/api/docker/networks",
+        "methods": [
+          "GET"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/docker_manager_controller",
+          "method": "listNetworks"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "auth",
+            "moduleNameOrPath": "#middleware/auth_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "docker_manager.inspect_network",
+        "pattern": "/api/docker/networks/:id",
+        "methods": [
+          "GET"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/docker_manager_controller",
+          "method": "inspectNetwork"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "auth",
+            "moduleNameOrPath": "#middleware/auth_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "docker_manager.create_network",
+        "pattern": "/api/docker/networks",
+        "methods": [
+          "POST"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/docker_manager_controller",
+          "method": "createNetwork"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "auth",
+            "moduleNameOrPath": "#middleware/auth_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "strict"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "docker_manager.connect_container_to_network",
+        "pattern": "/api/docker/networks/:id/connect",
+        "methods": [
+          "POST"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/docker_manager_controller",
+          "method": "connectContainerToNetwork"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "auth",
+            "moduleNameOrPath": "#middleware/auth_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "strict"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "docker_manager.disconnect_container_from_network",
+        "pattern": "/api/docker/networks/:id/disconnect",
+        "methods": [
+          "POST"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/docker_manager_controller",
+          "method": "disconnectContainerFromNetwork"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "auth",
+            "moduleNameOrPath": "#middleware/auth_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "strict"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "docker_diagnostics.start",
+        "pattern": "/api/docker/diagnostics",
+        "methods": [
+          "POST"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/docker_diagnostics_controller",
+          "method": "start"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "auth",
+            "moduleNameOrPath": "#middleware/auth_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "strict"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "docker_diagnostics.show",
+        "pattern": "/api/docker/diagnostics/:jobId",
+        "methods": [
+          "GET"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/docker_diagnostics_controller",
+          "method": "show"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "auth",
+            "moduleNameOrPath": "#middleware/auth_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "docker_manager.prune_images",
+        "pattern": "/api/docker/images/prune",
+        "methods": [
+          "POST"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/docker_manager_controller",
+          "method": "pruneImages"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "auth",
+            "moduleNameOrPath": "#middleware/auth_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "strict"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "docker_manager.list_images",
+        "pattern": "/api/docker/images",
+        "methods": [
+          "GET"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/docker_manager_controller",
+          "method": "listImages"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "auth",
+            "moduleNameOrPath": "#middleware/auth_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "docker_manager.inspect_image",
+        "pattern": "/api/docker/images/:id",
+        "methods": [
+          "GET"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/docker_manager_controller",
+          "method": "inspectImage"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "auth",
+            "moduleNameOrPath": "#middleware/auth_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "docker_manager.remove_image",
+        "pattern": "/api/docker/images/:id",
+        "methods": [
+          "DELETE"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "#controllers/docker_manager_controller",
+          "method": "removeImage"
+        },
+        "middleware": [
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "global"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "auth",
+            "moduleNameOrPath": "#middleware/auth_middleware",
+            "method": "handle"
+          },
+          {
+            "type": "named",
+            "name": "rateLimit",
+            "args": {
+              "limiter": "strict"
+            },
+            "moduleNameOrPath": "#middleware/rate_limit_middleware",
+            "method": "handle"
+          }
+        ]
+      },
+      {
+        "name": "event_stream",
+        "pattern": "/__transmit/events",
+        "methods": [
+          "GET"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "./controllers/event_stream_controller.js",
+          "method": "handle"
+        },
+        "middleware": []
+      },
+      {
+        "name": "subscribe",
+        "pattern": "/__transmit/subscribe",
+        "methods": [
+          "POST"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "./controllers/subscribe_controller.js",
+          "method": "handle"
+        },
+        "middleware": []
+      },
+      {
+        "name": "unsubscribe",
+        "pattern": "/__transmit/unsubscribe",
+        "methods": [
+          "POST"
+        ],
+        "handler": {
+          "type": "controller",
+          "moduleNameOrPath": "./controllers/unsubscribe_controller.js",
+          "method": "handle"
+        },
+        "middleware": []
+      },
+      {
+        "name": "",
+        "pattern": "/*",
+        "methods": [
+          "GET"
+        ],
+        "handler": {
+          "type": "closure",
+          "name": "closure"
+        },
+        "middleware": []
+      }
+    ]
+  }
+]

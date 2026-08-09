@@ -1,0 +1,35 @@
+{
+  "algorithm": "scrypt",
+  "phcId": "scrypt",
+  "cost": 16384,
+  "blockSize": 8,
+  "parallelization": 1,
+  "saltSize": 16,
+  "keyLength": 64,
+  "vectors": [
+    {
+      "password": "12341234",
+      "phc": "$scrypt$n=16384,r=8,p=1$Qu+HU2aPbliCfIiJu/tm0Q$OvJmhT2Sp7t+IK4DLM6Yd6Ya9ln95dBydfykkb9DWZDd5BoEEOVceThrI6vsKXXwhn560gaKkpE8MGhOjScogA"
+    },
+    {
+      "password": "senha-forte-2026",
+      "phc": "$scrypt$n=16384,r=8,p=1$W5jmqrY8hZaF0/jy+aAJCg$xDgJHZPMZZHSc5fub3oT9lBcbMrBKgYhHdm8fRnA5FKhZQO1uzrjg2b1S9unlklgS/7ZmyO2EaH2c6XGVpcaBQ"
+    },
+    {
+      "password": "ção ãe ü €",
+      "phc": "$scrypt$n=16384,r=8,p=1$9Ea0HWIWXuFyyAgnanZGeg$oyfRr3MU2gnck8jCae3ZhY06Writv1pUcmDoOcIUay+8OA58jBaZ6GQkvkwM3yv6CLi1fFuCFfiPOtRsa54mAQ"
+    },
+    {
+      "password": "a",
+      "phc": "$scrypt$n=16384,r=8,p=1$Ku60otcUJeyo49dYDcOvow$fdoIF1/t8c6hrGrWMQOmVhpEQmVmZMLwNnVs8lRISoiIUB99fN9o+4zJ/yz0ztpZrKSDDy+EP1bjYIgJ7ivzMg"
+    },
+    {
+      "password": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "phc": "$scrypt$n=16384,r=8,p=1$mB1wPQHMK9v5r+m8gWUnvQ$PtZBfpFjW5iNCiiukODvqVV67Fr6A/n0wF65jbHzGinbB1ePNCP1Nvr/IPxk0BOzLSYxOJ637+CHZpn8xN5DlQ"
+    },
+    {
+      "password": "  espaços  ",
+      "phc": "$scrypt$n=16384,r=8,p=1$1wo1CT2y+OJyNs5hWX7BPQ$ZnAT7wO/cuC+YoX/kO8tHCPTjGQc+gFzICbrWpkk7n/Nyantjrz27CBmb41FuePVAC21v72+bpZYUeNryKDMFQ"
+    }
+  ]
+}

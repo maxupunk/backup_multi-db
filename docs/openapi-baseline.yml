@@ -1,0 +1,2788 @@
+openapi: "3.0.0"
+info:
+  title: "DB Backup Manager API"
+  version: "1.0.0"
+  description: "API para gerenciamento de backups de múltiplos bancos de dados"
+components:
+  responses:
+    Forbidden:
+      description: "Access token is missing or invalid"
+    Accepted:
+      description: "The request was accepted"
+    Created:
+      description: "The resource has been created"
+    NotFound:
+      description: "The resource has been created"
+    NotAcceptable:
+      description: "The resource has been created"
+  securitySchemes:
+    BearerAuth:
+      type: "http"
+      scheme: "bearer"
+      bearerFormat: "JWT"
+    BasicAuth:
+      type: "http"
+      scheme: "basic"
+    ApiKeyAuth:
+      type: "apiKey"
+      in: "header"
+      name: "X-API-Key"
+  schemas:
+    Any:
+      description: "Any JSON object not defined as schema"
+    PaginationMeta:
+      type: "object"
+      properties:
+        total:
+          type: "number"
+          example: 100
+          nullable: false
+        page:
+          type: "number"
+          example: 2
+          nullable: false
+        perPage:
+          type: "number"
+          example: 10
+          nullable: false
+        currentPage:
+          type: "number"
+          example: 3
+          nullable: false
+        lastPage:
+          type: "number"
+          example: 10
+          nullable: false
+        firstPage:
+          type: "number"
+          example: 1
+          nullable: false
+        lastPageUrl:
+          type: "string"
+          example: "/?page=10"
+          nullable: false
+        firstPageUrl:
+          type: "string"
+          example: "/?page=1"
+          nullable: false
+        nextPageUrl:
+          type: "string"
+          example: "/?page=6"
+          nullable: false
+        previousPageUrl:
+          type: "string"
+          example: "/?page=5"
+          nullable: false
+    AuditLog:
+      type: "object"
+      required: []
+      properties:
+        id:
+          type: "number"
+          example: 998
+        action:
+          $ref: "#/components/schemas/AuditAction"
+          example: null
+        entity_type:
+          $ref: "#/components/schemas/AuditEntityType"
+          example: null
+        entity_id:
+          type: "number"
+          example: 955
+        entity_name:
+          type: "string"
+          example: "Lorem Ipsum"
+        description:
+          type: "string"
+          example: "Lorem ipsum dolor sit amet"
+        details:
+          $ref: "#/components/schemas/AuditDetails"
+          example: null
+        ip_address:
+          type: "string"
+          example: "Lorem Ipsum"
+        user_agent:
+          type: "string"
+          example: "Lorem Ipsum"
+        status:
+          $ref: "#/components/schemas/AuditStatus"
+          example: null
+        error_message:
+          type: "string"
+          example: "Lorem Ipsum"
+        created_at:
+          type: "string"
+          example: "2021-03-23T16:13:08.489+01:00"
+          format: "date-time"
+      description: "AuditLog (Model)"
+    Backup:
+      type: "object"
+      required: []
+      properties:
+        id:
+          type: "number"
+          example: 982
+        connection_id:
+          type: "number"
+          example: 559
+        connection_database_id:
+          type: "number"
+          example: 214
+        database_name:
+          type: "string"
+          example: "Lorem Ipsum"
+        storage_destination_id:
+          type: "number"
+          example: 390
+        status:
+          $ref: "#/components/schemas/BackupStatus"
+          example: null
+        file_path:
+          type: "string"
+          example: "Lorem Ipsum"
+        file_name:
+          type: "string"
+          example: "Lorem Ipsum"
+        file_size:
+          type: "number"
+          example: 392
+        checksum:
+          type: "string"
+          example: "Lorem Ipsum"
+        compressed:
+          type: "boolean"
+          example: true
+        retention_type:
+          $ref: "#/components/schemas/RetentionType"
+          example: null
+        protected:
+          type: "boolean"
+          example: true
+        started_at:
+          type: "string"
+          example: "2021-03-23T16:13:08.489+01:00"
+          format: "date-time"
+        finished_at:
+          type: "string"
+          example: "2021-03-23T16:13:08.489+01:00"
+          format: "date-time"
+        duration_seconds:
+          type: "number"
+          example: 317
+        error_message:
+          type: "string"
+          example: "Lorem Ipsum"
+        exit_code:
+          type: "number"
+          example: 342
+        metadata:
+          $ref: "#/components/schemas/BackupMetadata"
+          example: null
+        trigger:
+          $ref: "#/components/schemas/BackupTrigger"
+          example: null
+        created_at:
+          type: "string"
+          example: "2021-03-23T16:13:08.489+01:00"
+          format: "date-time"
+        updated_at:
+          type: "string"
+          example: "2021-03-23T16:13:08.489+01:00"
+          format: "date-time"
+        connection:
+          $ref: "#/components/schemas/Connection"
+          example: null
+        connection_database:
+          $ref: "#/components/schemas/ConnectionDatabase"
+          example: null
+        storage_destination:
+          $ref: "#/components/schemas/StorageDestination"
+          example: null
+      description: "Backup (Model)"
+    Connection:
+      type: "object"
+      required: []
+      properties:
+        id:
+          type: "number"
+          example: 156
+        name:
+          type: "string"
+          example: "John Doe"
+        type:
+          $ref: "#/components/schemas/DatabaseType"
+          example: null
+        host:
+          type: "string"
+          example: "Lorem Ipsum"
+        port:
+          type: "number"
+          example: 351
+        username:
+          type: "string"
+          example: "Lorem Ipsum"
+        schedule_frequency:
+          $ref: "#/components/schemas/ScheduleFrequency"
+          example: null
+        schedule_enabled:
+          type: "boolean"
+          example: true
+        status:
+          $ref: "#/components/schemas/ConnectionStatus"
+          example: null
+        last_error:
+          type: "string"
+          example: "Lorem Ipsum"
+        last_tested_at:
+          type: "string"
+          example: "2021-03-23T16:13:08.489+01:00"
+          format: "date-time"
+        last_backup_at:
+          type: "string"
+          example: "2021-03-23T16:13:08.489+01:00"
+          format: "date-time"
+        storage_destination_id:
+          type: "number"
+          example: 674
+        options:
+          $ref: "#/components/schemas/ConnectionOptions"
+          example: null
+        created_at:
+          type: "string"
+          example: "2021-03-23T16:13:08.489+01:00"
+          format: "date-time"
+        updated_at:
+          type: "string"
+          example: "2021-03-23T16:13:08.489+01:00"
+          format: "date-time"
+        backups:
+          type: "array"
+          items:
+            $ref: "#/components/schemas/Backup"
+            example: null
+        databases:
+          type: "array"
+          items:
+            $ref: "#/components/schemas/ConnectionDatabase"
+            example: null
+        storage_destination:
+          $ref: "#/components/schemas/StorageDestination"
+          example: null
+      description: "Connection (Model)"
+    ConnectionDatabase:
+      type: "object"
+      required: []
+      properties:
+        id:
+          type: "number"
+          example: 428
+        connection_id:
+          type: "number"
+          example: 384
+        database_name:
+          type: "string"
+          example: "Lorem Ipsum"
+        enabled:
+          type: "boolean"
+          example: true
+        created_at:
+          type: "string"
+          example: "2021-03-23T16:13:08.489+01:00"
+          format: "date-time"
+        updated_at:
+          type: "string"
+          example: "2021-03-23T16:13:08.489+01:00"
+          format: "date-time"
+        connection:
+          $ref: "#/components/schemas/Connection"
+          example: null
+        backups:
+          type: "array"
+          items:
+            $ref: "#/components/schemas/Backup"
+            example: null
+      description: "ConnectionDatabase (Model)"
+    ResourceMetricHistory:
+      type: "object"
+      required: []
+      properties:
+        id:
+          type: "number"
+          example: 762
+        scope:
+          $ref: "#/components/schemas/ResourceMetricScope"
+          example: null
+        entity_id:
+          type: "string"
+          example: "Lorem Ipsum"
+        entity_name:
+          type: "string"
+          example: "Lorem Ipsum"
+        cpu_usage_percent:
+          type: "number"
+          example: 644
+        memory_usage_percent:
+          type: "number"
+          example: 334
+        memory_used_bytes:
+          type: "number"
+          example: 808
+        memory_total_bytes:
+          type: "number"
+          example: 923
+        collected_at:
+          type: "string"
+          example: "2021-03-23T16:13:08.489+01:00"
+          format: "date-time"
+        created_at:
+          type: "string"
+          example: "2021-03-23T16:13:08.489+01:00"
+          format: "date-time"
+        updated_at:
+          type: "string"
+          example: "2021-03-23T16:13:08.489+01:00"
+          format: "date-time"
+      description: "ResourceMetricHistory (Model)"
+    StorageDestination:
+      type: "object"
+      required: []
+      properties:
+        id:
+          type: "number"
+          example: 564
+        name:
+          type: "string"
+          example: "John Doe"
+        type:
+          $ref: "#/components/schemas/StorageDestinationType"
+          example: null
+        status:
+          $ref: "#/components/schemas/StorageDestinationStatus"
+          example: null
+        provider:
+          $ref: "#/components/schemas/StorageProvider"
+          example: null
+        is_default:
+          type: "boolean"
+          example: true
+        created_at:
+          type: "string"
+          example: "2021-03-23T16:13:08.489+01:00"
+          format: "date-time"
+        updated_at:
+          type: "string"
+          example: "2021-03-23T16:13:08.489+01:00"
+          format: "date-time"
+        connections:
+          type: "array"
+          items:
+            $ref: "#/components/schemas/Connection"
+            example: null
+        backups:
+          type: "array"
+          items:
+            $ref: "#/components/schemas/Backup"
+            example: null
+      description: "StorageDestination (Model)"
+    SystemSetting:
+      type: "object"
+      required: []
+      properties:
+        id:
+          type: "number"
+          example: 428
+        name:
+          type: "string"
+          example: "John Doe"
+        value:
+          $ref: "#/components/schemas/SystemSettingValue"
+          example: null
+        created_at:
+          type: "string"
+          example: "2021-03-23T16:13:08.489+01:00"
+          format: "date-time"
+        updated_at:
+          type: "string"
+          example: "2021-03-23T16:13:08.489+01:00"
+          format: "date-time"
+      description: "SystemSetting (Model)"
+    User:
+      type: "object"
+      required: []
+      properties:
+        id:
+          type: "number"
+          example: 179
+        full_name:
+          type: "string"
+          example: "John Doe"
+        email:
+          type: "string"
+          example: "johndoe@example.com"
+          format: "email"
+        is_active:
+          type: "boolean"
+          example: true
+        is_admin:
+          type: "boolean"
+          example: true
+        created_at:
+          type: "string"
+          example: "2021-03-23T16:13:08.489+01:00"
+          format: "date-time"
+        updated_at:
+          type: "string"
+          example: "2021-03-23T16:13:08.489+01:00"
+          format: "date-time"
+      description: "User (Model)"
+    loginValidator:
+      type: "object"
+      properties:
+        email:
+          type: "string"
+          example: "Lorem Ipsum"
+          required: true
+        password:
+          type: "string"
+          example: "Lorem Ipsum"
+          required: true
+      example:
+        email: "Lorem Ipsum"
+        password: "Lorem Ipsum"
+      description: "loginValidator (Validator)"
+    registerValidator:
+      type: "object"
+      properties:
+        fullName:
+          type: "string"
+          example: "Lorem Ipsum"
+          maxLength: 100
+        email:
+          type: "string"
+          example: "Lorem Ipsum"
+          required: true
+        password:
+          type: "string"
+          example: "Lorem Ipsum"
+          required: true
+          minLength: 8
+          maxLength: 32
+        bootstrapToken:
+          type: "string"
+          example: "Lorem Ipsum"
+          maxLength: 255
+      example:
+        fullName: "Lorem Ipsum"
+        email: "Lorem Ipsum"
+        password: "Lorem Ipsum"
+        bootstrapToken: "Lorem Ipsum"
+      description: "registerValidator (Validator)"
+    createConnectionValidator:
+      type: "object"
+      properties:
+        name:
+          type: "string"
+          example: "Lorem Ipsum"
+          required: true
+          minLength: 1
+          maxLength: 100
+        type:
+          type: "number"
+          example: 709
+          choices:
+            - "mysql"
+            - "mariadb"
+            - "postgresql"
+          required: true
+        host:
+          type: "string"
+          example: "Lorem Ipsum"
+          required: true
+          minLength: 1
+          maxLength: 255
+        port:
+          type: "number"
+          example: 148
+          maximum: 65535
+          required: true
+        databases:
+          type: "array"
+          items:
+            type: "number"
+            example: 1
+            minimum: 1
+          required: true
+          properties:
+            items:
+              type: "string"
+              example: "Lorem Ipsum"
+        username:
+          type: "string"
+          example: "Lorem Ipsum"
+          required: true
+          minLength: 1
+          maxLength: 100
+        password:
+          type: "string"
+          example: "Lorem Ipsum"
+        storageDestinationId:
+          type: "number"
+          example: 751
+        scheduleFrequency:
+          type: "number"
+          example: 853
+          choices:
+            - "1h"
+            - "6h"
+            - "12h"
+            - "24h"
+        scheduleEnabled:
+          type: "boolean"
+          example: true
+        options:
+          type: "object"
+          properties:
+            ssl:
+              type: "boolean"
+              example: true
+            charset:
+              type: "string"
+              example: "Lorem Ipsum"
+      example:
+        name: "Lorem Ipsum"
+        type: 709
+        host: "Lorem Ipsum"
+        port: 148
+        databases:
+          - "Lorem Ipsum"
+        username: "Lorem Ipsum"
+        password: "Lorem Ipsum"
+        storageDestinationId: 751
+        scheduleFrequency: 853
+        scheduleEnabled: true
+        options:
+          ssl: true
+          charset: "Lorem Ipsum"
+      description: "createConnectionValidator (Validator)"
+    createDatabaseValidator:
+      type: "object"
+      properties:
+        databaseName:
+          type: "string"
+          example: "Lorem Ipsum"
+          pattern: "/^[a-zA-Z_][a-zA-Z0-9_-]*$/"
+          required: true
+          minLength: 1
+          maxLength: 63
+      example:
+        databaseName: "Lorem Ipsum"
+      description: "createDatabaseValidator (Validator)"
+    discoverDatabasesValidator:
+      type: "object"
+      properties:
+        type:
+          type: "number"
+          example: 64
+          choices:
+            - "mysql"
+            - "mariadb"
+            - "postgresql"
+          required: true
+        host:
+          type: "string"
+          example: "Lorem Ipsum"
+          required: true
+          minLength: 1
+          maxLength: 255
+        port:
+          type: "number"
+          example: 734
+          maximum: 65535
+          required: true
+        username:
+          type: "string"
+          example: "Lorem Ipsum"
+          required: true
+          minLength: 1
+          maxLength: 100
+        password:
+          type: "string"
+          example: "Lorem Ipsum"
+        ssl:
+          type: "boolean"
+          example: true
+      example:
+        type: 64
+        host: "Lorem Ipsum"
+        port: 734
+        username: "Lorem Ipsum"
+        password: "Lorem Ipsum"
+        ssl: true
+      description: "discoverDatabasesValidator (Validator)"
+    listConnectionsValidator:
+      type: "object"
+      properties:
+        page:
+          type: "number"
+          example: 111
+        limit:
+          type: "number"
+          example: 778
+          maximum: 100
+        type:
+          type: "number"
+          example: 98
+          choices:
+            - "mysql"
+            - "mariadb"
+            - "postgresql"
+        status:
+          type: "number"
+          example: 931
+          choices:
+            - "active"
+            - "inactive"
+            - "error"
+        search:
+          type: "string"
+          example: "Lorem Ipsum"
+      example:
+        page: 111
+        limit: 778
+        type: 98
+        status: 931
+        search: "Lorem Ipsum"
+      description: "listConnectionsValidator (Validator)"
+    updateConnectionValidator:
+      type: "object"
+      properties:
+        name:
+          type: "string"
+          example: "Lorem Ipsum"
+          minLength: 1
+          maxLength: 100
+        type:
+          type: "number"
+          example: 221
+          choices:
+            - "mysql"
+            - "mariadb"
+            - "postgresql"
+        host:
+          type: "string"
+          example: "Lorem Ipsum"
+          minLength: 1
+          maxLength: 255
+        port:
+          type: "number"
+          example: 209
+          maximum: 65535
+        databases:
+          type: "array"
+          items:
+            type: "number"
+            example: 1
+            minimum: 1
+          properties:
+            items:
+              type: "string"
+              example: "Lorem Ipsum"
+        username:
+          type: "string"
+          example: "Lorem Ipsum"
+          minLength: 1
+          maxLength: 100
+        password:
+          type: "string"
+          example: "Lorem Ipsum"
+        storageDestinationId:
+          type: "number"
+          example: 414
+        scheduleFrequency:
+          type: "number"
+          example: 650
+          choices:
+            - "1h"
+            - "6h"
+            - "12h"
+            - "24h"
+        scheduleEnabled:
+          type: "boolean"
+          example: true
+        options:
+          type: "object"
+          properties:
+            ssl:
+              type: "boolean"
+              example: true
+            charset:
+              type: "string"
+              example: "Lorem Ipsum"
+      example:
+        name: "Lorem Ipsum"
+        type: 221
+        host: "Lorem Ipsum"
+        port: 209
+        databases:
+          - "Lorem Ipsum"
+        username: "Lorem Ipsum"
+        password: "Lorem Ipsum"
+        storageDestinationId: 414
+        scheduleFrequency: 650
+        scheduleEnabled: true
+        options:
+          ssl: true
+          charset: "Lorem Ipsum"
+      description: "updateConnectionValidator (Validator)"
+    startDockerDiagnosticValidator:
+      type: "object"
+      properties:
+        tool:
+          type: "number"
+          example: 744
+          choices:
+            - "ping"
+            - "port_scan"
+            - "curl"
+          required: true
+        target:
+          type: "string"
+          example: "Lorem Ipsum"
+          required: true
+          minLength: 1
+          maxLength: 2048
+        port:
+          type: "number"
+          example: 936
+          maximum: 65535
+        count:
+          type: "number"
+          example: 852
+          maximum: 10
+        timeoutMs:
+          type: "number"
+          example: 268
+          maximum: 10000
+      example:
+        tool: 744
+        target: "Lorem Ipsum"
+        port: 936
+        count: 852
+        timeoutMs: 268
+      description: "startDockerDiagnosticValidator (Validator)"
+    importBackupValidator:
+      type: "object"
+      properties:
+        connectionId:
+          type: "number"
+          example: 464
+        databaseName:
+          type: "string"
+          example: "Lorem Ipsum"
+          minLength: 1
+          maxLength: 255
+        verifyIntegrity:
+          type: "boolean"
+          example: true
+      example:
+        connectionId: 464
+        databaseName: "Lorem Ipsum"
+        verifyIntegrity: true
+      description: "importBackupValidator (Validator)"
+    restoreBackupValidator:
+      type: "object"
+      properties:
+        mode:
+          type: "number"
+          example: 91
+          choices:
+            - "full"
+            - "schema-only"
+            - "data-only"
+        targetConnectionId:
+          type: "number"
+          example: 652
+        targetDatabase:
+          type: "string"
+          example: "Lorem Ipsum"
+          minLength: 1
+          maxLength: 100
+        noOwner:
+          type: "boolean"
+          example: true
+        noPrivileges:
+          type: "boolean"
+          example: true
+        noTablespaces:
+          type: "boolean"
+          example: true
+        noComments:
+          type: "boolean"
+          example: true
+        noCreateDb:
+          type: "boolean"
+          example: true
+        skipSafetyBackup:
+          type: "boolean"
+          example: true
+        clearBeforeRestore:
+          type: "boolean"
+          example: true
+      example:
+        mode: 91
+        targetConnectionId: 652
+        targetDatabase: "Lorem Ipsum"
+        noOwner: true
+        noPrivileges: true
+        noTablespaces: true
+        noComments: true
+        noCreateDb: true
+        skipSafetyBackup: true
+        clearBeforeRestore: true
+      description: "restoreBackupValidator (Validator)"
+    createStorageDestinationValidator:
+      type: "object"
+      properties:
+        name:
+          type: "string"
+          example: "Lorem Ipsum"
+          required: true
+          minLength: 1
+          maxLength: 100
+        status:
+          type: "number"
+          example: 482
+          choices:
+            - "active"
+            - "inactive"
+        isDefault:
+          type: "boolean"
+          example: true
+      example:
+        name: "Lorem Ipsum"
+        status: 482
+        isDefault: true
+      description: "createStorageDestinationValidator (Validator)"
+    listStorageDestinationsValidator:
+      type: "object"
+      properties:
+        page:
+          type: "number"
+          example: 385
+        limit:
+          type: "number"
+          example: 528
+          maximum: 100
+        type:
+          type: "number"
+          example: 60
+          choices:
+            - "local"
+            - "s3"
+            - "gcs"
+            - "azure_blob"
+            - "sftp"
+        status:
+          type: "number"
+          example: 224
+          choices:
+            - "active"
+            - "inactive"
+        search:
+          type: "string"
+          example: "Lorem Ipsum"
+      example:
+        page: 385
+        limit: 528
+        type: 60
+        status: 224
+        search: "Lorem Ipsum"
+      description: "listStorageDestinationsValidator (Validator)"
+    updateStorageDestinationValidator:
+      type: "object"
+      properties:
+        name:
+          type: "string"
+          example: "Lorem Ipsum"
+          minLength: 1
+          maxLength: 100
+        status:
+          type: "number"
+          example: 449
+          choices:
+            - "active"
+            - "inactive"
+        isDefault:
+          type: "boolean"
+          example: true
+      example:
+        name: "Lorem Ipsum"
+        status: 449
+        isDefault: true
+      description: "updateStorageDestinationValidator (Validator)"
+    archiveStorageValidator:
+      type: "object"
+      properties:
+        path:
+          type: "string"
+          example: "Lorem Ipsum"
+      example:
+        path: "Lorem Ipsum"
+      description: "archiveStorageValidator (Validator)"
+    browseStorageValidator:
+      type: "object"
+      properties:
+        path:
+          type: "string"
+          example: "Lorem Ipsum"
+        cursor:
+          type: "string"
+          example: "Lorem Ipsum"
+        limit:
+          type: "number"
+          example: 815
+          maximum: 1000
+        prefix:
+          type: "string"
+          example: "Lorem Ipsum"
+      example:
+        path: "Lorem Ipsum"
+        cursor: "Lorem Ipsum"
+        limit: 815
+        prefix: "Lorem Ipsum"
+      description: "browseStorageValidator (Validator)"
+    copyStorageValidator:
+      type: "object"
+      properties:
+        destinationId:
+          type: "number"
+          example: 401
+          required: true
+        sourcePath:
+          type: "string"
+          example: "Lorem Ipsum"
+        destinationPath:
+          type: "string"
+          example: "Lorem Ipsum"
+        dryRun:
+          type: "boolean"
+          example: true
+        deleteExtraneous:
+          type: "boolean"
+          example: true
+      example:
+        destinationId: 401
+        sourcePath: "Lorem Ipsum"
+        destinationPath: "Lorem Ipsum"
+        dryRun: true
+        deleteExtraneous: true
+      description: "copyStorageValidator (Validator)"
+    createStorageValidator:
+      type: "object"
+      properties:
+        name:
+          type: "string"
+          example: "Lorem Ipsum"
+          required: true
+          minLength: 1
+          maxLength: 100
+        status:
+          type: "number"
+          example: 553
+          choices:
+            - "active"
+            - "inactive"
+        isDefault:
+          type: "boolean"
+          example: true
+      example:
+        name: "Lorem Ipsum"
+        status: 553
+        isDefault: true
+      description: "createStorageValidator (Validator)"
+    deleteStorageObjectValidator:
+      type: "object"
+      properties:
+        key:
+          type: "string"
+          example: "Lorem Ipsum"
+          required: true
+          minLength: 1
+        isDirectory:
+          type: "boolean"
+          example: true
+          required: true
+      example:
+        key: "Lorem Ipsum"
+        isDirectory: true
+      description: "deleteStorageObjectValidator (Validator)"
+    listStoragesValidator:
+      type: "object"
+      properties:
+        page:
+          type: "number"
+          example: 4
+        limit:
+          type: "number"
+          example: 651
+          maximum: 100
+        type:
+          type: "number"
+          example: 167
+          choices:
+            - "local"
+            - "s3"
+            - "gcs"
+            - "azure_blob"
+            - "sftp"
+        provider:
+          type: "number"
+          example: 900
+          choices:
+            - "aws_s3"
+            - "minio"
+            - "cloudflare_r2"
+            - "google_gcs"
+            - "azure_blob"
+            - "sftp"
+            - "local"
+        status:
+          type: "number"
+          example: 375
+          choices:
+            - "active"
+            - "inactive"
+        search:
+          type: "string"
+          example: "Lorem Ipsum"
+      example:
+        page: 4
+        limit: 651
+        type: 167
+        provider: 900
+        status: 375
+        search: "Lorem Ipsum"
+      description: "listStoragesValidator (Validator)"
+    updateStorageValidator:
+      type: "object"
+      properties:
+        name:
+          type: "string"
+          example: "Lorem Ipsum"
+          minLength: 1
+          maxLength: 100
+        status:
+          type: "number"
+          example: 477
+          choices:
+            - "active"
+            - "inactive"
+        isDefault:
+          type: "boolean"
+          example: true
+      example:
+        name: "Lorem Ipsum"
+        status: 477
+        isDefault: true
+      description: "updateStorageValidator (Validator)"
+    updateBackupRetentionPolicyValidator:
+      type: "object"
+      properties:
+        daily:
+          type: "number"
+          example: 24
+          maximum: 3650
+          required: true
+        weekly:
+          type: "number"
+          example: 970
+          maximum: 520
+          required: true
+        monthly:
+          type: "number"
+          example: 658
+          maximum: 240
+          required: true
+        yearly:
+          type: "number"
+          example: 150
+          maximum: 100
+          required: true
+        pruneCron:
+          type: "string"
+          example: "Lorem Ipsum"
+          required: true
+          minLength: 1
+          maxLength: 100
+      example:
+        daily: 24
+        weekly: 970
+        monthly: 658
+        yearly: 150
+        pruneCron: "Lorem Ipsum"
+      description: "updateBackupRetentionPolicyValidator (Validator)"
+paths:
+  /api/swagger:
+    get:
+      summary: "route"
+      description: "\n\n __ - ****"
+      parameters: []
+      tags:
+        - "SWAGGER"
+      responses:
+        200:
+          description: "OK"
+          content:
+            application/json: {}
+      security: []
+  /api/docs:
+    get:
+      summary: "route"
+      description: "\n\n __ - ****"
+      parameters: []
+      tags:
+        - "DOCS"
+      responses:
+        200:
+          description: "OK"
+          content:
+            application/json: {}
+      security: []
+  /api/health:
+    get:
+      summary: "route"
+      description: "\n\n __ - ****"
+      parameters: []
+      tags:
+        - "HEALTH"
+      responses:
+        200:
+          description: "OK"
+          content:
+            application/json: {}
+      security: []
+  /api/auth/status:
+    get:
+      summary: " (checkStatus)"
+      description: "\n\n _app/controllers/auth_controller.ts_ - **checkStatus**"
+      parameters: []
+      tags:
+        - "AUTH"
+      responses:
+        200:
+          description: "OK"
+          content:
+            application/json: {}
+      security: []
+  /api/auth/register:
+    post:
+      summary: " (register)"
+      description: "\n\n _app/controllers/auth_controller.ts_ - **register**"
+      parameters: []
+      tags:
+        - "AUTH"
+      responses:
+        201:
+          description: "Created"
+          content:
+            application/json: {}
+      security: []
+      requestBody:
+        content:
+          application/json: {}
+  /api/auth/login:
+    post:
+      summary: " (login)"
+      description: "\n\n _app/controllers/auth_controller.ts_ - **login**"
+      parameters: []
+      tags:
+        - "AUTH"
+      responses:
+        201:
+          description: "Created"
+          content:
+            application/json: {}
+      security: []
+      requestBody:
+        content:
+          application/json: {}
+  /api/auth/me:
+    get:
+      summary: " (me)"
+      description: "\n\n _app/controllers/auth_controller.ts_ - **me**"
+      parameters: []
+      tags:
+        - "AUTH"
+      responses:
+        401:
+          description: "Returns **401** (Unauthorized)"
+        403:
+          description: "Returns **403** (Forbidden)"
+      security:
+        - BearerAuth:
+            - "access"
+  /api/auth/logout:
+    post:
+      summary: " (logout)"
+      description: "\n\n _app/controllers/auth_controller.ts_ - **logout**"
+      parameters: []
+      tags:
+        - "AUTH"
+      responses:
+        401:
+          description: "Returns **401** (Unauthorized)"
+        403:
+          description: "Returns **403** (Forbidden)"
+      security:
+        - BearerAuth:
+            - "access"
+      requestBody:
+        content:
+          application/json: {}
+  /api/connections/discover-databases:
+    post:
+      summary: " (discoverDatabases)"
+      description: "\n\n _app/controllers/connections_controller.ts_ - **discoverDatabases**"
+      parameters: []
+      tags:
+        - "CONNECTIONS"
+      responses:
+        401:
+          description: "Returns **401** (Unauthorized)"
+        403:
+          description: "Returns **403** (Forbidden)"
+      security:
+        - BearerAuth:
+            - "access"
+      requestBody:
+        content:
+          application/json: {}
+  /api/connections/docker-hosts:
+    get:
+      summary: " (dockerHosts)"
+      description: "\n\n _app/controllers/connections_controller.ts_ - **dockerHosts**"
+      parameters: []
+      tags:
+        - "CONNECTIONS"
+      responses:
+        401:
+          description: "Returns **401** (Unauthorized)"
+        403:
+          description: "Returns **403** (Forbidden)"
+      security:
+        - BearerAuth:
+            - "access"
+  /api/connections:
+    get:
+      summary: "Get a list of connections (index)"
+      description: "\n\n _app/controllers/connections_controller.ts_ - **index**"
+      parameters: []
+      tags:
+        - "CONNECTIONS"
+      responses:
+        401:
+          description: "Returns **401** (Unauthorized)"
+        403:
+          description: "Returns **403** (Forbidden)"
+      security:
+        - BearerAuth:
+            - "access"
+    post:
+      summary: "Create connections (store)"
+      description: "\n\n _app/controllers/connections_controller.ts_ - **store**"
+      parameters: []
+      tags:
+        - "CONNECTIONS"
+      responses:
+        401:
+          description: "Returns **401** (Unauthorized)"
+        403:
+          description: "Returns **403** (Forbidden)"
+      security:
+        - BearerAuth:
+            - "access"
+      requestBody:
+        content:
+          application/json: {}
+  /api/connections/{id}:
+    get:
+      summary: "Get a single instance of connections (show)"
+      description: "\n\n _app/controllers/connections_controller.ts_ - **show**"
+      parameters:
+        - in: "path"
+          name: "id"
+          schema:
+            type: "string"
+          required: true
+      tags:
+        - "CONNECTIONS"
+      responses:
+        401:
+          description: "Returns **401** (Unauthorized)"
+        403:
+          description: "Returns **403** (Forbidden)"
+      security:
+        - BearerAuth:
+            - "access"
+    put:
+      summary: "Update connections (update)"
+      description: "\n\n _app/controllers/connections_controller.ts_ - **update**"
+      parameters:
+        - in: "path"
+          name: "id"
+          schema:
+            type: "string"
+          required: true
+      tags:
+        - "CONNECTIONS"
+      responses:
+        401:
+          description: "Returns **401** (Unauthorized)"
+        403:
+          description: "Returns **403** (Forbidden)"
+      security:
+        - BearerAuth:
+            - "access"
+      requestBody:
+        content:
+          application/json: {}
+    delete:
+      summary: "Delete connections (destroy)"
+      description: "\n\n _app/controllers/connections_controller.ts_ - **destroy**"
+      parameters:
+        - in: "path"
+          name: "id"
+          schema:
+            type: "string"
+          required: true
+      tags:
+        - "CONNECTIONS"
+      responses:
+        401:
+          description: "Returns **401** (Unauthorized)"
+        403:
+          description: "Returns **403** (Forbidden)"
+      security:
+        - BearerAuth:
+            - "access"
+  /api/storage-destinations:
+    get:
+      summary: "Get a list of storage-destinations (index)"
+      description: "\n\n _app/controllers/storage_destinations_controller.ts_ - **index**"
+      parameters: []
+      tags:
+        - "STORAGE-DESTINATIONS"
+      responses:
+        401:
+          description: "Returns **401** (Unauthorized)"
+        403:
+          description: "Returns **403** (Forbidden)"
+      security:
+        - BearerAuth:
+            - "access"
+    post:
+      summary: "Create storage-destinations (store)"
+      description: "\n\n _app/controllers/storage_destinations_controller.ts_ - **store**"
+      parameters: []
+      tags:
+        - "STORAGE-DESTINATIONS"
+      responses:
+        401:
+          description: "Returns **401** (Unauthorized)"
+        403:
+          description: "Returns **403** (Forbidden)"
+      security:
+        - BearerAuth:
+            - "access"
+      requestBody:
+        content:
+          application/json: {}
+  /api/storage-destinations/{id}:
+    get:
+      summary: "Get a single instance of storage-destinations (show)"
+      description: "\n\n _app/controllers/storage_destinations_controller.ts_ - **show**"
+      parameters:
+        - in: "path"
+          name: "id"
+          schema:
+            type: "string"
+          required: true
+      tags:
+        - "STORAGE-DESTINATIONS"
+      responses:
+        401:
+          description: "Returns **401** (Unauthorized)"
+        403:
+          description: "Returns **403** (Forbidden)"
+      security:
+        - BearerAuth:
+            - "access"
+    put:
+      summary: "Update storage-destinations (update)"
+      description: "\n\n _app/controllers/storage_destinations_controller.ts_ - **update**"
+      parameters:
+        - in: "path"
+          name: "id"
+          schema:
+            type: "string"
+          required: true
+      tags:
+        - "STORAGE-DESTINATIONS"
+      responses:
+        401:
+          description: "Returns **401** (Unauthorized)"
+        403:
+          description: "Returns **403** (Forbidden)"
+      security:
+        - BearerAuth:
+            - "access"
+      requestBody:
+        content:
+          application/json: {}
+    delete:
+      summary: "Delete storage-destinations (destroy)"
+      description: "\n\n _app/controllers/storage_destinations_controller.ts_ - **destroy**"
+      parameters:
+        - in: "path"
+          name: "id"
+          schema:
+            type: "string"
+          required: true
+      tags:
+        - "STORAGE-DESTINATIONS"
+      responses:
+        401:
+          description: "Returns **401** (Unauthorized)"
+        403:
+          description: "Returns **403** (Forbidden)"
+      security:
+        - BearerAuth:
+            - "access"
+  /api/storage-destinations-space:
+    get:
+      summary: " (spaceAll)"
+      description: "\n\n _app/controllers/storage_destinations_controller.ts_ - **spaceAll**"
+      parameters: []
+      tags:
+        - "STORAGE-DESTINATIONS-SPACE"
+      responses:
+        401:
+          description: "Returns **401** (Unauthorized)"
+        403:
+          description: "Returns **403** (Forbidden)"
+      security:
+        - BearerAuth:
+            - "access"
+  /api/storage-destinations/{id}/space:
+    get:
+      summary: " (space)"
+      description: "\n\n _app/controllers/storage_destinations_controller.ts_ - **space**"
+      parameters:
+        - in: "path"
+          name: "id"
+          schema:
+            type: "string"
+          required: true
+      tags:
+        - "STORAGE-DESTINATIONS"
+      responses:
+        401:
+          description: "Returns **401** (Unauthorized)"
+        403:
+          description: "Returns **403** (Forbidden)"
+      security:
+        - BearerAuth:
+            - "access"
+  /api/storages:
+    get:
+      summary: "Get a list of storages (index)"
+      description: "\n\n _app/controllers/storages_controller.ts_ - **index**"
+      parameters: []
+      tags:
+        - "STORAGES"
+      responses:
+        401:
+          description: "Returns **401** (Unauthorized)"
+        403:
+          description: "Returns **403** (Forbidden)"
+      security:
+        - BearerAuth:
+            - "access"
+    post:
+      summary: "Create storages (store)"
+      description: "\n\n _app/controllers/storages_controller.ts_ - **store**"
+      parameters: []
+      tags:
+        - "STORAGES"
+      responses:
+        401:
+          description: "Returns **401** (Unauthorized)"
+        403:
+          description: "Returns **403** (Forbidden)"
+      security:
+        - BearerAuth:
+            - "access"
+      requestBody:
+        content:
+          application/json: {}
+  /api/storages/copy-jobs/{jobId}:
+    get:
+      summary: " (copyStatus)"
+      description: "\n\n _app/controllers/storages_controller.ts_ - **copyStatus**"
+      parameters:
+        - in: "path"
+          name: "jobId"
+          schema:
+            type: "string"
+          required: true
+      tags:
+        - "STORAGES"
+      responses:
+        401:
+          description: "Returns **401** (Unauthorized)"
+        403:
+          description: "Returns **403** (Forbidden)"
+      security:
+        - BearerAuth:
+            - "access"
+  /api/storages/archive-jobs/{jobId}:
+    get:
+      summary: " (archiveJobStatus)"
+      description: "\n\n _app/controllers/storages_controller.ts_ - **archiveJobStatus**"
+      parameters:
+        - in: "path"
+          name: "jobId"
+          schema:
+            type: "string"
+          required: true
+      tags:
+        - "STORAGES"
+      responses:
+        401:
+          description: "Returns **401** (Unauthorized)"
+        403:
+          description: "Returns **403** (Forbidden)"
+      security:
+        - BearerAuth:
+            - "access"
+  /api/storages/archive-jobs/{jobId}/download:
+    get:
+      summary: " (downloadArchive)"
+      description: "\n\n _app/controllers/storages_controller.ts_ - **downloadArchive**"
+      parameters:
+        - in: "path"
+          name: "jobId"
+          schema:
+            type: "string"
+          required: true
+      tags:
+        - "STORAGES"
+      responses:
+        401:
+          description: "Returns **401** (Unauthorized)"
+        403:
+          description: "Returns **403** (Forbidden)"
+      security:
+        - BearerAuth:
+            - "access"
+  /api/storages/{id}:
+    get:
+      summary: "Get a single instance of storages (show)"
+      description: "\n\n _app/controllers/storages_controller.ts_ - **show**"
+      parameters:
+        - in: "path"
+          name: "id"
+          schema:
+            type: "string"
+          required: true
+      tags:
+        - "STORAGES"
+      responses:
+        401:
+          description: "Returns **401** (Unauthorized)"
+        403:
+          description: "Returns **403** (Forbidden)"
+      security:
+        - BearerAuth:
+            - "access"
+    put:
+      summary: "Update storages (update)"
+      description: "\n\n _app/controllers/storages_controller.ts_ - **update**"
+      parameters:
+        - in: "path"
+          name: "id"
+          schema:
+            type: "string"
+          required: true
+      tags:
+        - "STORAGES"
+      responses:
+        401:
+          description: "Returns **401** (Unauthorized)"
+        403:
+          description: "Returns **403** (Forbidden)"
+      security:
+        - BearerAuth:
+            - "access"
+      requestBody:
+        content:
+          application/json: {}
+    delete:
+      summary: "Delete storages (destroy)"
+      description: "\n\n _app/controllers/storages_controller.ts_ - **destroy**"
+      parameters:
+        - in: "path"
+          name: "id"
+          schema:
+            type: "string"
+          required: true
+      tags:
+        - "STORAGES"
+      responses:
+        401:
+          description: "Returns **401** (Unauthorized)"
+        403:
+          description: "Returns **403** (Forbidden)"
+      security:
+        - BearerAuth:
+            - "access"
+  /api/storages/{id}/test:
+    post:
+      summary: " (test)"
+      description: "\n\n _app/controllers/storages_controller.ts_ - **test**"
+      parameters:
+        - in: "path"
+          name: "id"
+          schema:
+            type: "string"
+          required: true
+      tags:
+        - "STORAGES"
+      responses:
+        401:
+          description: "Returns **401** (Unauthorized)"
+        403:
+          description: "Returns **403** (Forbidden)"
+      security:
+        - BearerAuth:
+            - "access"
+      requestBody:
+        content:
+          application/json: {}
+  /api/storages/{id}/browse:
+    get:
+      summary: " (browse)"
+      description: "\n\n _app/controllers/storages_controller.ts_ - **browse**"
+      parameters:
+        - in: "path"
+          name: "id"
+          schema:
+            type: "string"
+          required: true
+      tags:
+        - "STORAGES"
+      responses:
+        401:
+          description: "Returns **401** (Unauthorized)"
+        403:
+          description: "Returns **403** (Forbidden)"
+      security:
+        - BearerAuth:
+            - "access"
+  /api/storages/{id}/object:
+    delete:
+      summary: " (destroyObject)"
+      description: "\n\n _app/controllers/storages_controller.ts_ - **destroyObject**"
+      parameters:
+        - in: "path"
+          name: "id"
+          schema:
+            type: "string"
+          required: true
+      tags:
+        - "STORAGES"
+      responses:
+        401:
+          description: "Returns **401** (Unauthorized)"
+        403:
+          description: "Returns **403** (Forbidden)"
+      security:
+        - BearerAuth:
+            - "access"
+  /api/storages/{id}/copy:
+    post:
+      summary: " (startCopy)"
+      description: "\n\n _app/controllers/storages_controller.ts_ - **startCopy**"
+      parameters:
+        - in: "path"
+          name: "id"
+          schema:
+            type: "string"
+          required: true
+      tags:
+        - "STORAGES"
+      responses:
+        401:
+          description: "Returns **401** (Unauthorized)"
+        403:
+          description: "Returns **403** (Forbidden)"
+      security:
+        - BearerAuth:
+            - "access"
+      requestBody:
+        content:
+          application/json: {}
+  /api/storages/{id}/archive:
+    post:
+      summary: " (startArchive)"
+      description: "\n\n _app/controllers/storages_controller.ts_ - **startArchive**"
+      parameters:
+        - in: "path"
+          name: "id"
+          schema:
+            type: "string"
+          required: true
+      tags:
+        - "STORAGES"
+      responses:
+        401:
+          description: "Returns **401** (Unauthorized)"
+        403:
+          description: "Returns **403** (Forbidden)"
+      security:
+        - BearerAuth:
+            - "access"
+      requestBody:
+        content:
+          application/json: {}
+  /api/connections/{id}/test:
+    post:
+      summary: " (test)"
+      description: "\n\n _app/controllers/connections_controller.ts_ - **test**"
+      parameters:
+        - in: "path"
+          name: "id"
+          schema:
+            type: "string"
+          required: true
+      tags:
+        - "CONNECTIONS"
+      responses:
+        401:
+          description: "Returns **401** (Unauthorized)"
+        403:
+          description: "Returns **403** (Forbidden)"
+      security:
+        - BearerAuth:
+            - "access"
+      requestBody:
+        content:
+          application/json: {}
+  /api/connections/{id}/create-database:
+    post:
+      summary: " (createDatabase)"
+      description: "\n\n _app/controllers/connections_controller.ts_ - **createDatabase**"
+      parameters:
+        - in: "path"
+          name: "id"
+          schema:
+            type: "string"
+          required: true
+      tags:
+        - "CONNECTIONS"
+      responses:
+        401:
+          description: "Returns **401** (Unauthorized)"
+        403:
+          description: "Returns **403** (Forbidden)"
+      security:
+        - BearerAuth:
+            - "access"
+      requestBody:
+        content:
+          application/json: {}
+  /api/connections/{id}/backup:
+    post:
+      summary: " (backup)"
+      description: "\n\n _app/controllers/connections_controller.ts_ - **backup**"
+      parameters:
+        - in: "path"
+          name: "id"
+          schema:
+            type: "string"
+          required: true
+      tags:
+        - "CONNECTIONS"
+      responses:
+        401:
+          description: "Returns **401** (Unauthorized)"
+        403:
+          description: "Returns **403** (Forbidden)"
+      security:
+        - BearerAuth:
+            - "access"
+      requestBody:
+        content:
+          application/json: {}
+  /api/backups:
+    get:
+      summary: "Get a list of backups (index)"
+      description: "\n\n _app/controllers/backups_controller.ts_ - **index**"
+      parameters: []
+      tags:
+        - "BACKUPS"
+      responses:
+        401:
+          description: "Returns **401** (Unauthorized)"
+        403:
+          description: "Returns **403** (Forbidden)"
+      security:
+        - BearerAuth:
+            - "access"
+  /api/connections/{connectionId}/backups:
+    get:
+      summary: " (byConnection)"
+      description: "\n\n _app/controllers/backups_controller.ts_ - **byConnection**"
+      parameters:
+        - in: "path"
+          name: "connectionId"
+          schema:
+            type: "string"
+          required: true
+      tags:
+        - "CONNECTIONS"
+      responses:
+        401:
+          description: "Returns **401** (Unauthorized)"
+        403:
+          description: "Returns **403** (Forbidden)"
+      security:
+        - BearerAuth:
+            - "access"
+  /api/backups/{id}:
+    get:
+      summary: "Get a single instance of backups (show)"
+      description: "\n\n _app/controllers/backups_controller.ts_ - **show**"
+      parameters:
+        - in: "path"
+          name: "id"
+          schema:
+            type: "string"
+          required: true
+      tags:
+        - "BACKUPS"
+      responses:
+        401:
+          description: "Returns **401** (Unauthorized)"
+        403:
+          description: "Returns **403** (Forbidden)"
+      security:
+        - BearerAuth:
+            - "access"
+    delete:
+      summary: "Delete backups (destroy)"
+      description: "\n\n _app/controllers/backups_controller.ts_ - **destroy**"
+      parameters:
+        - in: "path"
+          name: "id"
+          schema:
+            type: "string"
+          required: true
+      tags:
+        - "BACKUPS"
+      responses:
+        401:
+          description: "Returns **401** (Unauthorized)"
+        403:
+          description: "Returns **403** (Forbidden)"
+      security:
+        - BearerAuth:
+            - "access"
+  /api/backups/{id}/download:
+    get:
+      summary: " (download)"
+      description: "\n\n _app/controllers/backups_controller.ts_ - **download**"
+      parameters:
+        - in: "path"
+          name: "id"
+          schema:
+            type: "string"
+          required: true
+      tags:
+        - "BACKUPS"
+      responses:
+        401:
+          description: "Returns **401** (Unauthorized)"
+        403:
+          description: "Returns **403** (Forbidden)"
+      security:
+        - BearerAuth:
+            - "access"
+  /api/backups/{id}/restore:
+    post:
+      summary: " (restore)"
+      description: "\n\n _app/controllers/backups_controller.ts_ - **restore**"
+      parameters:
+        - in: "path"
+          name: "id"
+          schema:
+            type: "string"
+          required: true
+      tags:
+        - "BACKUPS"
+      responses:
+        401:
+          description: "Returns **401** (Unauthorized)"
+        403:
+          description: "Returns **403** (Forbidden)"
+      security:
+        - BearerAuth:
+            - "access"
+      requestBody:
+        content:
+          application/json: {}
+  /api/backups/import:
+    post:
+      summary: " (import)"
+      description: "\n\n _app/controllers/backups_controller.ts_ - **import**"
+      parameters: []
+      tags:
+        - "BACKUPS"
+      responses:
+        401:
+          description: "Returns **401** (Unauthorized)"
+        403:
+          description: "Returns **403** (Forbidden)"
+      security:
+        - BearerAuth:
+            - "access"
+      requestBody:
+        content:
+          application/json: {}
+  /api/stats:
+    get:
+      summary: " (stats)"
+      description: "\n\n _app/controllers/system_controller.ts_ - **stats**"
+      parameters: []
+      tags:
+        - "STATS"
+      responses:
+        401:
+          description: "Returns **401** (Unauthorized)"
+        403:
+          description: "Returns **403** (Forbidden)"
+      security:
+        - BearerAuth:
+            - "access"
+  /api/system/status:
+    get:
+      summary: " (status)"
+      description: "\n\n _app/controllers/system_controller.ts_ - **status**"
+      parameters: []
+      tags:
+        - "SYSTEM"
+      responses:
+        401:
+          description: "Returns **401** (Unauthorized)"
+        403:
+          description: "Returns **403** (Forbidden)"
+      security:
+        - BearerAuth:
+            - "access"
+  /api/system/diagnostics:
+    get:
+      summary: " (diagnostics)"
+      description: "\n\n _app/controllers/system_controller.ts_ - **diagnostics**"
+      parameters: []
+      tags:
+        - "SYSTEM"
+      responses:
+        401:
+          description: "Returns **401** (Unauthorized)"
+        403:
+          description: "Returns **403** (Forbidden)"
+      security:
+        - BearerAuth:
+            - "access"
+  /api/system/diagnostics/{name}/download:
+    get:
+      summary: " (downloadDiagnostic)"
+      description: "\n\n _app/controllers/system_controller.ts_ - **downloadDiagnostic**"
+      parameters:
+        - in: "path"
+          name: "name"
+          schema:
+            type: "string"
+          required: true
+      tags:
+        - "SYSTEM"
+      responses:
+        401:
+          description: "Returns **401** (Unauthorized)"
+        403:
+          description: "Returns **403** (Forbidden)"
+      security:
+        - BearerAuth:
+            - "access"
+  /api/system/diagnostics/{name}:
+    delete:
+      summary: " (destroyDiagnostic)"
+      description: "\n\n _app/controllers/system_controller.ts_ - **destroyDiagnostic**"
+      parameters:
+        - in: "path"
+          name: "name"
+          schema:
+            type: "string"
+          required: true
+      tags:
+        - "SYSTEM"
+      responses:
+        401:
+          description: "Returns **401** (Unauthorized)"
+        403:
+          description: "Returns **403** (Forbidden)"
+      security:
+        - BearerAuth:
+            - "access"
+  /api/system/containers/resources:
+    get:
+      summary: " (containerResources)"
+      description: "\n\n _app/controllers/system_controller.ts_ - **containerResources**"
+      parameters: []
+      tags:
+        - "SYSTEM"
+      responses:
+        401:
+          description: "Returns **401** (Unauthorized)"
+        403:
+          description: "Returns **403** (Forbidden)"
+      security:
+        - BearerAuth:
+            - "access"
+  /api/system/resources/history:
+    get:
+      summary: " (resourcesHistory)"
+      description: "\n\n _app/controllers/system_controller.ts_ - **resourcesHistory**"
+      parameters: []
+      tags:
+        - "SYSTEM"
+      responses:
+        401:
+          description: "Returns **401** (Unauthorized)"
+        403:
+          description: "Returns **403** (Forbidden)"
+      security:
+        - BearerAuth:
+            - "access"
+  /api/system/backup-retention:
+    get:
+      summary: " (backupRetentionPolicy)"
+      description: "\n\n _app/controllers/system_controller.ts_ - **backupRetentionPolicy**"
+      parameters: []
+      tags:
+        - "SYSTEM"
+      responses:
+        401:
+          description: "Returns **401** (Unauthorized)"
+        403:
+          description: "Returns **403** (Forbidden)"
+      security:
+        - BearerAuth:
+            - "access"
+    put:
+      summary: " (updateBackupRetentionPolicy)"
+      description: "\n\n _app/controllers/system_controller.ts_ - **updateBackupRetentionPolicy**"
+      parameters: []
+      tags:
+        - "SYSTEM"
+      responses:
+        401:
+          description: "Returns **401** (Unauthorized)"
+        403:
+          description: "Returns **403** (Forbidden)"
+      security:
+        - BearerAuth:
+            - "access"
+      requestBody:
+        content:
+          application/json: {}
+  /api/system/backup-retention/run:
+    post:
+      summary: " (runBackupRetention)"
+      description: "\n\n _app/controllers/system_controller.ts_ - **runBackupRetention**"
+      parameters: []
+      tags:
+        - "SYSTEM"
+      responses:
+        401:
+          description: "Returns **401** (Unauthorized)"
+        403:
+          description: "Returns **403** (Forbidden)"
+      security:
+        - BearerAuth:
+            - "access"
+      requestBody:
+        content:
+          application/json: {}
+  /api/audit-logs:
+    get:
+      summary: "Get a list of audit-logs (index)"
+      description: "\n\n _app/controllers/audit_logs_controller.ts_ - **index**"
+      parameters: []
+      tags:
+        - "AUDIT-LOGS"
+      responses:
+        401:
+          description: "Returns **401** (Unauthorized)"
+        403:
+          description: "Returns **403** (Forbidden)"
+      security:
+        - BearerAuth:
+            - "access"
+  /api/audit-logs/stats:
+    get:
+      summary: " (stats)"
+      description: "\n\n _app/controllers/audit_logs_controller.ts_ - **stats**"
+      parameters: []
+      tags:
+        - "AUDIT-LOGS"
+      responses:
+        401:
+          description: "Returns **401** (Unauthorized)"
+        403:
+          description: "Returns **403** (Forbidden)"
+      security:
+        - BearerAuth:
+            - "access"
+  /api/audit-logs/{id}:
+    get:
+      summary: "Get a single instance of audit-logs (show)"
+      description: "\n\n _app/controllers/audit_logs_controller.ts_ - **show**"
+      parameters:
+        - in: "path"
+          name: "id"
+          schema:
+            type: "string"
+          required: true
+      tags:
+        - "AUDIT-LOGS"
+      responses:
+        401:
+          description: "Returns **401** (Unauthorized)"
+        403:
+          description: "Returns **403** (Forbidden)"
+      security:
+        - BearerAuth:
+            - "access"
+  /api/users:
+    get:
+      summary: "Get a list of users (index)"
+      description: "\n\n _app/controllers/users_controller.ts_ - **index**"
+      parameters: []
+      tags:
+        - "USERS"
+      responses:
+        401:
+          description: "Returns **401** (Unauthorized)"
+        403:
+          description: "Returns **403** (Forbidden)"
+      security:
+        - BearerAuth:
+            - "access"
+  /api/users/{id}/status:
+    patch:
+      summary: " (toggleStatus)"
+      description: "\n\n _app/controllers/users_controller.ts_ - **toggleStatus**"
+      parameters:
+        - in: "path"
+          name: "id"
+          schema:
+            type: "string"
+          required: true
+      tags:
+        - "USERS"
+      responses:
+        401:
+          description: "Returns **401** (Unauthorized)"
+        403:
+          description: "Returns **403** (Forbidden)"
+      security:
+        - BearerAuth:
+            - "access"
+      requestBody:
+        content:
+          application/json: {}
+  /api/docker/status:
+    get:
+      summary: " (status)"
+      description: "\n\n _app/controllers/docker_manager_controller.ts_ - **status**"
+      parameters: []
+      tags:
+        - "DOCKER"
+      responses:
+        401:
+          description: "Returns **401** (Unauthorized)"
+        403:
+          description: "Returns **403** (Forbidden)"
+      security:
+        - BearerAuth:
+            - "access"
+  /api/docker/containers:
+    get:
+      summary: " (listContainers)"
+      description: "\n\n _app/controllers/docker_manager_controller.ts_ - **listContainers**"
+      parameters: []
+      tags:
+        - "DOCKER"
+      responses:
+        401:
+          description: "Returns **401** (Unauthorized)"
+        403:
+          description: "Returns **403** (Forbidden)"
+      security:
+        - BearerAuth:
+            - "access"
+  /api/docker/containers/{id}:
+    get:
+      summary: " (inspectContainer)"
+      description: "\n\n _app/controllers/docker_manager_controller.ts_ - **inspectContainer**"
+      parameters:
+        - in: "path"
+          name: "id"
+          schema:
+            type: "string"
+          required: true
+      tags:
+        - "DOCKER"
+      responses:
+        401:
+          description: "Returns **401** (Unauthorized)"
+        403:
+          description: "Returns **403** (Forbidden)"
+      security:
+        - BearerAuth:
+            - "access"
+    delete:
+      summary: " (removeContainer)"
+      description: "\n\n _app/controllers/docker_manager_controller.ts_ - **removeContainer**"
+      parameters:
+        - in: "path"
+          name: "id"
+          schema:
+            type: "string"
+          required: true
+      tags:
+        - "DOCKER"
+      responses:
+        401:
+          description: "Returns **401** (Unauthorized)"
+        403:
+          description: "Returns **403** (Forbidden)"
+      security:
+        - BearerAuth:
+            - "access"
+  /api/docker/containers/{id}/logs:
+    get:
+      summary: " (containerLogs)"
+      description: "\n\n _app/controllers/docker_manager_controller.ts_ - **containerLogs**"
+      parameters:
+        - in: "path"
+          name: "id"
+          schema:
+            type: "string"
+          required: true
+      tags:
+        - "DOCKER"
+      responses:
+        401:
+          description: "Returns **401** (Unauthorized)"
+        403:
+          description: "Returns **403** (Forbidden)"
+      security:
+        - BearerAuth:
+            - "access"
+    delete:
+      summary: " (clearContainerLogs)"
+      description: "\n\n _app/controllers/docker_manager_controller.ts_ - **clearContainerLogs**"
+      parameters:
+        - in: "path"
+          name: "id"
+          schema:
+            type: "string"
+          required: true
+      tags:
+        - "DOCKER"
+      responses:
+        401:
+          description: "Returns **401** (Unauthorized)"
+        403:
+          description: "Returns **403** (Forbidden)"
+      security:
+        - BearerAuth:
+            - "access"
+  /api/docker/containers/{id}/start:
+    post:
+      summary: " (startContainer)"
+      description: "\n\n _app/controllers/docker_manager_controller.ts_ - **startContainer**"
+      parameters:
+        - in: "path"
+          name: "id"
+          schema:
+            type: "string"
+          required: true
+      tags:
+        - "DOCKER"
+      responses:
+        401:
+          description: "Returns **401** (Unauthorized)"
+        403:
+          description: "Returns **403** (Forbidden)"
+      security:
+        - BearerAuth:
+            - "access"
+      requestBody:
+        content:
+          application/json: {}
+  /api/docker/containers/{id}/stop:
+    post:
+      summary: " (stopContainer)"
+      description: "\n\n _app/controllers/docker_manager_controller.ts_ - **stopContainer**"
+      parameters:
+        - in: "path"
+          name: "id"
+          schema:
+            type: "string"
+          required: true
+      tags:
+        - "DOCKER"
+      responses:
+        401:
+          description: "Returns **401** (Unauthorized)"
+        403:
+          description: "Returns **403** (Forbidden)"
+      security:
+        - BearerAuth:
+            - "access"
+      requestBody:
+        content:
+          application/json: {}
+  /api/docker/containers/{id}/restart:
+    post:
+      summary: " (restartContainer)"
+      description: "\n\n _app/controllers/docker_manager_controller.ts_ - **restartContainer**"
+      parameters:
+        - in: "path"
+          name: "id"
+          schema:
+            type: "string"
+          required: true
+      tags:
+        - "DOCKER"
+      responses:
+        401:
+          description: "Returns **401** (Unauthorized)"
+        403:
+          description: "Returns **403** (Forbidden)"
+      security:
+        - BearerAuth:
+            - "access"
+      requestBody:
+        content:
+          application/json: {}
+  /api/docker/volumes:
+    get:
+      summary: " (listVolumes)"
+      description: "\n\n _app/controllers/docker_manager_controller.ts_ - **listVolumes**"
+      parameters: []
+      tags:
+        - "DOCKER"
+      responses:
+        401:
+          description: "Returns **401** (Unauthorized)"
+        403:
+          description: "Returns **403** (Forbidden)"
+      security:
+        - BearerAuth:
+            - "access"
+  /api/docker/volumes/{name}:
+    get:
+      summary: " (inspectVolume)"
+      description: "\n\n _app/controllers/docker_manager_controller.ts_ - **inspectVolume**"
+      parameters:
+        - in: "path"
+          name: "name"
+          schema:
+            type: "string"
+          required: true
+      tags:
+        - "DOCKER"
+      responses:
+        401:
+          description: "Returns **401** (Unauthorized)"
+        403:
+          description: "Returns **403** (Forbidden)"
+      security:
+        - BearerAuth:
+            - "access"
+    delete:
+      summary: " (removeVolume)"
+      description: "\n\n _app/controllers/docker_manager_controller.ts_ - **removeVolume**"
+      parameters:
+        - in: "path"
+          name: "name"
+          schema:
+            type: "string"
+          required: true
+      tags:
+        - "DOCKER"
+      responses:
+        401:
+          description: "Returns **401** (Unauthorized)"
+        403:
+          description: "Returns **403** (Forbidden)"
+      security:
+        - BearerAuth:
+            - "access"
+  /api/docker/volumes/{name}/export:
+    get:
+      summary: " (exportVolume)"
+      description: "\n\n _app/controllers/docker_manager_controller.ts_ - **exportVolume**"
+      parameters:
+        - in: "path"
+          name: "name"
+          schema:
+            type: "string"
+          required: true
+      tags:
+        - "DOCKER"
+      responses:
+        401:
+          description: "Returns **401** (Unauthorized)"
+        403:
+          description: "Returns **403** (Forbidden)"
+      security:
+        - BearerAuth:
+            - "access"
+  /api/docker/volumes/{name}/backup:
+    post:
+      summary: " (backupVolumeToStorage)"
+      description: "\n\n _app/controllers/docker_manager_controller.ts_ - **backupVolumeToStorage**"
+      parameters:
+        - in: "path"
+          name: "name"
+          schema:
+            type: "string"
+          required: true
+      tags:
+        - "DOCKER"
+      responses:
+        401:
+          description: "Returns **401** (Unauthorized)"
+        403:
+          description: "Returns **403** (Forbidden)"
+      security:
+        - BearerAuth:
+            - "access"
+      requestBody:
+        content:
+          application/json: {}
+  /api/docker/networks:
+    get:
+      summary: " (listNetworks)"
+      description: "\n\n _app/controllers/docker_manager_controller.ts_ - **listNetworks**"
+      parameters: []
+      tags:
+        - "DOCKER"
+      responses:
+        401:
+          description: "Returns **401** (Unauthorized)"
+        403:
+          description: "Returns **403** (Forbidden)"
+      security:
+        - BearerAuth:
+            - "access"
+    post:
+      summary: " (createNetwork)"
+      description: "\n\n _app/controllers/docker_manager_controller.ts_ - **createNetwork**"
+      parameters: []
+      tags:
+        - "DOCKER"
+      responses:
+        401:
+          description: "Returns **401** (Unauthorized)"
+        403:
+          description: "Returns **403** (Forbidden)"
+      security:
+        - BearerAuth:
+            - "access"
+      requestBody:
+        content:
+          application/json: {}
+  /api/docker/networks/{id}:
+    get:
+      summary: " (inspectNetwork)"
+      description: "\n\n _app/controllers/docker_manager_controller.ts_ - **inspectNetwork**"
+      parameters:
+        - in: "path"
+          name: "id"
+          schema:
+            type: "string"
+          required: true
+      tags:
+        - "DOCKER"
+      responses:
+        401:
+          description: "Returns **401** (Unauthorized)"
+        403:
+          description: "Returns **403** (Forbidden)"
+      security:
+        - BearerAuth:
+            - "access"
+  /api/docker/networks/{id}/connect:
+    post:
+      summary: " (connectContainerToNetwork)"
+      description: "\n\n _app/controllers/docker_manager_controller.ts_ - **connectContainerToNetwork**"
+      parameters:
+        - in: "path"
+          name: "id"
+          schema:
+            type: "string"
+          required: true
+      tags:
+        - "DOCKER"
+      responses:
+        401:
+          description: "Returns **401** (Unauthorized)"
+        403:
+          description: "Returns **403** (Forbidden)"
+      security:
+        - BearerAuth:
+            - "access"
+      requestBody:
+        content:
+          application/json: {}
+  /api/docker/networks/{id}/disconnect:
+    post:
+      summary: " (disconnectContainerFromNetwork)"
+      description: "\n\n _app/controllers/docker_manager_controller.ts_ - **disconnectContainerFromNetwork**"
+      parameters:
+        - in: "path"
+          name: "id"
+          schema:
+            type: "string"
+          required: true
+      tags:
+        - "DOCKER"
+      responses:
+        401:
+          description: "Returns **401** (Unauthorized)"
+        403:
+          description: "Returns **403** (Forbidden)"
+      security:
+        - BearerAuth:
+            - "access"
+      requestBody:
+        content:
+          application/json: {}
+  /api/docker/diagnostics:
+    post:
+      summary: " (start)"
+      description: "\n\n _app/controllers/docker_diagnostics_controller.ts_ - **start**"
+      parameters: []
+      tags:
+        - "DOCKER"
+      responses:
+        401:
+          description: "Returns **401** (Unauthorized)"
+        403:
+          description: "Returns **403** (Forbidden)"
+      security:
+        - BearerAuth:
+            - "access"
+      requestBody:
+        content:
+          application/json: {}
+  /api/docker/diagnostics/{jobId}:
+    get:
+      summary: "Get a single instance of docker (show)"
+      description: "\n\n _app/controllers/docker_diagnostics_controller.ts_ - **show**"
+      parameters:
+        - in: "path"
+          name: "jobId"
+          schema:
+            type: "string"
+          required: true
+      tags:
+        - "DOCKER"
+      responses:
+        401:
+          description: "Returns **401** (Unauthorized)"
+        403:
+          description: "Returns **403** (Forbidden)"
+      security:
+        - BearerAuth:
+            - "access"
+  /api/docker/images/prune:
+    post:
+      summary: " (pruneImages)"
+      description: "\n\n _app/controllers/docker_manager_controller.ts_ - **pruneImages**"
+      parameters: []
+      tags:
+        - "DOCKER"
+      responses:
+        401:
+          description: "Returns **401** (Unauthorized)"
+        403:
+          description: "Returns **403** (Forbidden)"
+      security:
+        - BearerAuth:
+            - "access"
+      requestBody:
+        content:
+          application/json: {}
+  /api/docker/images:
+    get:
+      summary: " (listImages)"
+      description: "\n\n _app/controllers/docker_manager_controller.ts_ - **listImages**"
+      parameters: []
+      tags:
+        - "DOCKER"
+      responses:
+        401:
+          description: "Returns **401** (Unauthorized)"
+        403:
+          description: "Returns **403** (Forbidden)"
+      security:
+        - BearerAuth:
+            - "access"
+  /api/docker/images/{id}:
+    get:
+      summary: " (inspectImage)"
+      description: "\n\n _app/controllers/docker_manager_controller.ts_ - **inspectImage**"
+      parameters:
+        - in: "path"
+          name: "id"
+          schema:
+            type: "string"
+          required: true
+      tags:
+        - "DOCKER"
+      responses:
+        401:
+          description: "Returns **401** (Unauthorized)"
+        403:
+          description: "Returns **403** (Forbidden)"
+      security:
+        - BearerAuth:
+            - "access"
+    delete:
+      summary: " (removeImage)"
+      description: "\n\n _app/controllers/docker_manager_controller.ts_ - **removeImage**"
+      parameters:
+        - in: "path"
+          name: "id"
+          schema:
+            type: "string"
+          required: true
+      tags:
+        - "DOCKER"
+      responses:
+        401:
+          description: "Returns **401** (Unauthorized)"
+        403:
+          description: "Returns **403** (Forbidden)"
+      security:
+        - BearerAuth:
+            - "access"
+  /__transmit/events:
+    get:
+      summary: " (handle)"
+      description: "\n\n _D:\\Projetos\\Javascript\\backup_multi-db\\backend\\config/../app/./controllers/event_stream_controller.ts_ - **handle**"
+      parameters: []
+      tags:
+        - "EVENTS"
+      responses:
+        200:
+          description: "OK"
+          content:
+            application/json: {}
+      security: []
+  /__transmit/subscribe:
+    post:
+      summary: " (handle)"
+      description: "\n\n _D:\\Projetos\\Javascript\\backup_multi-db\\backend\\config/../app/./controllers/subscribe_controller.ts_ - **handle**"
+      parameters: []
+      tags:
+        - "SUBSCRIBE"
+      responses:
+        201:
+          description: "Created"
+          content:
+            application/json: {}
+      security: []
+      requestBody:
+        content:
+          application/json: {}
+  /__transmit/unsubscribe:
+    post:
+      summary: " (handle)"
+      description: "\n\n _D:\\Projetos\\Javascript\\backup_multi-db\\backend\\config/../app/./controllers/unsubscribe_controller.ts_ - **handle**"
+      parameters: []
+      tags:
+        - "UNSUBSCRIBE"
+      responses:
+        201:
+          description: "Created"
+          content:
+            application/json: {}
+      security: []
+      requestBody:
+        content:
+          application/json: {}
+  /*:
+    get:
+      summary: "route"
+      description: "\n\n __ - ****"
+      parameters: []
+      tags: []
+      responses:
+        200:
+          description: "OK"
+          content:
+            application/json: {}
+      security: []
+tags:
+  - name: "SWAGGER"
+    description: "Everything related to SWAGGER"
+  - name: "DOCS"
+    description: "Everything related to DOCS"
+  - name: "HEALTH"
+    description: "Everything related to HEALTH"
+  - name: "AUTH"
+    description: "Everything related to AUTH"
+  - name: "CONNECTIONS"
+    description: "Everything related to CONNECTIONS"
+  - name: "STORAGE-DESTINATIONS"
+    description: "Everything related to STORAGE-DESTINATIONS"
+  - name: "STORAGE-DESTINATIONS-SPACE"
+    description: "Everything related to STORAGE-DESTINATIONS-SPACE"
+  - name: "STORAGES"
+    description: "Everything related to STORAGES"
+  - name: "BACKUPS"
+    description: "Everything related to BACKUPS"
+  - name: "STATS"
+    description: "Everything related to STATS"
+  - name: "SYSTEM"
+    description: "Everything related to SYSTEM"
+  - name: "AUDIT-LOGS"
+    description: "Everything related to AUDIT-LOGS"
+  - name: "USERS"
+    description: "Everything related to USERS"
+  - name: "DOCKER"
+    description: "Everything related to DOCKER"
+  - name: "EVENTS"
+    description: "Everything related to EVENTS"
+  - name: "SUBSCRIBE"
+    description: "Everything related to SUBSCRIBE"
+  - name: "UNSUBSCRIBE"
+    description: "Everything related to UNSUBSCRIBE"

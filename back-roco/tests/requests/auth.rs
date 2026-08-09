@@ -6,6 +6,23 @@ use serial_test::serial;
 
 use super::prepare_data;
 
+/// `cleanup_user_model()` with the timezone offset also redacted.
+///
+/// The `loco_rs` date filters stop at the seconds field
+/// (`\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}`), so on a machine that is not on UTC
+/// the offset survives and the snapshot records `DATE-03:00` instead of `DATE`.
+/// That makes the committed snapshots pass only in the timezone they were
+/// recorded in — a false failure that says nothing about the code.
+///
+/// Filters apply in order, so appending after the framework's own redactions is
+/// enough: they turn the timestamp into `DATE`, this collapses the trailing
+/// offset into it.
+fn cleanup_user_model_tz() -> Vec<(&'static str, &'static str)> {
+    let mut filters = cleanup_user_model();
+    filters.push((r"DATE[+-]\d{2}:\d{2}", "DATE"));
+    filters
+}
+
 // TODO: see how to dedup / extract this to app-local test utils
 // not to framework, because that would require a runtime dep on insta
 macro_rules! configure_insta {
@@ -39,7 +56,7 @@ async fn can_register() {
         let saved_user = users::Model::find_by_email(&ctx.db, email).await;
 
         with_settings!({
-            filters => cleanup_user_model()
+            filters => cleanup_user_model_tz()
         }, {
             assert_debug_snapshot!(saved_user);
         });
@@ -113,7 +130,7 @@ async fn can_login_with_verify(#[case] test_name: &str, #[case] password: &str) 
         );
 
         with_settings!({
-            filters => cleanup_user_model()
+            filters => cleanup_user_model_tz()
         }, {
             assert_debug_snapshot!(test_name, (response.status_code(), response.text()));
         });
@@ -184,7 +201,7 @@ async fn can_login_without_verify() {
         );
 
         with_settings!({
-            filters => cleanup_user_model()
+            filters => cleanup_user_model_tz()
         }, {
             assert_debug_snapshot!(login_response.text());
         });
@@ -304,7 +321,7 @@ async fn can_get_current_user() {
         );
 
         with_settings!({
-            filters => cleanup_user_model()
+            filters => cleanup_user_model_tz()
         }, {
             assert_debug_snapshot!((response.status_code(), response.text()));
         });
@@ -360,7 +377,7 @@ async fn can_auth_with_magic_link() {
         );
 
         with_settings!({
-            filters => cleanup_user_model()
+            filters => cleanup_user_model_tz()
         }, {
             assert_debug_snapshot!(magic_link_response.text());
         });
@@ -449,7 +466,7 @@ async fn can_resend_verification_email() {
             .expect("User should exist");
 
         with_settings!({
-            filters => cleanup_user_model()
+            filters => cleanup_user_model_tz()
         }, {
             assert_debug_snapshot!("resend_verification_user", user);
         });

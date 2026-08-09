@@ -1,0 +1,52 @@
+{
+  "name": "auth/status",
+  "recordedFrom": "adonis",
+  "request": {
+    "method": "GET",
+    "route": "GET /api/auth/status",
+    "path": "/api/auth/status",
+    "as": "none"
+  },
+  "response": {
+    "status": 200,
+    "mime": "application/json",
+    "contentType": "application/json; charset=utf-8",
+    "headerNames": [
+      "content-type",
+      "x-ratelimit-limit"
+    ],
+    "headers": {
+      "content-type": "application/json; charset=utf-8",
+      "x-ratelimit-limit": "600"
+    },
+    "shape": {
+      "kind": "object",
+      "fields": {
+        "data": {
+          "kind": "object",
+          "fields": {
+            "hasUsers": {
+              "kind": "primitive",
+              "type": "boolean"
+            },
+            "requiresBootstrapToken": {
+              "kind": "primitive",
+              "type": "boolean"
+            }
+          }
+        },
+        "success": {
+          "kind": "primitive",
+          "type": "boolean"
+        }
+      }
+    },
+    "body": {
+      "data": {
+        "hasUsers": true,
+        "requiresBootstrapToken": false
+      },
+      "success": true
+    }
+  }
+}

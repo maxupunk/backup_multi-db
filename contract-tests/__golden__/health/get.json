@@ -1,0 +1,45 @@
+{
+  "name": "health/get",
+  "recordedFrom": "adonis",
+  "request": {
+    "method": "GET",
+    "route": "GET /api/health",
+    "path": "/api/health",
+    "as": "none"
+  },
+  "response": {
+    "status": 200,
+    "mime": "application/json",
+    "contentType": "application/json; charset=utf-8",
+    "headerNames": [
+      "content-type",
+      "x-ratelimit-limit"
+    ],
+    "headers": {
+      "content-type": "application/json; charset=utf-8",
+      "x-ratelimit-limit": "600"
+    },
+    "shape": {
+      "kind": "object",
+      "fields": {
+        "status": {
+          "kind": "primitive",
+          "type": "string"
+        },
+        "timestamp": {
+          "kind": "primitive",
+          "type": "string"
+        },
+        "version": {
+          "kind": "primitive",
+          "type": "string"
+        }
+      }
+    },
+    "body": {
+      "status": "ok",
+      "timestamp": "<timestamp>",
+      "version": "1.0.0"
+    }
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "prefix": "oat_",
+  "hashAlgorithm": "sha256-hex",
+  "seedLength": 40,
+  "checksum": "crc32-decimal",
+  "vectors": [
+    {
+      "identifier": "1",
+      "seedLength": 40,
+      "seed": "1gJFyvqKXCB9V5uyWT15awSqrr-qkqVDbsOKOnJJ",
+      "checksum": "161104671",
+      "secret": "1gJFyvqKXCB9V5uyWT15awSqrr-qkqVDbsOKOnJJ161104671",
+      "tokenValue": "oat_MQ.MWdKRnl2cUtYQ0I5VjV1eVdUMTVhd1NxcnItcWtxVkRic09LT25KSjE2MTEwNDY3MQ",
+      "hash": "64747c0b9b5981ccad3f826c7eaa4901ab2f3290685cee3246371c8f43d7e3e9"
+    },
+    {
+      "identifier": "2",
+      "seedLength": 40,
+      "seed": "zBG5e9LGjgvzt_QfY6oWY3f9O73Y5U8JNK701yQu",
+      "checksum": "2913309856",
+      "secret": "zBG5e9LGjgvzt_QfY6oWY3f9O73Y5U8JNK701yQu2913309856",
+      "tokenValue": "oat_Mg.ekJHNWU5TEdqZ3Z6dF9RZlk2b1dZM2Y5TzczWTVVOEpOSzcwMXlRdTI5MTMzMDk4NTY",
+      "hash": "ed73335345078bb73efa698b1fffdca587e71eff7d9a0d46a0a5bbc3e17247b3"
+    },
+    {
+      "identifier": "123456",
+      "seedLength": 40,
+      "seed": "HIvfssw9KTTDZEJo_virmQmMSIocGGWMzoui5Hss",
+      "checksum": "711054266",
+      "secret": "HIvfssw9KTTDZEJo_virmQmMSIocGGWMzoui5Hss711054266",
+      "tokenValue": "oat_MTIzNDU2.SEl2ZnNzdzlLVFREWkVKb192aXJtUW1NU0lvY0dHV016b3VpNUhzczcxMTA1NDI2Ng",
+      "hash": "c315c1c35db8aa20b55fa887538bd5bf12a1c3c8e16d2d1120b0a7c23ff6b352"
+    },
+    {
+      "identifier": "7",
+      "seedLength": 32,
+      "seed": "IdiMMwgE_ImMfZgoQiFHYCO8GRKTHQdi",
+      "checksum": "231448061",
+      "secret": "IdiMMwgE_ImMfZgoQiFHYCO8GRKTHQdi231448061",
+      "tokenValue": "oat_Nw.SWRpTU13Z0VfSW1NZlpnb1FpRkhZQ084R1JLVEhRZGkyMzE0NDgwNjE",
+      "hash": "c23ff47e2830a9dc3f67c5cec8167ef6828014d37de025bf65110fc6cd821f28"
+    }
+  ]
+}

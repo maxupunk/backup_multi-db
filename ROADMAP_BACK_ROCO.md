@@ -3,8 +3,9 @@
 > **Objetivo duplo**
 > 1. Criar a suíte completa de **testes de endpoint** do `backend` atual, escrita de forma
 >    **agnóstica de implementação**, para servir de *contrato executável* do `back-roco`.
-> 2. Portar o `backend` para `back-roco` até a **paridade total**: 85 endpoints HTTP,
->    8 models, 14 migrations, 47 services, 4 middlewares, scheduler e SSE.
+> 2. Portar o `backend` para `back-roco` até a **paridade total**: **87 pares método+rota**
+>    sob `/api` (85 endpoints lógicos), 8 models, 14 migrations, 47 services, 4 middlewares,
+>    3 rotas SSE, scheduler e fallback SPA.
 >
 > Documento vivo. Marque os checkboxes conforme avança.
 > Estimativas são ordens de grandeza, não compromissos.
@@ -41,7 +42,7 @@
 
 | Área | Quantidade |
 |---|---|
-| Endpoints HTTP | **85** (+ SSE `/__transmit/*` + fallback SPA) |
+| Endpoints HTTP | **87 pares método+rota** sob `/api` (85 handlers lógicos) + 3 rotas SSE + fallback SPA = **91** |
 | Controllers | 10 (~3.138 LOC) |
 | Models | 8 |
 | Migrations | 14 |
@@ -108,24 +109,30 @@ independentes e podem entrar a qualquer momento após a Fase 3).
 
 ## 3. Decisões de arquitetura (bloqueantes)
 
-**Resolver ANTES de escrever código de produção.** Cada uma muda o desenho do port.
+**Status: ✅ TODAS DECIDIDAS em 2026-08-09.** Alterações a partir daqui exigem registro do motivo.
 
-| # | Decisão | Opções | Impacto | Status |
-|---|---|---|---|---|
-| D1 | **Formato do token de auth** | (a) Manter *opaque token* do Adonis (`auth_access_tokens`, hash em DB) · (b) Migrar para JWT do Loco | (b) invalida todas as sessões e exige mudança no frontend; (a) exige reimplementar o provider do Adonis em Rust | ⬜ |
-| D2 | **Hash de senha** | Adonis usa **scrypt**; Loco usa **argon2** | Se mudar, usuários existentes não conseguem logar → precisa de rehash-on-login ou reset forçado | ⬜ |
-| D3 | **Criptografia de credenciais** | `EncryptionService` = AES-256-GCM, formato `iv:authTag:data` em base64 | O Rust **precisa** ler os registros existentes de `connections.password_encrypted` e `storage_destinations.config_encrypted`. Byte-compatibilidade obrigatória, incluindo a derivação de chave | ⬜ |
-| D4 | **Estratégia de banco** | (a) `back-roco` aponta para o **mesmo** SQLite do Adonis · (b) schema novo + script de migração de dados | (a) exige que as migrations Sea-ORM sejam *no-op* sobre o schema existente; (b) exige janela de downtime | ⬜ |
-| D5 | **Convenção de nomes de coluna** | Adonis: `snake_case` no DB / `camelCase` no JSON. Loco/Sea-ORM: `snake_case` em ambos | Se o JSON mudar, **o frontend quebra**. Definir política de serialização (`#[serde(rename_all = "camelCase")]`) desde a primeira DTO | ⬜ |
-| D6 | **Transporte SSE** | Adonis usa `@adonisjs/transmit` em `/__transmit/*` | Loco não traz SSE. Reimplementar com `axum::response::sse` mantendo o mesmo path e formato de evento, ou trocar por WebSocket (quebra o frontend) | ⬜ |
-| D7 | **Rate limiting** | `@adonisjs/limiter` com 4 limiters (`global`, `auth`, `strict`, `backup`) e `keyBy: 'ip-email'` | Reimplementar como middleware Axum (`tower-governor` ou próprio). Os headers de resposta (`X-RateLimit-*`, `Retry-After`) fazem parte do contrato | ⬜ |
-| D8 | **Cutover** | (a) Big-bang · (b) Reverse-proxy por rota (strangler fig) | (b) permite migrar domínio a domínio com o frontend inalterado — **recomendado** | ⬜ |
-| D9 | **Erros HTTP** | Adonis retorna `{ message, errors[] }` do VineJS | Definir shape único e traduzir os erros do `validator` para ele. Contrato do frontend | ⬜ |
-| D10 | **Swagger** | `adonis-autoswagger` gera `/api/swagger` e `/api/docs` | Porta com `utoipa` ou aceita perda temporária da doc | ⬜ |
+| # | Decisão | **Escolha** | Consequência assumida |
+|---|---|---|---|
+| D1 | Formato do token de auth | ✅ **Token opaco compatível** — mantém `auth_access_tokens`, hash em DB | Sessões atuais continuam válidas; frontend inalterado. Custo: reimplementar o provider do Adonis em Rust |
+| D2 | Hash de senha | ✅ **scrypt** (o mesmo do Adonis) | Usuários logam com a senha atual, sem reset nem rehash. Custo: `scrypt` crate + réplica dos parâmetros do `@adonisjs/core/hash` |
+| D3 | Criptografia de credenciais | ✅ **AES-256-GCM byte-compatível**, formato `iv:authTag:data` base64 | ⚠️ **IV de 16 bytes**, não os 12 padrão do GCM — o Rust precisa de `AesGcm<Aes256, U16>`, não o alias `Aes256Gcm`. Chave = `DB_ENCRYPTION_KEY` hex de 64 chars, usada **direto**, sem KDF |
+| D4 | Estratégia de banco | ✅ **Schema novo + script de migração de dados** | Liberdade para modelar no estilo Sea-ORM. Exige janela de downtime no cutover e um migrador que preserve os dados atuais (incl. 25.458 linhas de métricas) e o hash dos tokens |
+| D5 | Nomes na serialização | ✅ **`camelCase` no JSON**, `snake_case` no DB | Todas as DTOs levam `#[serde(rename_all = "camelCase")]`. Frontend não muda |
+| D6 | Transporte SSE | ✅ **`axum::response::sse` no mesmo path** `/__transmit/*` | Replicar o protocolo do `@adonisjs/transmit`: `GET /__transmit/events`, `POST /__transmit/subscribe`, `POST /__transmit/unsubscribe` |
+| D7 | Rate limiting | ✅ **Middleware Axum próprio** (base `tower-governor`) | 4 limiters (`global`, `auth`, `strict`, `backup`), `keyBy` por IP e IP+email, headers `X-RateLimit-*` e `Retry-After` idênticos |
+| D8 | Cutover | ✅ **Big-bang ao final da Fase 12** | Sem proxy intermediário. Todo o risco concentrado num evento → as Fases 12.12–12.14 (shadow traffic e runbook de rollback) passam a ser **obrigatórias**, não opcionais |
+| D9 | Erros HTTP | ✅ **Shape do VineJS**: `{ message, errors: [{ message, field, rule }] }` | `impl IntoResponse` traduzindo `validator::ValidationErrors` para esse formato |
+| D10 | Swagger | ✅ **`utoipa`**, comparado contra `docs/openapi-baseline.yml` | Anotação manual dos handlers; 73 paths a cobrir |
 
-> **Recomendação para D1/D2/D4/D8:** manter opaque token + scrypt + mesmo SQLite + strangler fig.
-> Zero impacto no frontend e zero downtime; o custo é reimplementar dois algoritmos em Rust,
-> o que é contido e testável isoladamente.
+### Consequências combinadas de D4 + D8 que precisam de atenção
+
+A combinação **schema novo + big-bang** é a de maior risco operacional entre as escolhidas.
+Mitigações que deixam de ser opcionais:
+
+- **Fase 4** ganha um entregável extra: o **script de migração de dados** (`backend` SQLite → schema novo), com teste de round-trip sobre uma cópia do banco de produção.
+- O migrador precisa preservar o **hash dos access tokens** (D1) — senão o cutover derruba todas as sessões, anulando o ganho de D1/D2.
+- **Fase 12.13 (shadow traffic)** é a única rede de proteção antes da troca. Não pular.
+- **Runbook de rollback** (12.11) precisa incluir o caminho de volta: restaurar o SQLite do Adonis a partir do snapshot pré-cutover.
 
 ---
 
@@ -188,17 +195,67 @@ independentes e podem entrar a qualquer momento após a Fase 3).
 
 ## Fase 0 — Inventário e decisões
 
-**Duração estimada:** 2–3 dias · **Bloqueia:** tudo
+**Status: ✅ CONCLUÍDA (2026-08-09)** · **Bloqueia:** tudo
 
-- [ ] 0.1 — Revisar e **decidir D1 a D10** (seção 3). Registrar cada decisão com justificativa neste arquivo.
-- [ ] 0.2 — Congelar o `backend/` durante o port (feature freeze) ou definir processo de sincronização de mudanças.
-- [ ] 0.3 — Rodar `node ace list:routes` e salvar a saída como `docs/routes-baseline.txt` (fonte de verdade das 85 rotas).
-- [ ] 0.4 — Extrair o Swagger atual (`GET /api/swagger`) e salvar como `docs/openapi-baseline.json`.
-- [ ] 0.5 — Levantar o schema real do SQLite em produção: `sqlite3 app_data/db.sqlite3 .schema > docs/schema-baseline.sql`. Comparar com as migrations (detectar drift).
-- [ ] 0.6 — Validar disponibilidade das crates do Apêndice B (versões, licenças, maturidade).
-- [ ] 0.7 — Definir ambiente de teste reproduzível: `docker-compose.test.yml` com MySQL, MariaDB, PostgreSQL, MinIO e um SFTP — necessário para as fases 6–8.
+- [x] 0.1 — **D1 a D10 decididas** e registradas na seção 3.
+- [ ] 0.2 — Congelar o `backend/` durante o port (feature freeze) ou definir processo de sincronização. *Pendente de definição do time.*
+- [x] 0.3 — `docs/routes-baseline.txt` + `docs/routes-baseline.json` gerados via `node ace list:routes --json`.
+- [x] 0.4 — `docs/openapi-baseline.yml` extraído de `GET /api/swagger` (74 KB, **73 paths**).
+- [x] 0.5 — `docs/schema-baseline.sql` extraído do SQLite real (`backend/storage/database/app.sqlite3`).
+- [x] 0.6 — Crates do Apêndice B validadas contra o crates.io. Toolchain: **rustc 1.96.0**.
+- [x] 0.7 — `docker-compose.test.yml` + `tests-fixtures/` criados e **verificados de ponta a ponta**.
 
-**Pronto quando:** todas as decisões D1–D10 marcadas e o compose de teste sobe com um comando.
+### Achados da Fase 0 (corrigem premissas do inventário inicial)
+
+**0.3 — a contagem real é 87, não 85.**
+`node ace list:routes` reporta **91 rotas não-HEAD**: 87 sob `/api` + 3 do Transmit + 1 fallback SPA.
+A diferença para os 85 "endpoints lógicos" é que `connections/:id` e `storage-destinations/:id`
+respondem a **PUT e PATCH** — dois pares método+rota cada, um handler só.
+E `/__transmit/*` não é um wildcard: são 3 rotas concretas
+(`GET /events`, `POST /subscribe`, `POST /unsubscribe`).
+
+> **Número de referência para o placar de paridade: 87 pares método+rota sob `/api`.**
+
+**0.5 — o banco real está íntegro e as 14 migrations estão aplicadas.**
+Não há drift entre as migrations e o schema em disco. Volume de dados a migrar (D4):
+
+| Tabela | Linhas |
+|---|---:|
+| `resource_metric_history` | 25.458 |
+| `auth_access_tokens` | 3 |
+| `audit_logs` | 2 |
+| `users` · `connections` · `connection_databases` · `backups` · `storage_destinations` · `system_settings` | 1 cada |
+
+**0.6 — todas as crates existem; duas descobertas mudam o plano.**
+
+- 🟢 **GCS deixou de ser risco alto.** `google-cloud-storage = "1.17.0"` é hoje a biblioteca
+  **oficial** do Google para Rust, não mais um port de comunidade. Risco rebaixado de 🔴 para 🟢.
+- 💡 **`object_store = "0.14"`** oferece uma abstração única sobre S3, GCS, Azure e local.
+  Mapeia quase 1:1 no trait `StorageExplorerAdapter` e pode substituir 3 SDKs por 1 dependência.
+  **Avaliar na Fase 8** — SFTP continuaria fora dela, de qualquer forma.
+
+**0.7 — ambiente de teste no ar e com fixtures carregados.**
+
+| Serviço | Porta (127.0.0.1) | Estado verificado |
+|---|---|---|
+| MySQL 8.4 | 13306 | healthy · 4 customers · `fixture_secondary` criado |
+| MariaDB 11.4 | 13307 | healthy · 4 customers |
+| PostgreSQL 16 | 15432 | healthy · 4 customers · `fixture_secondary` criado |
+| MinIO | 19000 / 19001 | healthy · buckets `backups-primary`, `backups-secondary`, `archives` |
+| SFTP | 12222 | healthy · `/home/tester/backups` |
+| `docker-target` (alpine) | — | up · alvo descartável para a Fase 9 |
+
+> ⚠️ **Armadilha encontrada:** `--default-authentication-plugin` foi **removida no MySQL 8.4** —
+> o server aborta no boot com `unknown variable`. O plugin (`caching_sha2_password`) já é o
+> default desde a 8.0, então a flag foi simplesmente retirada do compose.
+
+**Descoberta crítica para D3 (achada ao ler `encryption_service.ts`):**
+o `EncryptionService` usa **IV de 16 bytes**, não os 12 padrão do AES-GCM, e usa a
+`DB_ENCRYPTION_KEY` **diretamente** como chave de 32 bytes, sem nenhum KDF.
+Em Rust isso significa `AesGcm<Aes256, U16>` — o alias pronto `Aes256Gcm` (nonce de 12 bytes)
+**não serve**. É o primeiro item da Fase 3.
+
+**Pronto quando:** ~~todas as decisões D1–D10 marcadas e o compose de teste sobe com um comando.~~ ✅
 
 ---
 
@@ -208,21 +265,68 @@ independentes e podem entrar a qualquer momento após a Fase 3).
 
 Cria a infraestrutura da suíte black-box. Nenhum teste de endpoint ainda — só o esqueleto.
 
-- [ ] 1.1 — Criar `contract-tests/` na raiz do repositório (workspace independente, Node + Vitest + `undici`).
-- [ ] 1.2 — Config de target: `BASE_URL`, `TARGET` (`adonis` | `roco`), timeouts, retries.
-- [ ] 1.3 — Cliente HTTP com helpers: `as(user)`, `unauth()`, `expectStatus()`, `expectShape()`.
-- [ ] 1.4 — **Gerência de estado determinístico** — decidir e implementar um dos:
-  - reset do banco entre suítes via CLI de cada backend (`node ace migration:fresh --seed` / `cargo loco db reset`);
-  - endpoint `POST /api/__test__/reset` habilitado só em `NODE_ENV=test`/`LOCO_ENV=test`;
-  - fixtures idempotentes com prefixo de nome único por execução.
-- [ ] 1.5 — Seeds compartilhados: usuário admin, usuário comum, usuário inativo, 1 conexão MySQL, 1 conexão PG, 1 storage local, 1 storage S3 (MinIO), backups em cada status.
-- [ ] 1.6 — **Golden files**: modo `--record` que grava a resposta do Adonis em `contract-tests/__golden__/<endpoint>.json`, com redaction de campos voláteis (ids, timestamps, durations, paths temporários).
-- [ ] 1.7 — Matchers tolerantes: comparação de *shape* + tipos + campos obrigatórios, não igualdade literal (evita falso-negativo por ordem de chaves ou id incremental).
-- [ ] 1.8 — Relatório de cobertura de rotas: cruzar `routes-baseline.txt` × testes existentes e falhar o build se alguma rota ficar sem teste.
-- [ ] 1.9 — Scripts: `pnpm contract:record`, `pnpm contract:adonis`, `pnpm contract:roco`, `pnpm contract:diff`.
-- [ ] 1.10 — CI: job que roda a suíte contra o Adonis a cada PR (garante que os golden files não apodreçam).
+- [x] 1.1 — `contract-tests/` na raiz (workspace independente, Node + Vitest 3 + `undici`). 36 testes do próprio harness + 12 de contrato.
+- [x] 1.2 — Config de target em `src/config.ts`: `CONTRACT_TARGET`, `CONTRACT_BASE_URL`, timeouts, retries, modo de golden, `runId`.
+- [x] 1.3 — Cliente HTTP (`src/http.ts`) + sessões (`src/session.ts`): `as('admin'|'member'|'inactive')`, `unauth()`, `withBogusToken()`, `expectStatus()`, `expectGolden()`.
+- [x] 1.4 — **Gerência de estado determinístico** — o harness sobe e derruba o próprio servidor, com SQLite descartável por execução. Ver decisão abaixo.
+- [~] 1.5 — Seeds compartilhados **via HTTP** (`src/seed.ts`): admin, usuário comum ativo, usuário inativo, conexão MySQL, conexão PostgreSQL, storage local, storage MinIO. **Backups ficaram de fora** — ver lacuna abaixo.
+- [x] 1.6 — **Golden files** em `__golden__/`, gravados só a partir do Adonis, com redaction de id/timestamp/token/path. Regravação é byte-idêntica (verificado por md5).
+- [x] 1.7 — Matchers tolerantes (`src/shape.ts`) com teste próprio, incluindo um que garante que eles **reprovam** algo.
+- [x] 1.8 — Relatório de cobertura (`src/report.ts`) cruzando `docs/routes-baseline.txt` com o rastro do cliente HTTP; `--enforce-coverage` reprova a execução.
+- [x] 1.9 — Scripts: `contract:record`, `contract:adonis`, `contract:roco`, `contract:diff`, `contract:coverage`, `contract:selftest`.
+- [x] 1.10 — CI em `.github/workflows/contract-tests.yml`, com job dedicado a detectar golden desatualizado.
 
-**Pronto quando:** `pnpm contract:record` grava golden de `GET /api/health` e `pnpm contract:adonis` passa.
+**Pronto quando:** ~~`pnpm contract:record` grava golden de `GET /api/health` e `pnpm contract:adonis` passa.~~ ✅
+
+### 1.4 — decisão registrada: o harness sobe o próprio servidor
+
+Das três opções listadas originalmente, nenhuma foi adotada como estava. O harness prepara um
+diretório por execução, roda `node ace migration:run` contra um SQLite descartável, sobe
+`node ace serve --no-hmr` numa porta livre, espera `GET /api/health`, semeia por HTTP e no fim
+derruba tudo.
+
+O endpoint `POST /api/__test__/reset` foi descartado por dois motivos:
+
+- **D8** (big-bang) exige o `backend/` congelado; abrir rota nova nele só para teste contraria isso;
+- o rate limiter do Adonis usa store **em memória** (`config/limiter.ts`), e o limiter de `auth` é
+  de **5 req/min por IP+e-mail**. Um endpoint de reset limparia o banco e deixaria os contadores
+  intactos. Reiniciar o processo zera as duas coisas de uma vez.
+
+Consequência prática para a Fase 2: **os tokens são emitidos uma única vez por execução**, no seed.
+Uma suíte que fizesse login por teste começaria a tomar 429 no sexto.
+
+### Salvaguarda contra o banco de produção
+
+O backend lê o `.env` da **raiz do repositório**, onde está o caminho do banco de produção. As
+variáveis que o harness injeta têm precedência (`process.env` vence — verificado no código de
+`@adonisjs/env`), mas o harness não confia nisso em silêncio: depois das migrations ele exige que
+o arquivo SQLite tenha nascido dentro de `.contract/<runId>/`. Se não nasceu, aborta antes de
+escrever qualquer coisa.
+
+### Lacuna assumida: backups não são semeados
+
+Criar um backup pela API exige um banco de origem vivo (`docker-compose.test.yml`) e um dump real.
+Fica para o lote de backups da **Fase 2**, onde há teste consumindo o recurso. Está declarado em
+`SeedState.backups` e no README, não escondido.
+
+### Tolerâncias da comparação (1.7)
+
+A comparação é de **formato**, nunca de valor. Cada tolerância é uma decisão:
+
+| Situação | Decisão |
+|---|---|
+| Ordem das chaves | irrelevante — chaves ordenadas na derivação |
+| Valor de id, data, duração | irrelevante — só o tipo importa |
+| Tamanho de array | irrelevante — o formato do **item** é comparado |
+| Array heterogêneo | itens unificados, não só o item 0 |
+| `null` em qualquer dos lados | campo nulável, não conflito |
+| Array vazio onde o golden tinha itens | reportado como `unverified-array` |
+| Chave **a mais** na resposta | **falha** (`allowExtraKeys` afrouxa caso a caso) |
+| `charset` do content-type | irrelevante — só o mime é comparado |
+
+O golden guarda **duas** representações: `response.shape`, derivado do corpo **cru**, que é a
+autoridade da comparação; e `response.body`, redigido, só para leitura humana no code review.
+Guardar apenas o redigido perderia o contrato — a redação troca tipos (`1` vira `"<id>"`).
 
 ---
 
@@ -314,9 +418,23 @@ passa verde contra o Adonis.
 **Duração estimada:** 1–2 semanas · **Depende de:** Fase 0 · **Paralela às Fases 1–2**
 
 - [ ] 3.1 — Configuração `config/*.yaml` equivalente ao `.env` do Adonis (portas, DB, chave de cripto, TTL de token, limites). Segredos via `get_env`.
-- [ ] 3.2 — **`EncryptionService` em Rust** (crate `aes-gcm`) — byte-compatível com o formato `iv:authTag:data` base64. **Teste crítico:** descriptografar um payload gerado pelo Node.
-- [ ] 3.3 — **Hash de senha** conforme D2 (`scrypt` ou `argon2`) + verificação contra hashes existentes.
-- [ ] 3.4 — **Auth** conforme D1: se opaque token, implementar o provider (`auth_access_tokens`, hash do token, `expires_at`, `last_used_at`) e o extractor Axum correspondente.
+- [x] 3.2 — ✅ **`EncryptionService` em Rust** — `src/models/encryption.rs`. **Go/no-go de D3 aprovado.**
+  - `AesGcm<Aes256, U16>` (o alias `Aes256Gcm` usa nonce de 12 e não serviria);
+  - `DB_ENCRYPTION_KEY` usada direto como chave de 32 bytes, sem KDF;
+  - `Debug` não renderiza a chave, para que um `{:?}` acidental em log não a vaze;
+  - **13 testes**: 9 unitários + 4 de compatibilidade cruzada contra vetores gerados pelo Node (`tests/fixtures/encryption_vectors.json`);
+  - **prova com dados reais**: teste `decrypts_real_production_rows` (marcado `#[ignore]`, sem segredo versionado) descriptografou em Rust o `password_encrypted` e o `config_encrypted` **do banco de produção** — 9 e 46 bytes, respectivamente.
+- [x] 3.3 — ✅ **scrypt** (D2) — `src/models/password.rs`. Formato PHC `$scrypt$n=16384,r=8,p=1$salt$hash`, base64 padrão **sem padding**, salt 16 bytes, keyLength 64.
+  - `verify` deriva com os parâmetros **do hash armazenado**, nunca com os da config — do contrário, subir o custo trancaria todos os usuários para fora;
+  - comparação em tempo constante (`subtle`); `needs_rehash` para a política futura;
+  - o crate `scrypt` recebe `log2(N)`, o Node recebe `N` — custo que não seja potência de 2 é rejeitado, não arredondado;
+  - **15 testes**: 8 unitários + 6 de compatibilidade contra hashes gerados pelo driver real do Adonis + 1 contra produção;
+  - **prova com dados reais**: `verifies_against_the_real_production_salt` (`#[ignore]`) derivou com o **salt e os parâmetros do hash real** de `users.password` e bateu byte a byte com o Node — sem nunca precisar da senha real.
+- [~] 3.4 — **Auth com token opaco** (D1) — camada de formato **pronta** em `src/models/access_token.rs`; a camada de banco espera a Fase 4.
+  - formato `oat_<base64url(id)>.<base64url(secret)>`, com `secret = <seed 40 chars><crc32(seed) decimal>`;
+  - coluna `hash` = SHA-256 **hex** do secret; comparação em tempo constante;
+  - **14 testes**: 8 unitários + 6 de compatibilidade contra tokens emitidos pelo `AccessToken.createTransientToken` real. Inclui confirmação de que o CRC-32 do `crc32fast` (IEEE) é o mesmo do `@poppinss/utils`;
+  - **falta (depende da Fase 4):** consulta à tabela `auth_access_tokens`, checagem de `expires_at`, atualização de `last_used_at`, `abilities`, revogação no logout, e o extractor Axum equivalente ao `middleware.auth()`.
 - [ ] 3.5 — **Middleware de rate limit** — 4 limiters, `keyBy` por IP e por IP+email, headers `X-RateLimit-*` e `Retry-After` idênticos.
 - [ ] 3.6 — **Formato de erro unificado** (D9) — `impl IntoResponse` traduzindo erros do `validator` e do `loco_rs` para o shape do VineJS.
 - [ ] 3.7 — Middleware equivalente ao `force_json_response` + CORS com a mesma config.
@@ -325,8 +443,40 @@ passa verde contra o Adonis.
 - [ ] 3.10 — Fixtures YAML em `src/fixtures/` espelhando os seeds da tarefa 1.5.
 - [ ] 3.11 — `Dockerfile` e entrada no `docker-compose.dev.yml` para o `back-roco`.
 
+### Achados da Fase 3 (em andamento)
+
+**3.2 — D3 confirmado com dados reais.** Não é só o algoritmo que bate: os ciphertexts que
+realmente precisam sobreviver à migração foram descriptografados pela implementação Rust.
+O risco nº 1 da tabela de riscos está **eliminado**, não apenas mitigado.
+
+**Snapshots do scaffold falhavam fora de UTC.** `cleanup_user_model()` do `loco_rs` redige a data
+até os segundos e deixa o offset de fuso (`DATE-03:00`), então os snapshots do scaffold só
+passavam na timezone em que foram gravados. Corrigido com um filtro local
+`cleanup_user_model_tz()` em `tests/requests/auth.rs`. **Vale para todo snapshot futuro** — use
+esse helper, não o do framework, em qualquer teste que serialize `created_at`/`updated_at`.
+
+**As três primitivas de compatibilidade estão provadas contra dados reais.** D1, D2 e D3 deixaram
+de ser risco: criptografia, hash de senha e formato de token foram todos verificados contra o que
+está gravado no banco de produção, não apenas contra fixtures. O padrão adotado — gerar vetores
+com a implementação Node original e travá-los num `tests/fixtures/*.json` — deve ser repetido em
+qualquer outro ponto de compatibilidade binária que apareça.
+
+**⚠️ Descoberta para a Fase 4 — `auth_access_tokens` guarda tempo como inteiro de milissegundos.**
+`created_at` e `expires_at` são `1785928191780`, não texto ISO. O migrador de dados (4.9) e as
+entidades Sea-ORM precisam tratar isso; ler como `DateTime` direto vai falhar ou, pior, silenciar.
+
+**⚠️ Pendência para a 3.9 — o `export_to` do `ts-rs` aponta para o lugar errado.**
+`src/dtos/common.rs` declara `export_to = "../frontend/src/bindings/"`, mas o caminho é resolvido
+a partir de um diretório `bindings/` implícito dentro do crate — o resultado vai para
+`back-roco/frontend/src/bindings/`, e **não** para o `frontend/` da raiz que o SPA consome.
+Para alcançar o frontend real o caminho precisa ser `../../frontend/src/bindings/`.
+Corrigir junto com a definição da política de serialização (D5).
+
 **Pronto quando:** `cargo test` verde, `GET /api/health` responde idêntico ao Adonis no contrato,
-e um token emitido pelo Adonis é aceito pelo Rust (se D1 = opaque).
+e um token emitido pelo Adonis é aceito pelo Rust (D1 = token opaco).
+
+Estado atual da suíte: **67 testes, 0 falhas, 2 ignorados** (os de dados de produção).
+`cargo fmt --check` e `cargo clippy --all-targets -- -D warnings` limpos.
 
 ---
 
@@ -342,7 +492,13 @@ e um token emitido pelo Adonis é aceito pelo Rust (se D1 = opaque).
 - [ ] 4.6 — `cargo loco db migrate` + `cargo loco db entities` — gerar `src/models/_entities/`.
 - [ ] 4.7 — Lógica de domínio em `src/models/*.rs`: hooks de criptografia (`ActiveModelBehavior`), `getDecryptedPassword`, `getSafeConfig`, `markAsStarted/Completed/Failed`, `promoteRetention`, `getDefaultPort`, `getDumpCommand`, `getScheduleIntervalMs`.
 - [ ] 4.8 — **Validação de schema cruzado**: script que compara `.schema` do SQLite gerado pelo Rust com `docs/schema-baseline.sql` (Fase 0.5). Diferenças precisam ser justificadas.
-- [ ] 4.9 — Conforme D4: script de migração de dados ou prova de que as migrations Sea-ORM são no-op sobre o banco existente.
+- [ ] 4.9 — **Script de migração de dados** (D4 = schema novo). Entregável próprio, não um detalhe:
+  - lê o SQLite do Adonis e popula o schema novo, tabela a tabela, na ordem das FKs;
+  - **preserva o hash dos `auth_access_tokens`** — sem isso o cutover derruba todas as sessões e anula o ganho de D1/D2;
+  - preserva os `password_encrypted` / `config_encrypted` como estão (a cripto é byte-compatível por D3, não precisa recriptografar);
+  - lida com as 25.458 linhas de `resource_metric_history` em lote, sem carregar tudo em memória;
+  - teste de round-trip sobre uma **cópia** do banco real, comparando contagens e checksums por tabela;
+  - é idempotente e re-executável (o shadow traffic da 12.13 vai exigir rodar mais de uma vez).
 - [ ] 4.10 — Testes de model em `back-roco/tests/models/` para os 8 models (`insta` + `#[serial]`).
 
 **Pronto quando:** `cargo loco db migrate` roda limpo, o diff de schema da 4.8 está vazio (ou justificado),
@@ -507,9 +663,9 @@ frontend atual consome o stream do `back-roco` sem alteração.
 - [ ] 12.9 — `cargo fmt` + `cargo clippy --all-targets -- -D warnings` limpos.
 - [ ] 12.10 — Dockerfile de produção multi-stage + entrada no `docker-compose.yml`.
 - [ ] 12.11 — Documentação: README, AGENTS.md atualizado, guia de migração, runbook de rollback.
-- [ ] 12.12 — **Cutover** conforme D8. Se strangler fig: proxy roteando domínio a domínio, com plano de rollback por rota.
-- [ ] 12.13 — Período de shadow traffic (rodar os dois, comparar respostas em produção, servir só o Adonis) antes de trocar de fato.
-- [ ] 12.14 — Descomissionar o `backend/` só após N dias de estabilidade.
+- [ ] 12.12 — **Cutover big-bang** (D8): snapshot do SQLite → rodar o migrador da 4.9 → subir o `back-roco` → derrubar o Adonis. Janela de downtime planejada e comunicada.
+- [ ] 12.13 — **Shadow traffic (obrigatório)** — rodar os dois em paralelo, espelhar o tráfego real para o `back-roco`, comparar respostas, servir só o Adonis. É a única rede de proteção antes de um big-bang.
+- [ ] 12.14 — Descomissionar o `backend/` só após N dias de estabilidade. Manter o snapshot pré-cutover durante todo o período.
 
 ---
 
@@ -694,8 +850,13 @@ Legenda: **T** = teste de contrato escrito (Fase 2) · **P** = portado no `back-
 
 | # | Método | Rota | Origem | T | P | V |
 |---|---|---|---|:-:|:-:|:-:|
-| 86 | GET/POST | `/__transmit/*` | `@adonisjs/transmit` (SSE) | ⬜ | ⬜ | ⬜ |
-| 87 | GET | `*` | Fallback SPA | ⬜ | ⬜ | ⬜ |
+| 88 | GET | `/__transmit/events` | `@adonisjs/transmit` (stream SSE) | ⬜ | ⬜ | ⬜ |
+| 89 | POST | `/__transmit/subscribe` | `@adonisjs/transmit` | ⬜ | ⬜ | ⬜ |
+| 90 | POST | `/__transmit/unsubscribe` | `@adonisjs/transmit` | ⬜ | ⬜ | ⬜ |
+| 91 | GET | `*` | Fallback SPA | ⬜ | ⬜ | ⬜ |
+
+> As linhas 14 e 22 contam **dois** pares método+rota cada (`PUT` e `PATCH` no mesmo handler),
+> por isso a numeração 1–85 cobre 87 pares. Fonte de verdade: `docs/routes-baseline.txt`.
 
 > ⚠️ **Ordem de rotas importa.** Várias rotas específicas precisam ser registradas **antes**
 > das paramétricas: `connections/discover-databases` antes de `connections/:id`,
@@ -724,7 +885,8 @@ Legenda: **T** = teste de contrato escrito (Fase 2) · **P** = portado no `back-
 | `better-sqlite3` | SQLite de controle | `sqlx` (sqlite) via Sea-ORM | ✅ direto |
 | `@aws-sdk/client-s3` | S3/MinIO/R2 | `aws-sdk-s3` | ✅ direto |
 | `@aws-sdk/s3-request-presigner` | URLs assinadas | `aws-sdk-s3` (presigning) | ✅ direto |
-| `@google-cloud/storage` | GCS | `google-cloud-storage` (comunidade) ou REST | 🔴 sem SDK oficial |
+| `@google-cloud/storage` | GCS | `google-cloud-storage` **1.17 — SDK oficial do Google** | ✅ direto |
+| — | alternativa unificada S3+GCS+Azure+local | `object_store` 0.14 | 💡 avaliar na Fase 8 |
 | `@azure/storage-blob` | Azure Blob | `azure_storage_blobs` | ⚠️ SDK em preview |
 | `ssh2-sftp-client` | SFTP | `russh-sftp` ou `ssh2` | ⚠️ avaliar |
 | `archiver` | tar/zip streaming | `tar` + `flate2` / `zip` | ✅ direto |
@@ -742,8 +904,10 @@ Legenda: **T** = teste de contrato escrito (Fase 2) · **P** = portado no `back-
 
 | Risco | Probabilidade | Impacto | Mitigação |
 |---|---|---|---|
-| Criptografia incompatível → credenciais existentes ilegíveis | Média | 🔴 Crítico | Tarefa 3.2 com teste cruzado Node→Rust **antes** de qualquer outra coisa |
-| GCS sem SDK oficial em Rust | Alta | 🟡 Médio | Implementar via REST + OAuth2, ou manter GCS no Adonis durante o strangler fig |
+| ~~Criptografia incompatível → credenciais ilegíveis~~ | — | — | ✅ **Eliminado na Fase 3.2**: o Rust descriptografou os ciphertexts reais de produção. IV de 16 bytes tratado |
+| ~~GCS sem SDK oficial em Rust~~ | — | — | ✅ **Resolvido na Fase 0.6**: `google-cloud-storage 1.17` é o SDK oficial do Google |
+| Migração de dados (D4) perde ou corrompe registros | Média | 🔴 Crítico | Script da Fase 4.9 com teste de round-trip sobre cópia do banco real + snapshot pré-cutover |
+| Big-bang (D8) sem rede de proteção | Média | 🔴 Crítico | Fases 12.13 (shadow traffic) e 12.11 (runbook de rollback) são **obrigatórias** |
 | Comportamento sutil de restore diverge (filtros) | Alta | 🔴 Crítico | Portar os 3 testes unitários de `restore_filters*` primeiro, como spec |
 | Ordem de rotas do Axum difere do Adonis | Alta | 🟡 Médio | Testes explícitos para os 4 pares conflitantes (nota do Apêndice A) |
 | Shape do JSON muda e quebra o frontend | Média | 🔴 Crítico | D5 decidido cedo + golden files da Fase 1 + tarefa 12.5 |
@@ -754,7 +918,39 @@ Legenda: **T** = teste de contrato escrito (Fase 2) · **P** = portado no `back-
 
 ## Como usar este documento
 
-1. Comece **exclusivamente** pela Fase 0. Nenhuma linha de código de produção antes das decisões D1–D10.
+1. ~~Comece pela Fase 0.~~ ✅ Concluída em 2026-08-09. Decisões D1–D10 fechadas na seção 3.
 2. Marque os checkboxes conforme conclui. Um item só é marcado quando o critério de "Pronto quando" da fase o cobre.
 3. Atualize o Apêndice A (colunas **T**/**P**/**V**) a cada endpoint concluído — é o placar real de paridade.
 4. Se uma decisão mudar no meio do caminho, edite a seção 3 registrando **o motivo** — desvio silencioso vira dívida (regra da seção 12 do `AGENTS.md`).
+
+### Artefatos gerados pela Fase 0
+
+| Arquivo | Conteúdo |
+|---|---|
+| `docs/routes-baseline.txt` | 91 rotas não-HEAD, com os middlewares de cada uma |
+| `docs/routes-baseline.json` | mesma fonte, estruturada (para o relatório de cobertura da 1.8) |
+| `docs/openapi-baseline.yml` | spec OpenAPI 3.0 do Adonis, 73 paths — alvo do `utoipa` (D10) |
+| `docs/schema-baseline.sql` | schema real do SQLite de produção — alvo do migrador (4.9) |
+| `docker-compose.test.yml` | MySQL, MariaDB, PostgreSQL, MinIO, SFTP e alvo Docker |
+| `tests-fixtures/{mysql,mariadb,postgres}/` | seeds SQL com FK, enum, JSON, view, acentuação e escapes |
+| `contract-tests/` | suíte black-box da Fase 1 — harness, matchers, seeds, golden e cobertura |
+| `contract-tests/__golden__/` | contratos gravados do Adonis; **versionados**, é o diff deles que denuncia mudança |
+| `.github/workflows/contract-tests.yml` | CI da suíte + detecção de golden desatualizado |
+
+### Estado atual
+
+```
+Fase 0  ████████████████████  100%   decisões + baselines + ambiente
+Fase 1  ███████████████████░   95%   harness de contrato (backups no seed → Fase 2)
+Fase 2  ░░░░░░░░░░░░░░░░░░░░    1%   6/91 rotas cobertas          ← próxima
+Fase 3  █████░░░░░░░░░░░░░░░   23%   fundação back-roco (2,5/11)  ← em andamento
+Fases 4–12                      0%
+```
+
+Concluído até aqui: **Fase 0 inteira** (exceto 0.2, que depende do time), a **Fase 1** e as três
+primitivas de compatibilidade da Fase 3 — **3.2 (criptografia)**, **3.3 (scrypt)** e a metade de
+formato da **3.4 (token opaco)**. As três foram validadas contra dados reais de produção, não só
+fixtures.
+
+Números da suíte de contrato hoje: **36 testes do harness** + **12 de contrato**, 3 golden files
+gravados, **6 de 91 rotas** cobertas. A Fase 2 é o trabalho de levar esse 6 a 91.
