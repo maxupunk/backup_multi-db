@@ -1,24 +1,27 @@
-//! `/api/stats` e `/api/system/status` (tarefa 5.5 — parcial).
+//! `/api/stats`, `/api/system/*` e diagnostico do host (tarefas 5.5 e 11).
 //!
-//! Sao as duas rotas de `system` que ja' tem tudo de que precisam. As outras
-//! oito (`diagnostics`, `containers/resources`, `resources/history`,
-//! `backup-retention`) dependem do cliente Docker da Fase 9 e da politica de
-//! retencao da Fase 11, e entram junto com elas.
-//!
-//! O bloco `storageSpaces` de `GET /api/stats` foi ligado na **tarefa 8.13**;
-//! ele lista o disco local padrao e os destinos ativos, com os remotos entrando
-//! como `spaceAvailable: false`.
+//! O grupo `/api/system` reune monitoramento, retencao de backups e artefatos de
+//! diagnostico. `/api/stats` fica fora do prefixo para manter o contrato do
+//! Adonis.
 
+use axum::body::Body;
+use axum::extract::{Json, Query, State};
+use axum::http::header;
 use axum::response::{IntoResponse, Response};
 use loco_rs::prelude::*;
+use serde::Deserialize;
 
 use crate::controllers::middlewares::auth::Authenticated;
+use crate::controllers::middlewares::origin::RequestOrigin;
 use crate::initializers::settings::Settings;
 use crate::models::_entities::{backups, connections};
+use crate::models::audit_log::{AuditAction, AuditEntityType};
+use crate::models::audit_logs;
+use crate::models::backup_retention_policy::BackupRetentionPolicy;
 use crate::models::backup_runner;
 use crate::models::storage::space;
 use crate::models::system_monitor;
-use crate::views::envelope::Data;
+use crate::views::envelope::{Data, Message};
 use crate::views::errors::ApiError;
 use crate::views::system as view;
 
@@ -79,6 +82,180 @@ pub async fn status(State(_ctx): State<AppContext>, _session: Authenticated) -> 
     Ok(axum::Json(Data::new(view::SystemOverview::from(overview))).into_response())
 }
 
+/// `GET /api/system/containers/resources` — metricas de containers Docker.
+#[debug_handler]
+pub async fn container_resources(State(ctx): State<AppContext>, _session: Authenticated) -> Reply {
+    let overview = crate::models::docker_container_monitoring::overview(&ctx).await;
+    Ok(axum::Json(Data::new(overview)).into_response())
+}
+
+#[derive(Debug, Deserialize)]
+pub struct HistoryQuery {
+    #[serde(default = "default_range_hours")]
+    pub range_hours: i64,
+}
+
+fn default_range_hours() -> i64 {
+    24
+}
+
+/// `GET /api/system/resources/history` — historico de metricas agregado.
+#[debug_handler]
+pub async fn resources_history(
+    State(ctx): State<AppContext>,
+    _session: Authenticated,
+    Query(query): Query<HistoryQuery>,
+) -> Reply {
+    let history = crate::models::resource_metric_history::history(&ctx, query.range_hours).await?;
+    Ok(axum::Json(Data::new(history)).into_response())
+}
+
+/// `GET /api/system/backup-retention` — politica GFS atual.
+#[debug_handler]
+pub async fn backup_retention_policy(
+    State(ctx): State<AppContext>,
+    _session: Authenticated,
+) -> Reply {
+    let policy = crate::models::backup_retention_policy::get_policy(&ctx).await?;
+    Ok(axum::Json(Data::new(view::BackupRetentionPolicy::from(policy))).into_response())
+}
+
+/// `PUT /api/system/backup-retention` — atualiza a politica GFS.
+#[debug_handler]
+pub async fn update_backup_retention_policy(
+    State(ctx): State<AppContext>,
+    _session: Authenticated,
+    origin: RequestOrigin,
+    Json(payload): Json<BackupRetentionPolicy>,
+) -> Reply {
+    if !crate::models::backup_retention_policy::is_valid_cron(&payload.prune_cron) {
+        return Err(ApiError::unprocessable(
+            "Expressao cron invalida para o prune automatico",
+        ));
+    }
+
+    let (policy, changes) =
+        crate::models::backup_retention_policy::update_policy(&ctx, payload).await?;
+
+    if !changes.is_empty() {
+        let details = serde_json::json!({ "changes": changes });
+        audit_logs::Model::record_or_warn(
+            &ctx.db,
+            audit_logs::AuditEntry::success(
+                AuditAction::SettingsUpdated,
+                "Politica de retencao atualizada",
+            )
+            .entity_type(AuditEntityType::Settings)
+            .details(details)
+            .from_request(origin.ip, origin.user_agent),
+        )
+        .await;
+    }
+
+    Ok(axum::Json(Data::new(view::BackupRetentionPolicy::from(policy))).into_response())
+}
+
+/// `POST /api/system/backup-retention/run` — executa o prune de retencao.
+#[debug_handler]
+pub async fn run_backup_retention(
+    State(ctx): State<AppContext>,
+    __session: Authenticated,
+) -> Reply {
+    let result = crate::models::retention::prune_backups(&ctx).await?;
+    Ok(axum::Json(Data::new(result)).into_response())
+}
+
+/// `GET /api/system/diagnostics` — lista artefatos de diagnostico.
+#[debug_handler]
+pub async fn diagnostics(State(ctx): State<AppContext>, session: Authenticated) -> Reply {
+    session.require_admin("Apenas administradores podem acessar artefatos de diagnostico.")?;
+
+    let overview = crate::models::diagnostics::list(&ctx).await?;
+    Ok(axum::Json(Data::new(overview)).into_response())
+}
+
+/// `GET /api/system/diagnostics/:name/download` — baixa um artefato.
+#[debug_handler]
+pub async fn download_diagnostic(
+    State(ctx): State<AppContext>,
+    session: Authenticated,
+    origin: RequestOrigin,
+    axum::extract::Path(name): axum::extract::Path<String>,
+) -> Reply {
+    session.require_admin("Apenas administradores podem acessar artefatos de diagnostico.")?;
+
+    let Some(path) = crate::models::diagnostics::resolve(&ctx, &name)? else {
+        return Err(ApiError::not_found(
+            "Artefato de diagnostico nao encontrado",
+        ));
+    };
+
+    let metadata = tokio::fs::metadata(&path).await.map_err(|err| {
+        loco_rs::Error::Message(format!("falha ao ler metadados do artefato: {err}"))
+    })?;
+    let file = tokio::fs::File::open(&path)
+        .await
+        .map_err(|err| loco_rs::Error::Message(format!("falha ao abrir artefato: {err}")))?;
+
+    audit_logs::Model::record_or_warn(
+        &ctx.db,
+        audit_logs::AuditEntry::success(
+            AuditAction::DiagnosticsDownloaded,
+            "Download de artefato de diagnostico",
+        )
+        .entity_type(AuditEntityType::Settings)
+        .details(serde_json::json!({ "fileName": name }))
+        .from_request(origin.ip, origin.user_agent),
+    )
+    .await;
+
+    let body = Body::from_stream(tokio_util::io::ReaderStream::new(file));
+
+    Ok((
+        [(header::CONTENT_TYPE, "application/octet-stream".to_string())],
+        [(
+            header::CONTENT_DISPOSITION,
+            format!(r#"attachment; filename="{}""#, name),
+        )],
+        [(header::CONTENT_LENGTH, metadata.len().to_string())],
+        body,
+    )
+        .into_response())
+}
+
+/// `DELETE /api/system/diagnostics/:name` — remove um artefato.
+#[debug_handler]
+pub async fn destroy_diagnostic(
+    State(ctx): State<AppContext>,
+    session: Authenticated,
+    origin: RequestOrigin,
+    axum::extract::Path(name): axum::extract::Path<String>,
+) -> Reply {
+    session.require_admin("Apenas administradores podem acessar artefatos de diagnostico.")?;
+
+    let Some(path) = crate::models::diagnostics::resolve(&ctx, &name)? else {
+        return Err(ApiError::not_found(
+            "Artefato de diagnostico nao encontrado",
+        ));
+    };
+
+    crate::models::diagnostics::remove(&path).await?;
+
+    audit_logs::Model::record_or_warn(
+        &ctx.db,
+        audit_logs::AuditEntry::success(
+            AuditAction::DiagnosticsDeleted,
+            "Remocao de artefato de diagnostico",
+        )
+        .entity_type(AuditEntityType::Settings)
+        .details(serde_json::json!({ "fileName": name }))
+        .from_request(origin.ip, origin.user_agent),
+    )
+    .await;
+
+    Ok(axum::Json(Message::new("Artefato de diagnostico removido")).into_response())
+}
+
 /// Rotas de system.
 ///
 /// `/api/stats` fica **fora** do prefixo `/api/system` — e' assim no Adonis, e
@@ -87,4 +264,21 @@ pub fn routes() -> Routes {
     Routes::new()
         .add("/api/stats", get(stats))
         .add("/api/system/status", get(status))
+        .add("/api/system/containers/resources", get(container_resources))
+        .add("/api/system/resources/history", get(resources_history))
+        .add("/api/system/backup-retention", get(backup_retention_policy))
+        .add(
+            "/api/system/backup-retention",
+            put(update_backup_retention_policy),
+        )
+        .add(
+            "/api/system/backup-retention/run",
+            post(run_backup_retention),
+        )
+        .add("/api/system/diagnostics", get(diagnostics))
+        .add(
+            "/api/system/diagnostics/{name}/download",
+            get(download_diagnostic),
+        )
+        .add("/api/system/diagnostics/{name}", delete(destroy_diagnostic))
 }

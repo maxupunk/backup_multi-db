@@ -140,6 +140,7 @@ mod tests {
     use crate::app::App;
 
     #[tokio::test]
+    #[serial_test::serial]
     async fn registry_scopes_events_to_the_subscribed_uid_and_channel() {
         let boot = boot_test::<App>().await.expect("test boot");
         let ctx = &boot.app_context;

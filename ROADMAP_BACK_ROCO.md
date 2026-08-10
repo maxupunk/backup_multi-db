@@ -1302,15 +1302,15 @@ frontend atual consome o stream do `back-roco` sem alteração.
 
 **Duração estimada:** 1–2 semanas · **Depende de:** Fases 9 e 10 · **Fecha o lote 2.6**
 
-- [ ] 11.1 — `GET /api/system/containers/resources`.
-- [ ] 11.2 — `resource_metrics_polling_service` + `resource_metrics_history_service` — coleta periódica e persistência em `resource_metric_history`.
-- [ ] 11.3 — `GET /api/system/resources/history` — ranges, agregação e downsampling idênticos.
-- [ ] 11.4 — `GET|PUT /api/system/backup-retention` — política GFS em `system_settings`.
-- [ ] 11.5 — `backup_retention_planner` — portar junto o teste unitário existente (a lógica de projeção é sutil).
-- [ ] 11.6 — `POST /api/system/backup-retention/run`.
-- [ ] 11.7 — **Diagnostics de sistema** (3 endpoints): listar, baixar e remover heap snapshots — admin-only, com bloqueio de path traversal. Avaliar se o conceito ainda faz sentido em Rust (heap snapshot é artefato do V8) — pode virar profile de memória ou ser descontinuado com registro da decisão.
-- [ ] 11.8 — `memory_watermark_service` e instrumentação de memória — reavaliar necessidade.
-- [ ] 11.9 — `system_monitoring_service` — métricas de host via `sysinfo`.
+- [x] 11.1 — `GET /api/system/containers/resources`.
+- [x] 11.2 — `resource_metrics_polling_service` + `resource_metrics_history_service` — coleta periódica e persistência em `resource_metric_history`.
+- [x] 11.3 — `GET /api/system/resources/history` — ranges, agregação e downsampling idênticos.
+- [x] 11.4 — `GET|PUT /api/system/backup-retention` — política GFS em `system_settings`.
+- [x] 11.5 — `backup_retention_planner` — portar junto o teste unitário existente (a lógica de projeção é sutil).
+- [x] 11.6 — `POST /api/system/backup-retention/run`.
+- [x] 11.7 — **Diagnostics de sistema** (3 endpoints): listar, baixar e remover heap snapshots — admin-only, com bloqueio de path traversal. Mantida a API listando artefatos `.heapsnapshot`/`.cpuprofile`/`.heapprofile` no `DIAGNOSTICS_PATH`, mesmo sem heap do V8 em Rust.
+- [x] 11.8 — `memory_watermark_service` e instrumentação de memória — implementado via `sysinfo` (RSS do processo).
+- [x] 11.9 — `system_monitoring_service` — métricas de host via `sysinfo`.
 
 **Pronto quando:** lote 2.6 passa integralmente (ou com as exceções de 11.7/11.8 registradas e aceitas).
 

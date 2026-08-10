@@ -306,6 +306,7 @@ async fn retain(registry: Registry, id: String) {
 mod tests {
     use super::*;
     #[tokio::test]
+    #[serial_test::serial]
     async fn invalid_tool_is_rejected() {
         let boot = loco_rs::testing::prelude::boot_test::<crate::app::App>()
             .await

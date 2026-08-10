@@ -76,6 +76,9 @@ impl Hooks for App {
         crate::models::storage::copy::register(ctx);
         crate::models::storage::archive::register(ctx);
         crate::models::docker_diagnostics::register(ctx);
+        crate::models::docker_container_monitoring::register(ctx);
+        crate::models::resource_metric_history::register(ctx);
+        crate::models::memory_watermark::register(ctx);
         crate::models::sse::register(ctx);
         crate::models::progress::bridge_to_sse(ctx);
 

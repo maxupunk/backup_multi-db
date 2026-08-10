@@ -59,7 +59,7 @@ impl FromStr for BackupStatus {
 ///
 /// A ordem nao e' decorativa: e' ela que define o que
 /// [`RetentionType::promote`] considera promocao.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum RetentionType {
     Hourly,
@@ -292,6 +292,14 @@ impl Model {
     ) -> loco_rs::Result<u64> {
         Ok(Entity::find()
             .filter(Column::CreatedAt.gte(since))
+            .count(db)
+            .await?)
+    }
+
+    /// Quantos backups estao protegidos contra prune.
+    pub async fn count_protected(db: &impl ConnectionTrait) -> loco_rs::Result<u64> {
+        Ok(Entity::find()
+            .filter(Column::Protected.eq(true))
             .count(db)
             .await?)
     }

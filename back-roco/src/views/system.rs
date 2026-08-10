@@ -159,6 +159,31 @@ pub struct Stats {
     pub system: SystemOverview,
 }
 
+/// Resposta de `GET|PUT /api/system/backup-retention`.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BackupRetentionPolicy {
+    pub daily: u32,
+    pub weekly: u32,
+    pub monthly: u32,
+    pub yearly: u32,
+    pub prune_cron: String,
+    pub default_prune_cron: &'static str,
+}
+
+impl From<crate::models::backup_retention_policy::BackupRetentionPolicy> for BackupRetentionPolicy {
+    fn from(policy: crate::models::backup_retention_policy::BackupRetentionPolicy) -> Self {
+        Self {
+            daily: policy.daily,
+            weekly: policy.weekly,
+            monthly: policy.monthly,
+            yearly: policy.yearly,
+            prune_cron: policy.prune_cron,
+            default_prune_cron: "0 2 * * *",
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

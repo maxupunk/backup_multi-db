@@ -94,6 +94,9 @@ russh-sftp = "2.4"
 bollard = { version = "0.18.1", default-features = false, features = ["http", "pipe"] }
 futures-util = "0.3"
 tokio-stream = { version = "0.1", features = ["sync"] }
+# Fase 11: validacao de `pruneCron` da politica de retencao. So' parse/validacao;
+# o agendamento fica com o scheduler nativo do Loco.
+cron = "0.15"
 
 [[bin]]
 name = "back_roco-cli"
