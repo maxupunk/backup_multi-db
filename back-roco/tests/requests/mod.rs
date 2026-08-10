@@ -2,6 +2,7 @@ mod audit_logs;
 mod auth;
 mod backups;
 mod connections;
+mod docker;
 mod session;
 mod storages;
 mod system;

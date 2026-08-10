@@ -1262,9 +1262,9 @@ recuperável —, enquanto abortar o `DELETE` deixaria um backup inacessível li
 
 **Duração estimada:** 2–3 semanas · **Depende de:** Fase 3 · **Cobre lote 2.7** · Independente das Fases 5–8
 
-- [ ] 9.1 — Cliente Docker: `bollard` (recomendado) ou porta manual de `docker_engine_http_client` sobre unix socket / named pipe.
+- [x] 9.1 — ✅ Cliente Docker `bollard`, com socket Unix e named pipe do Windows via `connect_with_local_defaults`.
 - [ ] 9.2 — `docker_environment_service` — detecção de ambiente (dentro/fora de container, socket disponível).
-- [ ] 9.3 — `GET /api/docker/status`.
+- [x] 9.3 — ✅ `GET /api/docker/status`, com ping limitado a 3 s e degradação para `available: false`.
 - [ ] 9.4 — **Containers** (9 endpoints): list, inspect, logs com filtros, clear logs, start, stop, restart, remove.
 - [ ] 9.5 — **Volumes** (5): list, inspect, export (streaming tar), backup para storage, remove.
 - [ ] 9.6 — **Networks** (5): list, inspect, create, connect, disconnect.

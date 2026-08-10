@@ -89,6 +89,9 @@ opendal = { version = "0.57", default-features = false, features = [
 # OpenSSL no build do Windows, onde este projeto e' desenvolvido.
 russh = { version = "0.55", default-features = false, features = ["ring", "flate2", "rsa"] }
 russh-sftp = "2.4"
+# Fase 9: cliente oficial de fato para a API do Docker, com transporte local
+# por socket Unix e named pipe do Windows. O Loco não encapsula a Engine API.
+bollard = { version = "0.18.1", default-features = false, features = ["http", "pipe"] }
 
 [[bin]]
 name = "back_roco-cli"

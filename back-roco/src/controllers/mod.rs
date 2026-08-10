@@ -2,6 +2,7 @@ pub mod audit_logs;
 pub mod auth;
 pub mod backups;
 pub mod connections;
+pub mod docker;
 pub mod middlewares;
 pub mod storage_destinations;
 pub mod storages;

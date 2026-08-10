@@ -10,6 +10,7 @@ pub mod backups;
 pub mod connection_databases;
 pub mod connections;
 pub mod database_driver;
+pub mod docker;
 pub mod dump;
 pub mod email;
 pub mod encryption;
