@@ -6,4 +6,5 @@ mod docker;
 mod session;
 mod storages;
 mod system;
+mod transmit;
 mod users;

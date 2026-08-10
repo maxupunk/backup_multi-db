@@ -70,6 +70,7 @@ impl Hooks for App {
         crate::models::storage::copy::register(ctx);
         crate::models::storage::archive::register(ctx);
         crate::models::docker_diagnostics::register(ctx);
+        crate::models::sse::register(ctx);
 
         // O limitador `auth` (5/min por IP+e-mail) e' pendurado nas rotas de
         // `register` e `login`; os demais grupos so' levam o global, que entra
@@ -85,6 +86,7 @@ impl Hooks for App {
             });
 
         AppRoutes::with_default_routes()
+            .add_route(controllers::transmit::routes())
             .add_route(controllers::auth::routes(&limiters))
             .add_route(controllers::connections::routes(&limiters))
             // Antes das rotas de `connections`: `/{connection_id}/backups` e'

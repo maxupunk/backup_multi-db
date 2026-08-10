@@ -1283,8 +1283,8 @@ recuperável —, enquanto abortar o `DELETE` deixaria um backup inacessível li
 
 **Duração estimada:** 2 semanas · **Depende de:** Fase 3 · **Cobre lote 2.8**
 
-- [ ] 10.1 — Conforme D6: endpoint SSE em `/__transmit/*` com `axum::response::sse`, replicando o handshake e o formato de evento do `@adonisjs/transmit`.
-- [ ] 10.2 — Registry de subscribers (porta de `sse_subscribers`) com broadcast por canal.
+- [x] 10.1 — ✅ Endpoints SSE em `/__transmit/*` com `axum::response::sse`, handshake e formato `{ channel, payload }` compatíveis com `@adonisjs/transmit`.
+- [x] 10.2 — ✅ Registry de subscribers no `AppContext`, com broadcast por canal e ping `$$transmit/ping` a cada 30 s.
 - [ ] 10.3 — Plugar os 4 emissores: backup progress, restore progress, resource metrics, docker diagnostics.
 - [ ] 10.4 — `notification_service` (526 LOC).
 - [ ] 10.5 — **Scheduler** — `scheduler_service` (node-cron) → scheduler do Loco (`config/scheduler.yaml`). Backups agendados por `schedule_frequency` (1h/6h/12h/24h) e `schedule_enabled`.

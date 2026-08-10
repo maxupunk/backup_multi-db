@@ -93,6 +93,7 @@ russh-sftp = "2.4"
 # por socket Unix e named pipe do Windows. O Loco não encapsula a Engine API.
 bollard = { version = "0.18.1", default-features = false, features = ["http", "pipe"] }
 futures-util = "0.3"
+tokio-stream = { version = "0.1", features = ["sync"] }
 
 [[bin]]
 name = "back_roco-cli"

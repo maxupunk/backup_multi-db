@@ -7,6 +7,7 @@ pub mod middlewares;
 pub mod storage_destinations;
 pub mod storages;
 pub mod system;
+pub mod transmit;
 pub mod users;
 
 use axum::body::Bytes;
