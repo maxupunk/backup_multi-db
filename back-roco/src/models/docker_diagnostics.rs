@@ -85,6 +85,7 @@ pub async fn start(ctx: &AppContext, params: StartParams) -> Result<Job, String>
         .unwrap_or(DEFAULT_TIMEOUT)
         .clamp(100, 30_000);
     let registry = registry(ctx).map_err(|error| error.to_string())?;
+    let sse = crate::models::sse::shared(ctx).map_err(|error| error.to_string())?;
     let job = Job {
         id: format!("diag-{}", Uuid::new_v4()),
         tool,
@@ -103,8 +104,9 @@ pub async fn start(ctx: &AppContext, params: StartParams) -> Result<Job, String>
     };
     let id = job.id.clone();
     registry.jobs.write().await.insert(id.clone(), job.clone());
+    broadcast(&sse, &job);
     tokio::spawn(async move {
-        run(registry, id).await;
+        run(registry, sse, id).await;
     });
     Ok(job)
 }
@@ -113,8 +115,9 @@ pub async fn get(ctx: &AppContext, id: &str) -> loco_rs::Result<Option<Job>> {
     Ok(registry(ctx)?.jobs.read().await.get(id).cloned())
 }
 
-async fn run(registry: Registry, id: String) {
+async fn run(registry: Registry, sse: crate::models::sse::Registry, id: String) {
     update(&registry, &id, |job| job.status = "running".into()).await;
+    publish_current(&registry, &sse, &id).await;
     let snapshot = registry.jobs.read().await.get(&id).cloned();
     let Some(job) = snapshot else {
         return;
@@ -143,7 +146,21 @@ async fn run(registry: Registry, id: String) {
         }
     })
     .await;
+    publish_current(&registry, &sse, &id).await;
     retain(registry, id).await;
+}
+
+fn broadcast(sse: &crate::models::sse::Registry, job: &Job) {
+    sse.broadcast(
+        format!("notifications/docker-diagnostics/{}", job.id),
+        serde_json::to_value(job).unwrap_or_else(|_| serde_json::json!({ "id": job.id })),
+    );
+}
+
+async fn publish_current(registry: &Registry, sse: &crate::models::sse::Registry, id: &str) {
+    if let Some(job) = registry.jobs.read().await.get(id).cloned() {
+        broadcast(sse, &job);
+    }
 }
 
 async fn ping(job: &Job) -> Result<(Vec<String>, String, Option<bool>, Option<u128>), String> {

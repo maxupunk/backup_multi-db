@@ -10,7 +10,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use loco_rs::prelude::*;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
@@ -77,12 +77,29 @@ pub enum CopyStatus {
 }
 
 /// Opcoes de `POST /api/storages/:id/copy`.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct CopyOptions {
     pub source_path: Option<String>,
     pub destination_path: Option<String>,
     pub dry_run: bool,
     pub delete_extraneous: bool,
+}
+
+/// Argumentos serializáveis que atravessam o worker do Loco.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CopyWorkerArgs {
+    pub job_id: String,
+    pub source: StorageDestination,
+    pub destination: StorageDestination,
+    pub settings: Settings,
+    pub options: CopyOptions,
+}
+
+/// Resultado da criação: o controller devolve `job`, e enfileira `args` no
+/// worker. Separar os dois impede que o model dependa da infraestrutura de fila.
+pub struct StartedCopyJob {
+    pub job: CopyJob,
+    pub args: CopyWorkerArgs,
 }
 
 /// Cria o job e o destaca da requisicao. A configuracao e' construida antes do
@@ -94,7 +111,7 @@ pub async fn start(
     destination: StorageDestination,
     settings: Settings,
     options: CopyOptions,
-) -> loco_rs::Result<CopyJob> {
+) -> loco_rs::Result<StartedCopyJob> {
     let registry = registry(ctx)?;
     let job = CopyJob {
         id: format!("copy-{}", Uuid::new_v4()),
@@ -111,15 +128,35 @@ pub async fn start(
     let id = job.id.clone();
     registry.jobs.write().await.insert(id.clone(), job.clone());
 
-    tokio::spawn(async move {
-        if let Err(error) =
-            execute(&registry, &id, &source, &destination, &settings, &options).await
-        {
-            fail(&registry, &id, error.message()).await;
-        }
-    });
+    Ok(StartedCopyJob {
+        job,
+        args: CopyWorkerArgs {
+            job_id: id,
+            source,
+            destination,
+            settings,
+            options,
+        },
+    })
+}
 
-    Ok(job)
+/// Executa o trabalho já aceito pelo controller, registrando a falha no job em
+/// vez de pedir retry cego a uma cópia que pode ter concluído parcialmente.
+pub async fn perform(ctx: &AppContext, args: CopyWorkerArgs) -> Result<()> {
+    let registry = registry(ctx)?;
+    if let Err(error) = execute(
+        &registry,
+        &args.job_id,
+        &args.source,
+        &args.destination,
+        &args.settings,
+        &args.options,
+    )
+    .await
+    {
+        fail(&registry, &args.job_id, error.message()).await;
+    }
+    Ok(())
 }
 
 /// Snapshot de um job. Retornar uma copia evita expor estado mutavel entre a

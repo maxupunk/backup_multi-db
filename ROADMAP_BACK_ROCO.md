@@ -1285,13 +1285,13 @@ recuperável —, enquanto abortar o `DELETE` deixaria um backup inacessível li
 
 - [x] 10.1 — ✅ Endpoints SSE em `/__transmit/*` com `axum::response::sse`, handshake e formato `{ channel, payload }` compatíveis com `@adonisjs/transmit`.
 - [x] 10.2 — ✅ Registry de subscribers no `AppContext`, com broadcast por canal e ping `$$transmit/ping` a cada 30 s.
-- [ ] 10.3 — Plugar os 4 emissores: backup progress, restore progress, resource metrics, docker diagnostics.
-- [ ] 10.4 — `notification_service` (526 LOC).
-- [ ] 10.5 — **Scheduler** — `scheduler_service` (node-cron) → scheduler do Loco (`config/scheduler.yaml`). Backups agendados por `schedule_frequency` (1h/6h/12h/24h) e `schedule_enabled`.
-- [ ] 10.6 — Sincronização do scheduler no CRUD de connections (equivalente ao `syncScheduler`).
-- [ ] 10.7 — Workers em background para copy/archive jobs (Fase 8) e coleta de métricas (Fase 11).
-- [ ] 10.8 — Retenção automática de audit logs (`audit_retention_service`).
-- [ ] 10.9 — Testes de worker e task em `back-roco/tests/workers/` e `tests/tasks/`.
+- [x] 10.3 — ✅ Os emissores de backup/restore são encaminhados do `ProgressHub` ao SSE; diagnósticos e métricas publicam nos canais compatíveis.
+- [x] 10.4 — ✅ `models/notifications.rs`: vocabulário tipado, publicação específica e global, integrado a backup, restore e teste de conexão.
+- [x] 10.5 — ✅ Scheduler nativo do Loco em `config/{development,production}.yaml`; dispatcher avalia frequências 1h/6h/12h/24h.
+- [x] 10.6 — ✅ Não há cron por conexão: o dispatcher consulta o banco em cada ciclo, portanto todo CRUD entra em vigor sem reinício.
+- [x] 10.7 — ✅ Workers Loco para copy, archive e polling de métricas, todos registrados em `App::connect_workers`.
+- [x] 10.8 — ✅ Tarefa diária de retenção configurável, com lotes de 500 e teto de 20.000 exclusões por execução.
+- [x] 10.9 — ✅ Contratos de nomes de tasks/workers em `tests/tasks/` e `tests/workers/`; testes SSE de request em `tests/requests/transmit.rs`.
 
 **Pronto quando:** um backup manual disparado emite os mesmos eventos SSE que o Adonis, e o
 frontend atual consome o stream do `back-roco` sem alteração.

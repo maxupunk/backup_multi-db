@@ -183,6 +183,20 @@ impl Model {
         self.schedule().map(ScheduleFrequency::interval_ms)
     }
 
+    /// Indica se este agendamento já venceu. Conexões sem execução anterior
+    /// vencem imediatamente na primeira passagem do dispatcher.
+    pub fn is_backup_due(&self, now: chrono::NaiveDateTime) -> bool {
+        let Some(interval_ms) = self.schedule_interval_ms() else {
+            return false;
+        };
+        match self.last_backup_at {
+            Some(last_backup_at) => {
+                now.signed_duration_since(last_backup_at).num_milliseconds() >= interval_ms
+            }
+            None => true,
+        }
+    }
+
     /// Senha em claro.
     ///
     /// Exige o servico de criptografia como argumento de proposito: sem ele
@@ -241,6 +255,17 @@ impl Model {
         Ok(Entity::find()
             .filter(Column::Status.eq(ConnectionStatus::Active.as_str()))
             .count(db)
+            .await?)
+    }
+
+    /// Conexões que o dispatcher de backups pode avaliar.
+    pub async fn scheduled_active(db: &impl ConnectionTrait) -> loco_rs::Result<Vec<Self>> {
+        Ok(Entity::find()
+            .filter(Column::ScheduleEnabled.eq(true))
+            .filter(Column::ScheduleFrequency.is_not_null())
+            .filter(Column::Status.eq(ConnectionStatus::Active.as_str()))
+            .order_by_asc(Column::Id)
+            .all(db)
             .await?)
     }
 }

@@ -10,7 +10,7 @@ use std::time::Duration;
 
 use async_compression::tokio::write::GzipEncoder;
 use loco_rs::prelude::*;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tokio::io::AsyncWriteExt;
 use tokio::sync::RwLock;
 use uuid::Uuid;
@@ -72,12 +72,26 @@ pub enum ArchiveStatus {
     Failed,
 }
 
+/// Argumentos serializáveis para o worker de geração do archive.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ArchiveWorkerArgs {
+    pub job_id: String,
+    pub storage: StorageDestination,
+    pub settings: Settings,
+}
+
+/// Estado aceito e o trabalho que deve ser entregue à fila pelo controller.
+pub struct StartedArchiveJob {
+    pub job: ArchiveJob,
+    pub args: ArchiveWorkerArgs,
+}
+
 pub async fn start(
     ctx: &AppContext,
     storage: StorageDestination,
     settings: Settings,
     path: Option<String>,
-) -> loco_rs::Result<ArchiveJob> {
+) -> loco_rs::Result<StartedArchiveJob> {
     let registry = registry(ctx)?;
     let job = ArchiveJob {
         id: format!("archive-{}", Uuid::new_v4()),
@@ -96,12 +110,24 @@ pub async fn start(
     let id = job.id.clone();
     registry.jobs.write().await.insert(id.clone(), job.clone());
 
-    tokio::spawn(async move {
-        if let Err(error) = execute(&registry, &id, &storage, &settings).await {
-            fail(&registry, &id, error.message()).await;
-        }
-    });
-    Ok(job)
+    Ok(StartedArchiveJob {
+        job,
+        args: ArchiveWorkerArgs {
+            job_id: id,
+            storage,
+            settings,
+        },
+    })
+}
+
+/// Executa um archive aceito. Uma falha de provider torna o job observável como
+/// `failed`; devolvê-la à fila causaria uma repetição automática insegura.
+pub async fn perform(ctx: &AppContext, args: ArchiveWorkerArgs) -> Result<()> {
+    let registry = registry(ctx)?;
+    if let Err(error) = execute(&registry, &args.job_id, &args.storage, &args.settings).await {
+        fail(&registry, &args.job_id, error.message()).await;
+    }
+    Ok(())
 }
 
 pub async fn get(ctx: &AppContext, id: &str) -> loco_rs::Result<Option<ArchiveJob>> {

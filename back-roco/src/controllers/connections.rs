@@ -36,6 +36,7 @@ use crate::models::connections::{
 };
 use crate::models::database_driver;
 use crate::models::encryption::EncryptionService;
+use crate::models::notifications::{self, NotificationCategory, NotificationType};
 use crate::views::backups as backup_view;
 use crate::views::connections as view;
 use crate::views::envelope::{Data, Message, MessageWithData};
@@ -294,6 +295,20 @@ pub async fn test(
     match outcome {
         Ok(probe) => {
             connection.record_test(&ctx.db, None).await?;
+            notifications::publish_or_warn(
+                &ctx,
+                notifications::CONNECTION,
+                NotificationType::Success,
+                NotificationCategory::Connection,
+                "Teste de Conexão",
+                format!("Conexão \"{name}\" testada com sucesso."),
+                Some(notification_data(
+                    "connection.test_success",
+                    id,
+                    &name,
+                    None,
+                )),
+            );
             audit(
                 &ctx,
                 &origin,
@@ -317,6 +332,20 @@ pub async fn test(
         Err(error) => {
             let message = error.message();
             connection.record_test(&ctx.db, Some(&message)).await?;
+            notifications::publish_or_warn(
+                &ctx,
+                notifications::CONNECTION,
+                NotificationType::Error,
+                NotificationCategory::Connection,
+                "Falha no Teste de Conexão",
+                format!("Conexão \"{name}\" falhou no teste: {message}"),
+                Some(notification_data(
+                    "connection.test_failed",
+                    id,
+                    &name,
+                    Some(&message),
+                )),
+            );
             audit(
                 &ctx,
                 &origin,
@@ -647,6 +676,35 @@ async fn audit(ctx: &AppContext, origin: &RequestOrigin, entry: AuditEntry) {
         entry.from_request(origin.ip.clone(), origin.user_agent.clone()),
     )
     .await;
+}
+
+fn notification_data(
+    event: &str,
+    connection_id: i64,
+    connection_name: &str,
+    error: Option<&str>,
+) -> serde_json::Map<String, serde_json::Value> {
+    let mut data = serde_json::Map::from_iter([
+        (
+            "event".to_string(),
+            serde_json::Value::String(event.to_string()),
+        ),
+        (
+            "connectionId".to_string(),
+            serde_json::Value::Number(connection_id.into()),
+        ),
+        (
+            "connectionName".to_string(),
+            serde_json::Value::String(connection_name.to_string()),
+        ),
+    ]);
+    if let Some(error) = error {
+        data.insert(
+            "error".to_string(),
+            serde_json::Value::String(error.to_string()),
+        );
+    }
+    data
 }
 
 /// Rotas de `/api/connections`.

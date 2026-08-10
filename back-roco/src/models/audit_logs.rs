@@ -22,6 +22,7 @@ use sea_orm::{
     QueryFilter, QueryOrder, QuerySelect,
 };
 
+use crate::initializers::settings::Settings;
 use crate::models::audit_log::{AuditAction, AuditEntityType, AuditStatus};
 use crate::views::pagination::PageRequest;
 
@@ -34,6 +35,17 @@ impl ActiveModelBehavior for ActiveModel {}
 /// O cabecalho e' texto arbitrario vindo do cliente: sem o corte, uma
 /// requisicao com um `User-Agent` de megabytes viraria uma linha de megabytes.
 const USER_AGENT_LIMIT: usize = 500;
+const RETENTION_BATCH_SIZE: u64 = 500;
+const RETENTION_MAX_DELETE: u64 = 20_000;
+
+/// Resultado de uma poda. O limite explícito evita que uma configuração
+/// esquecida transforme a primeira execução em uma exclusão interminável.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RetentionResult {
+    pub retention_days: u32,
+    pub deleted: u64,
+    pub capped: bool,
+}
 
 /// Uma entrada a registrar.
 ///
@@ -296,6 +308,50 @@ impl Model {
             .count(db)
             .await?)
     }
+
+    /// Remove logs mais antigos que a retenção configurada, em lotes pequenos.
+    /// `0` desliga explicitamente a política e não toca no banco.
+    pub async fn prune_expired(
+        ctx: &AppContext,
+        now: chrono::NaiveDateTime,
+    ) -> Result<RetentionResult> {
+        let settings = Settings::from_json(ctx.config.settings.as_ref())?;
+        let retention_days = settings.audit_retention_days;
+        if retention_days == 0 {
+            return Ok(RetentionResult {
+                retention_days,
+                deleted: 0,
+                capped: false,
+            });
+        }
+
+        let cutoff = now - chrono::Duration::days(i64::from(retention_days));
+        let ids = Entity::find()
+            .select_only()
+            .column(Column::Id)
+            .filter(Column::CreatedAt.lt(cutoff))
+            .order_by_asc(Column::Id)
+            .limit(RETENTION_MAX_DELETE)
+            .into_tuple::<i64>()
+            .all(&ctx.db)
+            .await?;
+        let capped = ids.len() as u64 == RETENTION_MAX_DELETE;
+        let mut deleted = 0;
+
+        for ids in ids.chunks(RETENTION_BATCH_SIZE as usize) {
+            deleted += Entity::delete_many()
+                .filter(Column::Id.is_in(ids.iter().copied()))
+                .exec(&ctx.db)
+                .await?
+                .rows_affected;
+        }
+
+        Ok(RetentionResult {
+            retention_days,
+            deleted,
+            capped,
+        })
+    }
 }
 
 /// Meia-noite do dia de `moment`.
@@ -385,5 +441,11 @@ mod tests {
         };
 
         assert_eq!(filters.to_condition().len(), 6);
+    }
+
+    #[test]
+    fn retention_cutoff_uses_full_days() {
+        let now = at("2026-08-10 12:00:00");
+        assert_eq!(now - chrono::Duration::days(30), at("2026-07-11 12:00:00"));
     }
 }

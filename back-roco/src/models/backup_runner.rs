@@ -33,6 +33,7 @@ use crate::models::backups::{BackupTrigger, RetentionType};
 use crate::models::database_driver::{self, DatabaseTarget};
 use crate::models::dump::{self, DumpError};
 use crate::models::encryption::EncryptionService;
+use crate::models::notifications;
 use crate::models::progress::{BackupProgressEmitter, ProgressHub, RestoreProgressEmitter};
 use crate::models::restore::{self, LineFilter, RestoreError, RestoreOptions};
 use crate::models::storage;
@@ -101,6 +102,12 @@ pub async fn run_backup(ctx: &AppContext, request: BackupRequest<'_>) -> Result<
         &request.database_name,
     );
     emitter.started();
+    notifications::backup_started(
+        ctx,
+        &request.connection.name,
+        request.connection.id,
+        request.trigger.as_str(),
+    );
 
     let mut outcome = perform_dump(
         request.connection,
@@ -136,6 +143,22 @@ pub async fn run_backup(ctx: &AppContext, request: BackupRequest<'_>) -> Result<
             backup.duration_seconds.unwrap_or(0),
         ),
         Err(message) => emitter.failed(message),
+    }
+    match &outcome {
+        Ok(_) => notifications::backup_completed(
+            ctx,
+            &request.connection.name,
+            request.connection.id,
+            backup.id,
+            backup.file_name.as_deref().unwrap_or("N/A"),
+            backup.file_size.unwrap_or(0),
+        ),
+        Err(message) => notifications::backup_failed(
+            ctx,
+            &request.connection.name,
+            request.connection.id,
+            message,
+        ),
     }
 
     Ok(BackupRun { backup, outcome })
@@ -380,6 +403,7 @@ pub async fn perform_restore(ctx: &AppContext, request: &RestoreRequest) -> Resu
     );
 
     let started = std::time::Instant::now();
+    notifications::restore_started(ctx, &connection.name, backup.id, &target_database);
 
     match restore_pipeline(
         ctx,
@@ -405,10 +429,24 @@ pub async fn perform_restore(ctx: &AppContext, request: &RestoreRequest) -> Resu
             }
 
             emitter.completed(seconds);
+            notifications::restore_completed(
+                ctx,
+                &connection.name,
+                backup.id,
+                &target_database,
+                seconds,
+            );
         }
         Err(message) => {
             tracing::error!(backup_id = backup.id, error = %message, "falha na restauração");
             emitter.failed(&message);
+            notifications::restore_failed(
+                ctx,
+                &connection.name,
+                backup.id,
+                &target_database,
+                &message,
+            );
         }
     }
 

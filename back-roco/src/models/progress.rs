@@ -22,7 +22,10 @@
 //! `sleep` — um teste que dorme meio segundo por caso, e que falha em maquina
 //! carregada.
 
-use std::sync::Arc;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
 use std::time::{Duration, Instant};
 
 use loco_rs::prelude::*;
@@ -91,6 +94,7 @@ pub struct ProgressEvent {
 #[derive(Debug, Clone)]
 pub struct ProgressHub {
     sender: Arc<broadcast::Sender<ProgressEvent>>,
+    relay_started: Arc<AtomicBool>,
 }
 
 impl Default for ProgressHub {
@@ -105,6 +109,7 @@ impl ProgressHub {
         let (sender, _) = broadcast::channel(CHANNEL_CAPACITY);
         Self {
             sender: Arc::new(sender),
+            relay_started: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -130,6 +135,31 @@ impl ProgressHub {
     pub fn publish(&self, event: ProgressEvent) {
         let _ = self.sender.send(event);
     }
+}
+
+/// Repassa os eventos de progresso já existentes para o transporte SSE.
+pub fn bridge_to_sse(ctx: &AppContext) {
+    let hub = ProgressHub::shared(ctx);
+    if hub.relay_started.swap(true, Ordering::AcqRel) {
+        return;
+    }
+    let Ok(registry) = crate::models::sse::shared(ctx) else {
+        tracing::error!("SSE registry was not initialized before the progress relay");
+        hub.relay_started.store(false, Ordering::Release);
+        return;
+    };
+    let mut receiver = hub.subscribe();
+    tokio::spawn(async move {
+        loop {
+            match receiver.recv().await {
+                Ok(event) => registry.broadcast(event.channel, event.payload),
+                Err(broadcast::error::RecvError::Lagged(skipped)) => {
+                    tracing::warn!(skipped, "progress SSE relay lagged behind");
+                }
+                Err(broadcast::error::RecvError::Closed) => break,
+            }
+        }
+    });
 }
 
 /// Emissor de progresso de um backup.

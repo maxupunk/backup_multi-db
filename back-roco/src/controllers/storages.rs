@@ -41,6 +41,7 @@ use crate::views::envelope::{Data, Message, MessageWithData};
 use crate::views::errors::ApiError;
 use crate::views::pagination::{Page, PageRequest};
 use crate::views::storages as view;
+use crate::workers::storage_jobs::{ArchiveWorker, CopyWorker};
 
 type Reply = std::result::Result<Response, ApiError>;
 
@@ -448,7 +449,7 @@ pub async fn start_copy(
         ));
     }
 
-    let job = copy::start(
+    let started = copy::start(
         &ctx,
         source.clone(),
         destination.clone(),
@@ -461,6 +462,8 @@ pub async fn start_copy(
         },
     )
     .await?;
+    CopyWorker::perform_later(&ctx, started.args).await?;
+    let job = started.job;
 
     audit(
         &ctx,
@@ -520,7 +523,10 @@ pub async fn start_archive(
 ) -> Reply {
     let storage = find_or_404(&ctx, id).await?;
     let params: StartArchiveParams = json_body(&body)?;
-    let job = archive::start(&ctx, storage.clone(), settings(&ctx)?, params.path.clone()).await?;
+    let started =
+        archive::start(&ctx, storage.clone(), settings(&ctx)?, params.path.clone()).await?;
+    ArchiveWorker::perform_later(&ctx, started.args).await?;
+    let job = started.job;
 
     audit(
         &ctx,

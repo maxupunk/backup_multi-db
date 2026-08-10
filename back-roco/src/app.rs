@@ -21,7 +21,12 @@ use crate::{
         resource_metric_history, storage_destinations, system_settings, users,
     },
     tasks,
-    workers::{downloader::DownloadWorker, restore::RestoreWorker},
+    workers::{
+        downloader::DownloadWorker,
+        resource_metrics::ResourceMetricsWorker,
+        restore::RestoreWorker,
+        storage_jobs::{ArchiveWorker, CopyWorker},
+    },
 };
 
 pub struct App;
@@ -57,6 +62,7 @@ impl Hooks for App {
     }
 
     async fn after_routes(router: axum::Router, ctx: &AppContext) -> Result<axum::Router> {
+        crate::workers::resource_metrics::start(ctx).await?;
         // Camadas globais: `force_json` e o limitador de 600 req/min por IP.
         // Os limitadores por rota (`auth`, `strict`, `backup`) entram junto com
         // as rotas que os usam, nas fases seguintes.
@@ -71,6 +77,7 @@ impl Hooks for App {
         crate::models::storage::archive::register(ctx);
         crate::models::docker_diagnostics::register(ctx);
         crate::models::sse::register(ctx);
+        crate::models::progress::bridge_to_sse(ctx);
 
         // O limitador `auth` (5/min por IP+e-mail) e' pendurado nas rotas de
         // `register` e `login`; os demais grupos so' levam o global, que entra
@@ -104,12 +111,15 @@ impl Hooks for App {
     async fn connect_workers(ctx: &AppContext, queue: &Queue) -> Result<()> {
         queue.register(DownloadWorker::build(ctx)).await?;
         queue.register(RestoreWorker::build(ctx)).await?;
+        queue.register(ResourceMetricsWorker::build(ctx)).await?;
+        queue.register(CopyWorker::build(ctx)).await?;
+        queue.register(ArchiveWorker::build(ctx)).await?;
         Ok(())
     }
 
-    #[allow(unused_variables)]
     fn register_tasks(tasks: &mut Tasks) {
-        // tasks-inject (do not remove)
+        tasks.register(tasks::scheduled_backups::ScheduledBackupsTask);
+        tasks.register(tasks::audit_retention::AuditRetentionTask);
     }
     /// Ordem inversa a' das chaves estrangeiras: filho antes do pai. Truncar
     /// `users` primeiro derrubaria os tokens por CASCADE e mascararia um erro

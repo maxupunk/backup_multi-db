@@ -47,6 +47,11 @@ fn registry(ctx: &AppContext) -> loco_rs::Result<Registry> {
         .ok_or_else(|| Error::Message("SSE registry was not initialized".to_string()))
 }
 
+/// Obtém o registry para uma tarefa que recebeu o contexto no boot.
+pub fn shared(ctx: &AppContext) -> loco_rs::Result<Registry> {
+    registry(ctx)
+}
+
 /// Inscreve um uid em um canal. Os limites evitam reter identificadores ou
 /// nomes de canal arbitrariamente grandes em memória.
 pub async fn subscribe(ctx: &AppContext, uid: &str, channel: &str) -> loco_rs::Result<bool> {
@@ -87,11 +92,18 @@ pub fn broadcast(
     channel: impl Into<String>,
     payload: Value,
 ) -> loco_rs::Result<()> {
-    let _ = registry(ctx)?.sender.send(BroadcastEvent {
-        channel: channel.into(),
-        payload,
-    });
+    registry(ctx)?.broadcast(channel, payload);
     Ok(())
+}
+
+impl Registry {
+    /// Publica sem precisar carregar o `AppContext` em uma task destacada.
+    pub fn broadcast(&self, channel: impl Into<String>, payload: Value) {
+        let _ = self.sender.send(BroadcastEvent {
+            channel: channel.into(),
+            payload,
+        });
+    }
 }
 
 pub fn receiver(ctx: &AppContext) -> loco_rs::Result<broadcast::Receiver<BroadcastEvent>> {
@@ -107,6 +119,17 @@ pub async fn receives(ctx: &AppContext, uid: &str, channel: &str) -> loco_rs::Re
         .is_some_and(|channels| channels.contains(channel)))
 }
 
+/// Há pelo menos um cliente inscrito no canal? Usado por emissores caros para
+/// evitar coletar métricas que ninguém está vendo.
+pub async fn has_subscribers(ctx: &AppContext, channel: &str) -> loco_rs::Result<bool> {
+    Ok(registry(ctx)?
+        .subscriptions
+        .read()
+        .await
+        .values()
+        .any(|channels| channels.contains(channel)))
+}
+
 fn valid(value: &str, maximum: usize) -> bool {
     !value.trim().is_empty() && value.len() <= maximum && !value.contains(['\r', '\n'])
 }
@@ -115,7 +138,6 @@ fn valid(value: &str, maximum: usize) -> bool {
 mod tests {
     use super::*;
     use crate::app::App;
-    use loco_rs::testing::prelude::*;
 
     #[tokio::test]
     async fn registry_scopes_events_to_the_subscribed_uid_and_channel() {
