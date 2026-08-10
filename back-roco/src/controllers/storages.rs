@@ -15,7 +15,7 @@
 //! são erro de configuração do usuário, não do servidor.
 
 use axum::body::Bytes;
-use axum::http::StatusCode;
+use axum::http::{header, StatusCode};
 use axum::response::{IntoResponse, Response};
 use loco_rs::prelude::*;
 use validator::Validate;
@@ -29,6 +29,8 @@ use crate::models::audit_log::{AuditAction, AuditEntityType};
 use crate::models::audit_logs::{AuditEntry, Model as AuditLog};
 use crate::models::backup_runner;
 use crate::models::encryption::EncryptionService;
+use crate::models::storage::archive;
+use crate::models::storage::copy::{self, CopyOptions};
 use crate::models::storage::explorer::{self, BrowseQuery, DeleteObjectParams};
 use crate::models::storage::{assert_deletable, StorageError};
 use crate::models::storage_destinations::{
@@ -47,6 +49,38 @@ const NOT_FOUND: &str = "Armazenamento não encontrado";
 
 const DEFAULT_PER_PAGE: u64 = 20;
 const MAX_PER_PAGE: u64 = 100;
+
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+struct StartCopyParams {
+    #[serde(rename = "destinationId")]
+    destination_id: Option<i64>,
+    #[serde(rename = "sourcePath")]
+    source_path: Option<String>,
+    #[serde(rename = "destinationPath")]
+    destination_path: Option<String>,
+    #[serde(rename = "dryRun")]
+    dry_run: Option<bool>,
+    #[serde(rename = "deleteExtraneous")]
+    delete_extraneous: Option<bool>,
+}
+
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+struct StartArchiveParams {
+    path: Option<String>,
+}
+
+impl Validate for StartCopyParams {
+    fn validate(&self) -> std::result::Result<(), validator::ValidationErrors> {
+        let mut errors = validator::ValidationErrors::new();
+        crate::models::validation::required_number(
+            &mut errors,
+            "destinationId",
+            self.destination_id,
+            i64::MAX,
+        );
+        crate::models::validation::finish(errors)
+    }
+}
 
 /// `GET /api/storages`.
 #[debug_handler]
@@ -389,6 +423,192 @@ pub async fn destroy_object(
     .into_response())
 }
 
+/// `POST /api/storages/:id/copy` inicia a copia e devolve antes da transferencia.
+#[debug_handler]
+pub async fn start_copy(
+    State(ctx): State<AppContext>,
+    _session: Authenticated,
+    origin: RequestOrigin,
+    Path(id): Path<i64>,
+    body: Bytes,
+) -> Reply {
+    let source = storages::Model::find_one(&ctx.db, id)
+        .await?
+        .ok_or_else(|| ApiError::not_found("Armazenamento de origem não encontrado"))?;
+    let params: StartCopyParams = json_body(&body)?;
+    Validate::validate(&params).map_err(|errors| ApiError::from_validation_errors(&errors))?;
+    let destination_id = params.destination_id.unwrap_or_default();
+    let destination = storages::Model::find_one(&ctx.db, destination_id)
+        .await?
+        .ok_or_else(|| ApiError::not_found("Armazenamento de destino não encontrado"))?;
+
+    if source.id == destination.id {
+        return Err(ApiError::unprocessable(
+            "Origem e destino não podem ser o mesmo armazenamento",
+        ));
+    }
+
+    let job = copy::start(
+        &ctx,
+        source.clone(),
+        destination.clone(),
+        settings(&ctx)?,
+        CopyOptions {
+            source_path: params.source_path,
+            destination_path: params.destination_path,
+            dry_run: params.dry_run.unwrap_or(false),
+            delete_extraneous: params.delete_extraneous.unwrap_or(false),
+        },
+    )
+    .await?;
+
+    audit(
+        &ctx,
+        &origin,
+        AuditEntry::success(
+            AuditAction::SettingsUpdated,
+            format!(
+                "Cópia iniciada de \"{}\" para \"{}\"",
+                source.name, destination.name
+            ),
+        )
+        .entity_type(AuditEntityType::Settings)
+        .entity(source.id, &source.name)
+        .details(serde_json::json!({
+            "metadata": {
+                "jobId": job.id,
+                "sourceId": source.id,
+                "destinationId": destination.id,
+                "dryRun": params.dry_run.unwrap_or(false),
+            }
+        })),
+    )
+    .await;
+
+    Ok((
+        StatusCode::ACCEPTED,
+        axum::Json(MessageWithData::new(
+            "Job de cópia iniciado",
+            serde_json::json!({ "jobId": job.id }),
+        )),
+    )
+        .into_response())
+}
+
+/// `GET /api/storages/copy-jobs/:jobId`.
+#[debug_handler]
+pub async fn copy_status(
+    State(_ctx): State<AppContext>,
+    _session: Authenticated,
+    Path(job_id): Path<String>,
+) -> Reply {
+    let job = copy::get(&_ctx, &job_id)
+        .await?
+        .ok_or_else(|| ApiError::not_found("Job de cópia não encontrado"))?;
+    Ok(axum::Json(Data::new(job)).into_response())
+}
+
+/// `POST /api/storages/:id/archive` cria um `.tar.gz` em disco, sem reter a
+/// listagem nem os objetos em memória.
+#[debug_handler]
+pub async fn start_archive(
+    State(ctx): State<AppContext>,
+    _session: Authenticated,
+    origin: RequestOrigin,
+    Path(id): Path<i64>,
+    body: Bytes,
+) -> Reply {
+    let storage = find_or_404(&ctx, id).await?;
+    let params: StartArchiveParams = json_body(&body)?;
+    let job = archive::start(&ctx, storage.clone(), settings(&ctx)?, params.path.clone()).await?;
+
+    audit(
+        &ctx,
+        &origin,
+        AuditEntry::success(
+            AuditAction::SettingsUpdated,
+            format!("Archive iniciado para \"{}\"", storage.name),
+        )
+        .entity_type(AuditEntityType::Settings)
+        .entity(storage.id, &storage.name)
+        .details(serde_json::json!({
+            "metadata": { "jobId": job.id, "path": params.path.unwrap_or_else(|| "/".to_string()) }
+        })),
+    )
+    .await;
+
+    Ok((
+        StatusCode::ACCEPTED,
+        axum::Json(MessageWithData::new("Job de archive iniciado", job)),
+    )
+        .into_response())
+}
+
+/// `GET /api/storages/archive-jobs/:jobId`.
+#[debug_handler]
+pub async fn archive_status(
+    State(ctx): State<AppContext>,
+    _session: Authenticated,
+    Path(job_id): Path<String>,
+) -> Reply {
+    let job = archive::get(&ctx, &job_id)
+        .await?
+        .ok_or_else(|| ApiError::not_found("Job de archive não encontrado"))?;
+    Ok(axum::Json(Data::new(job)).into_response())
+}
+
+/// `GET /api/storages/archive-jobs/:jobId/download` transmite o arquivo já
+/// pronto. O job não pronto falha em 422, em vez de devolver um gzip parcial.
+#[debug_handler]
+pub async fn download_archive(
+    State(ctx): State<AppContext>,
+    _session: Authenticated,
+    Path(job_id): Path<String>,
+) -> Reply {
+    let job = archive::get(&ctx, &job_id)
+        .await?
+        .ok_or_else(|| ApiError::not_found("Job de archive não encontrado"))?;
+    if job.status != archive::ArchiveStatus::Ready {
+        let message = match job.status {
+            archive::ArchiveStatus::Pending => "Archive ainda não foi iniciado".to_string(),
+            archive::ArchiveStatus::Building => "Archive está sendo gerado".to_string(),
+            archive::ArchiveStatus::Expired => "Archive expirou (limite de 15 minutos)".to_string(),
+            archive::ArchiveStatus::Failed => {
+                format!("Archive falhou: {}", job.error.unwrap_or_default())
+            }
+            archive::ArchiveStatus::Ready => "Archive não está disponível".to_string(),
+        };
+        return Err(ApiError::unprocessable(message));
+    }
+    let path = archive::download_path(&ctx, &job_id)
+        .await?
+        .ok_or_else(|| ApiError::unprocessable("Stream de download não disponível"))?;
+    let file = tokio::fs::File::open(&path)
+        .await
+        .map_err(|_| ApiError::unprocessable("Stream de download não disponível"))?;
+    let length = file.metadata().await.ok().map(|metadata| metadata.len());
+    let mut response =
+        axum::body::Body::from_stream(tokio_util::io::ReaderStream::new(file)).into_response();
+    let headers = response.headers_mut();
+    headers.insert(
+        header::CONTENT_TYPE,
+        header::HeaderValue::from_static("application/gzip"),
+    );
+    if let Ok(value) = header::HeaderValue::from_str(&format!(
+        "attachment; filename=\"storage-archive-{}-{}.tar.gz\"",
+        job.storage_id,
+        chrono::Utc::now().timestamp_millis()
+    )) {
+        headers.insert(header::CONTENT_DISPOSITION, value);
+    }
+    if let Some(length) =
+        length.and_then(|value| header::HeaderValue::from_str(&value.to_string()).ok())
+    {
+        headers.insert(header::CONTENT_LENGTH, length);
+    }
+    Ok(response)
+}
+
 async fn find_or_404(ctx: &AppContext, id: i64) -> std::result::Result<storages::Model, ApiError> {
     storages::Model::find_one(&ctx.db, id)
         .await?
@@ -456,15 +676,22 @@ async fn audit(ctx: &AppContext, origin: &RequestOrigin, entry: AuditEntry) {
 /// nossa origem.
 pub fn routes(limiters: &Limiters) -> Routes {
     let strict = axum::middleware::from_fn_with_state(limiters.strict(), enforce);
+    let backup = axum::middleware::from_fn_with_state(limiters.backup(), enforce);
 
     Routes::new()
         .prefix("/api/storages")
         .add("/", get(index))
         .add("/", post(store))
+        // Deve vir antes de `/{id}`: `copy-jobs` nao e' um id numerico.
+        .add("/copy-jobs/{job_id}", get(copy_status))
+        .add("/archive-jobs/{job_id}", get(archive_status))
+        .add("/archive-jobs/{job_id}/download", get(download_archive))
         .add("/{id}", get(show))
         .add("/{id}", put(update))
         .add("/{id}", delete(destroy))
         .add("/{id}/test", post(test).layer(strict))
         .add("/{id}/browse", get(browse))
         .add("/{id}/object", delete(destroy_object))
+        .add("/{id}/copy", post(start_copy).layer(backup.clone()))
+        .add("/{id}/archive", post(start_archive).layer(backup))
 }

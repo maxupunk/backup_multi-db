@@ -58,18 +58,18 @@ Banco de controle: **SQLite** (`app_data/`). Bancos gerenciados: MySQL, MariaDB,
 > Esta seção descrevia o **scaffold inicial**. Foi reescrita ao fim da Fase 7; o texto original
 > está no git.
 
-Estado: **Fases 0 a 7 concluídas.**
+Estado: **Fases 0 a 8 concluídas.**
 
 | Área | Estado |
 |---|---|
-| Endpoints sob `/api` | **46 de 87** pares método+rota (`cargo loco routes`) |
+| Endpoints sob `/api` | **51 de 87** pares método+rota (`cargo loco routes`) |
 | Controllers | `auth`, `users`, `audit_logs`, `system` (parcial), `connections`, `backups` |
 | Models | 9 entidades geradas + lógica de domínio, criptografia, senha, token, driver de banco, dump, restore, import, progresso |
 | Migrations | 4, cobrindo as 9 tabelas · diff estrutural vazio contra o schema do Adonis |
 | Workers | `downloader` (scaffold), `restore` |
 | Testes | **429** no `--lib` + 148 de integração, 0 falhas, 4 ignorados (2 de dados de produção, 2 de servidor real) |
 
-**Cobertura de paridade hoje: 53%** dos pares método+rota. O que falta: os jobs de storage (Fase 8), Docker
+**Cobertura de paridade hoje: 59%** dos pares método+rota. O que falta: Docker
 (Fase 9), SSE e scheduler (Fase 10), sistema avançado e retenção (Fase 11).
 
 ---
@@ -1061,24 +1061,24 @@ restauração que falhou faria a fila tentar de novo e restaurar o banco duas ve
 - [x] 8.8 — ✅ `POST /:id/test`, com o limitador `strict` e falha em **422**, não em 500.
 - [x] 8.9 — ✅ `GET /:id/browse`, com paginação por cursor e o enriquecimento de **réplicas**.
 - [x] 8.10 — ✅ `DELETE /:id/object`, com a raiz recusada antes de qualquer chamada ao provedor.
-- [ ] 8.11 — **Copy job** assíncrono (`bucket_copy_service`, 455 LOC) — job em background + endpoint de status.
-- [ ] 8.12 — **Archive job** (`bucket_archive_service`, 395 LOC) — streaming de tar/zip, endpoint de status e download.
+- [x] 8.11 — ✅ **Copy job** assíncrono (`src/models/storage/copy.rs`) — job em background, endpoint de status e sincronização opcional do destino.
+- [x] 8.12 — ✅ **Archive job** (`src/models/storage/archive.rs`) — `.tar.gz` em streaming, status e download protegido contra archive parcial.
 - [x] 8.13 — ✅ `src/models/storage/space.rs`, as duas rotas de espaço e o `storageSpaces` de `GET /api/stats`.
-- [ ] 8.14 — Retenção de jobs (porta de `storage_job_retention`).
+- [x] 8.14 — ✅ Retenção de jobs: TTL de 6h para cópias, expiração de archive em 15 min, limpeza terminal em 1h e teto de 50 jobs.
 - [x] 8.15 — ✅ Resolvida **por construção**, e não por cache — ver abaixo.
-- [ ] 8.16 — Testes Rust + contrato contra MinIO e SFTP do compose.
+- [x] 8.16 — ✅ Testes Rust de integração contra MinIO e SFTP do `docker-compose.test.yml`.
 
 **Pronto quando:** lote 2.5 passa para local, S3/MinIO e SFTP. GCS e Azure podem ficar
 com teste de integração opcional se não houver credencial em CI — **registrar a lacuna**.
 
-### Estado: 12 de 16 tarefas
+### Estado: 16 de 16 tarefas — Fase concluída
 
 Os **adapters (8.1–8.6)** e as **rotas de CRUD e exploração (8.7–8.10, 8.15)** estão prontos e
 verdes: **413 testes** no `--lib` e **144** de integração — 26 deles novos, cobrindo os dois
 recursos —, com `fmt` e `clippy --all-targets -D warnings` limpos.
 
-O que falta são os **jobs**: cópia (8.11), archive (8.12), retenção (8.14), o cálculo de espaço
-(8.13) e a suíte contra MinIO/SFTP do compose (8.16).
+Os adapters e as rotas da fase estão cobertos por testes locais e por integração real
+contra MinIO e SFTP. GCS e Azure continuam sem credenciais de CI, como lacuna registrada.
 
 ### A memoização que não precisou existir (8.15)
 
@@ -1349,7 +1349,7 @@ frontend atual consome o stream do `back-roco` sem alteração.
 | 5 | Auth/Users/Audit/System | 1–2 semanas | 🟢 | ✅ concluída |
 | 6 | Connections + drivers | 2–3 semanas | 🟡 | ✅ concluída |
 | 7 | Backups/dump/restore | 3–4 semanas | 🔴 | ✅ concluída (7.2/7.6/7.9 fechadas na Fase 8) |
-| 8 | Storages multi-provider | 3–4 semanas | 🔴 | 🟡 em andamento (12/16) |
+| 8 | Storages multi-provider | 3–4 semanas | 🔴 | ✅ concluída (16/16) |
 | 9 | Docker Manager | 2–3 semanas | 🔴 | ⬜ pode entrar em paralelo |
 | 10 | SSE/scheduler/workers | 2 semanas | 🟡 | ⬜ pode entrar em paralelo |
 | 11 | System avançado | 1–2 semanas | 🟡 | ⬜ depende de 9 e 10 |
@@ -1445,17 +1445,17 @@ contrato.
 |---|---|---|---|---|:-:|:-:|:-:|
 | 26 | GET | `/api/storages` | Storages.index | global | ✅ | ✅ | ⬜ |
 | 27 | POST | `/api/storages` | Storages.store | global | ✅ | ✅ | ⬜ |
-| 28 | GET | `/api/storages/copy-jobs/:jobId` | Storages.copyStatus | global | ✅ | ⬜ | ⬜ |
-| 29 | GET | `/api/storages/archive-jobs/:jobId` | Storages.archiveJobStatus | global | ✅ | ⬜ | ⬜ |
-| 30 | GET | `/api/storages/archive-jobs/:jobId/download` | Storages.downloadArchive | global | ✅ | ⬜ | ⬜ |
+| 28 | GET | `/api/storages/copy-jobs/:jobId` | Storages.copyStatus | global | ✅ | ✅ | ⬜ |
+| 29 | GET | `/api/storages/archive-jobs/:jobId` | Storages.archiveJobStatus | global | ✅ | ✅ | ⬜ |
+| 30 | GET | `/api/storages/archive-jobs/:jobId/download` | Storages.downloadArchive | global | ✅ | ✅ | ⬜ |
 | 31 | GET | `/api/storages/:id` | Storages.show | global | ✅ | ✅ | ⬜ |
 | 32 | PUT | `/api/storages/:id` | Storages.update | global | ✅ | ✅ | ⬜ |
 | 33 | DELETE | `/api/storages/:id` | Storages.destroy | global | ✅ | ✅ | ⬜ |
 | 34 | POST | `/api/storages/:id/test` | Storages.test | strict | ✅ | ✅ | ⬜ |
 | 35 | GET | `/api/storages/:id/browse` | Storages.browse | global | ✅ | ✅ | ⬜ |
 | 36 | DELETE | `/api/storages/:id/object` | Storages.destroyObject | global | ✅ | ✅ | ⬜ |
-| 37 | POST | `/api/storages/:id/copy` | Storages.startCopy | backup | ✅ | ⬜ | ⬜ |
-| 38 | POST | `/api/storages/:id/archive` | Storages.startArchive | backup | ✅ | ⬜ | ⬜ |
+| 37 | POST | `/api/storages/:id/copy` | Storages.startCopy | backup | ✅ | ✅ | ⬜ |
+| 38 | POST | `/api/storages/:id/archive` | Storages.startArchive | backup | ✅ | ✅ | ⬜ |
 
 ### Backups
 

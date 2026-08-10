@@ -1271,6 +1271,260 @@ async fn deleting_a_backup_survives_a_remote_that_does_not_answer() {
     .await;
 }
 
+#[tokio::test]
+#[serial]
+async fn copy_job_transfers_files_and_removes_extraneous_destination_entries() {
+    request::<App, _, _>(|request, _ctx| async move {
+        let token = admin_token(&request).await;
+        let source_dir = tempfile::tempdir().expect("origem temporaria");
+        let destination_dir = tempfile::tempdir().expect("destino temporario");
+        tokio::fs::create_dir_all(source_dir.path().join("exports"))
+            .await
+            .expect("cria pasta da origem");
+        tokio::fs::write(source_dir.path().join("exports/clients.sql"), b"clientes")
+            .await
+            .expect("grava origem");
+        tokio::fs::create_dir_all(destination_dir.path().join("imported"))
+            .await
+            .expect("cria pasta do destino");
+        tokio::fs::write(destination_dir.path().join("imported/stale.sql"), b"velho")
+            .await
+            .expect("grava arquivo excedente");
+
+        let source = create_local(&request, &token, "Origem de copia", source_dir.path()).await;
+        let destination =
+            create_local(&request, &token, "Destino de copia", destination_dir.path()).await;
+        let source_id = source["data"]["id"].as_i64().expect("id da origem");
+        let destination_id = destination["data"]["id"].as_i64().expect("id do destino");
+
+        let started = request
+            .post(&format!("/api/storages/{source_id}/copy"))
+            .authorization_bearer(&token)
+            .json(&serde_json::json!({
+                "destinationId": destination_id,
+                "sourcePath": "exports",
+                "destinationPath": "imported",
+                "deleteExtraneous": true,
+            }))
+            .await;
+        assert_eq!(started.status_code(), 202, "{}", started.text());
+        let started: Value = started.json();
+        assert_eq!(started["message"], "Job de cópia iniciado");
+        let job_id = started["data"]["jobId"]
+            .as_str()
+            .expect("id do job")
+            .to_string();
+
+        let mut final_job = None;
+        for _ in 0..40 {
+            let status = request
+                .get(&format!("/api/storages/copy-jobs/{job_id}"))
+                .authorization_bearer(&token)
+                .await;
+            assert_eq!(status.status_code(), 200, "{}", status.text());
+            let body: Value = status.json();
+            let job = body["data"].clone();
+            match job["status"].as_str() {
+                Some("completed") | Some("failed") => {
+                    final_job = Some(job);
+                    break;
+                }
+                _ => tokio::time::sleep(std::time::Duration::from_millis(25)).await,
+            }
+        }
+
+        let job = final_job.expect("job terminou dentro do prazo");
+        assert_eq!(job["status"], "completed", "{job}");
+        assert_eq!(job["filesTransferred"], 1);
+        assert_eq!(job["totalFiles"], 1);
+        assert_eq!(job["bytesTransferred"], 8);
+        assert_eq!(
+            tokio::fs::read(destination_dir.path().join("imported/clients.sql"))
+                .await
+                .expect("arquivo copiado"),
+            b"clientes"
+        );
+        assert!(
+            tokio::fs::metadata(destination_dir.path().join("imported/stale.sql"))
+                .await
+                .is_err(),
+            "sync deveria remover o arquivo que nao existe na origem"
+        );
+    })
+    .await;
+}
+
+#[tokio::test]
+#[serial]
+async fn archive_job_streams_a_valid_gzip_tar_for_local_storage() {
+    request::<App, _, _>(|request, _ctx| async move {
+        let token = admin_token(&request).await;
+        let source_dir = tempfile::tempdir().expect("storage temporario");
+        tokio::fs::create_dir_all(source_dir.path().join("exports"))
+            .await
+            .expect("cria pasta");
+        tokio::fs::write(source_dir.path().join("exports/clientes.sql"), b"clientes")
+            .await
+            .expect("grava arquivo");
+        let storage = create_local(&request, &token, "Archive local", source_dir.path()).await;
+        let storage_id = storage["data"]["id"].as_i64().expect("id do storage");
+
+        let started = request
+            .post(&format!("/api/storages/{storage_id}/archive"))
+            .authorization_bearer(&token)
+            .json(&serde_json::json!({ "path": "exports" }))
+            .await;
+        assert_eq!(started.status_code(), 202, "{}", started.text());
+        let job_id = started.json::<Value>()["data"]["id"]
+            .as_str()
+            .expect("id do archive")
+            .to_string();
+
+        let mut final_job = None;
+        for _ in 0..40 {
+            let status = request
+                .get(&format!("/api/storages/archive-jobs/{job_id}"))
+                .authorization_bearer(&token)
+                .await;
+            assert_eq!(status.status_code(), 200, "{}", status.text());
+            let job = status.json::<Value>()["data"].clone();
+            match job["status"].as_str() {
+                Some("ready") | Some("failed") => {
+                    final_job = Some(job);
+                    break;
+                }
+                _ => tokio::time::sleep(std::time::Duration::from_millis(25)).await,
+            }
+        }
+
+        let job = final_job.expect("archive terminou dentro do prazo");
+        assert_eq!(job["status"], "ready", "{job}");
+        assert_eq!(job["totalFiles"], 1);
+        assert_eq!(job["processedFiles"], 1);
+
+        let download = request
+            .get(&format!("/api/storages/archive-jobs/{job_id}/download"))
+            .authorization_bearer(&token)
+            .await;
+        assert_eq!(download.status_code(), 200, "{}", download.text());
+        assert_eq!(download.header("content-type"), "application/gzip");
+        let archive = download.as_bytes();
+        assert!(archive.starts_with(&[0x1f, 0x8b]), "resposta nao e gzip");
+
+        let archive_path = source_dir.path().join("download.tar.gz");
+        tokio::fs::write(&archive_path, archive)
+            .await
+            .expect("grava archive");
+        let archive_file = tokio::fs::File::open(archive_path)
+            .await
+            .expect("abre archive");
+        let mut decoder = async_compression::tokio::bufread::GzipDecoder::new(
+            tokio::io::BufReader::new(archive_file),
+        );
+        let mut tar = Vec::new();
+        tokio::io::AsyncReadExt::read_to_end(&mut decoder, &mut tar)
+            .await
+            .expect("descomprime archive");
+        assert!(tar.starts_with(b"exports/clientes.sql"));
+        assert_eq!(&tar[512..520], b"clientes");
+    })
+    .await;
+}
+
+#[tokio::test]
+#[serial]
+async fn minio_and_sftp_adapters_work_against_the_compose_services() {
+    request::<App, _, _>(|request, ctx| async move {
+        let token = admin_token(&request).await;
+        let scope = format!("phase8-{}", uuid::Uuid::new_v4());
+        let fixture = tempfile::NamedTempFile::new().expect("arquivo de fixture");
+        tokio::fs::write(fixture.path(), b"storage integration")
+            .await
+            .expect("grava fixture");
+
+        let minio = create_storage(
+            &request,
+            &token,
+            &serde_json::json!({
+                "name": format!("MinIO {scope}"),
+                "provider": "minio",
+                "config": {
+                    "bucket": "backups-primary",
+                    "accessKeyId": "testaccesskey",
+                    "secretAccessKey": "testsecretkey",
+                    "endpoint": "http://127.0.0.1:19000",
+                    "forcePathStyle": true,
+                    "prefix": scope,
+                },
+            }),
+        )
+        .await;
+        let sftp = create_storage(
+            &request,
+            &token,
+            &serde_json::json!({
+                "name": format!("SFTP {scope}"),
+                "provider": "sftp",
+                "config": {
+                    "host": "127.0.0.1",
+                    "port": 12222,
+                    "username": "tester",
+                    "password": "test_pw",
+                    "basePath": "backups",
+                },
+            }),
+        )
+        .await;
+
+        for (storage, key, browse_path) in [
+            (&minio, "integration.txt".to_string(), String::new()),
+            (&sftp, format!("{scope}/integration.txt"), scope.clone()),
+        ] {
+            let id = storage["data"]["id"].as_i64().expect("id do storage");
+            let test = request
+                .post(&format!("/api/storages/{id}/test"))
+                .authorization_bearer(&token)
+                .await;
+            assert_eq!(test.status_code(), 200, "{}", test.text());
+
+            let settings = back_roco::initializers::settings::Settings::from_json(
+                ctx.config.settings.as_ref(),
+            )
+            .expect("settings");
+            let encryption = back_roco::models::backup_runner::encryption_service(&settings)
+                .expect("encryption");
+            let destination = back_roco::models::storage_destinations::Model::find_one(&ctx.db, id)
+                .await
+                .expect("consulta storage")
+                .expect("storage existe");
+            let (_, adapter) = back_roco::models::storage::explorer::open(
+                &destination,
+                &encryption,
+                &settings.backup_storage_path,
+            )
+            .expect("adapter");
+            adapter
+                .put_file(&key, fixture.path())
+                .await
+                .expect("envia fixture ao provider");
+
+            let browse = request
+                .get(&format!("/api/storages/{id}/browse?path={browse_path}"))
+                .authorization_bearer(&token)
+                .await;
+            assert_eq!(browse.status_code(), 200, "{}", browse.text());
+            let objects = &browse.json::<Value>()["data"]["objects"];
+            assert!(
+                objects.as_array().is_some_and(|items| items
+                    .iter()
+                    .any(|item| item["name"] == "integration.txt")),
+                "o arquivo enviado nao foi listado: {objects}"
+            );
+        }
+    })
+    .await;
+}
+
 // ============================== autorização ==============================
 
 #[tokio::test]
@@ -1286,6 +1540,13 @@ async fn every_route_of_the_resource_demands_a_session() {
             request.post("/api/storages/1/test").await,
             request.get("/api/storages/1/browse").await,
             request.delete("/api/storages/1/object").await,
+            request.post("/api/storages/1/copy").await,
+            request.get("/api/storages/copy-jobs/qualquer").await,
+            request.post("/api/storages/1/archive").await,
+            request.get("/api/storages/archive-jobs/qualquer").await,
+            request
+                .get("/api/storages/archive-jobs/qualquer/download")
+                .await,
             request.get("/api/storage-destinations").await,
             request.post("/api/storage-destinations").await,
             request.get("/api/storage-destinations/1").await,

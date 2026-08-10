@@ -64,6 +64,12 @@ impl Hooks for App {
     }
 
     fn routes(ctx: &AppContext) -> AppRoutes {
+        // Estado efemero dos jobs de copia (Fase 8). Fica no SharedStore do
+        // contexto, nao num singleton global, para cada instancia manter seu
+        // proprio ciclo de vida e a Fase 10 poder trocar a implementacao.
+        crate::models::storage::copy::register(ctx);
+        crate::models::storage::archive::register(ctx);
+
         // O limitador `auth` (5/min por IP+e-mail) e' pendurado nas rotas de
         // `register` e `login`; os demais grupos so' levam o global, que entra
         // em `after_routes`.

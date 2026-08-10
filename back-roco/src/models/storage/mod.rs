@@ -26,8 +26,10 @@
 //! ligar três features que vinham desligadas. Zero crate nova para S3, GCS e
 //! Azure. O motivo completo está no roadmap.
 
+pub mod archive;
 pub mod cloud;
 pub mod config;
+pub mod copy;
 pub mod explorer;
 pub mod local;
 pub mod sftp;
