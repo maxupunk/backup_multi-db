@@ -86,6 +86,7 @@ impl Hooks for App {
             .add_route(controllers::backups::routes(&limiters))
             .add_route(controllers::storages::routes(&limiters))
             .add_route(controllers::storage_destinations::routes())
+            .add_route(controllers::storage_destinations::space_routes())
             .add_route(controllers::users::routes())
             .add_route(controllers::audit_logs::routes())
             .add_route(controllers::system::routes())

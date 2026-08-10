@@ -26,6 +26,7 @@ use crate::controllers::middlewares::auth::Authenticated;
 use crate::initializers::settings::Settings;
 use crate::models::backup_runner;
 use crate::models::encryption::EncryptionService;
+use crate::models::storage::space;
 use crate::models::storage_destinations::{
     self as destinations, CreateDestinationParams, DestinationUpdate, ListQuery, NewDestination,
     UpdateDestinationParams,
@@ -212,6 +213,57 @@ pub async fn destroy(
     .into_response())
 }
 
+/// `GET /api/storage-destinations/:id/space`.
+///
+/// Um destino remoto responde **200 com `data: null`**, e não 404: a rota
+/// existe e a resposta é "este tipo não sabe informar espaço". Um 404 aqui
+/// faria a interface tratar o destino como inexistente.
+#[debug_handler]
+pub async fn space(
+    State(ctx): State<AppContext>,
+    _session: Authenticated,
+    Path(id): Path<i64>,
+) -> Reply {
+    let destination = find_or_404(&ctx, id).await?;
+    let settings = settings(&ctx)?;
+    let encryption = backup_runner::encryption_service(&settings)?;
+
+    let Some(info) = space::destination_space(
+        Some(&destination),
+        &encryption,
+        &settings.backup_storage_path,
+    ) else {
+        return Ok(axum::Json(MessageWithData::new(
+            "Informações de espaço não disponíveis para este tipo de armazenamento",
+            serde_json::Value::Null,
+        ))
+        .into_response());
+    };
+
+    Ok(axum::Json(Data::new(view::SpaceItem::from(info))).into_response())
+}
+
+/// `GET /api/storage-destinations-space`.
+///
+/// Note o hífen: a rota **não** está sob `/api/storage-destinations`, e por isso
+/// tem o seu próprio grupo em [`space_routes`].
+#[debug_handler]
+pub async fn space_all(State(ctx): State<AppContext>, _session: Authenticated) -> Reply {
+    let settings = settings(&ctx)?;
+    let encryption = backup_runner::encryption_service(&settings)?;
+
+    let spaces =
+        space::all_destinations_space(&ctx.db, &encryption, &settings.backup_storage_path).await?;
+
+    Ok(axum::Json(Data::new(
+        spaces
+            .into_iter()
+            .map(view::SpaceItem::from)
+            .collect::<Vec<_>>(),
+    ))
+    .into_response())
+}
+
 async fn find_or_404(
     ctx: &AppContext,
     id: i64,
@@ -221,9 +273,12 @@ async fn find_or_404(
         .ok_or_else(|| ApiError::not_found(NOT_FOUND))
 }
 
+fn settings(ctx: &AppContext) -> std::result::Result<Settings, ApiError> {
+    Ok(Settings::from_json(ctx.config.settings.as_ref())?)
+}
+
 fn encryption(ctx: &AppContext) -> std::result::Result<EncryptionService, ApiError> {
-    let settings = Settings::from_json(ctx.config.settings.as_ref())?;
-    Ok(backup_runner::encryption_service(&settings)?)
+    Ok(backup_runner::encryption_service(&settings(ctx)?)?)
 }
 
 fn safe_config(
@@ -243,5 +298,18 @@ pub fn routes() -> Routes {
         .add("/", post(store))
         .add("/{id}", get(show))
         .add("/{id}", put(update))
+        .add("/{id}", patch(update))
         .add("/{id}", delete(destroy))
+        .add("/{id}/space", get(space))
+}
+
+/// `GET /api/storage-destinations-space`, que mora fora do prefixo do recurso.
+///
+/// O hífen no lugar da barra não é engano de digitação do Adonis: a rota é
+/// irmã do recurso, e não filha dele. Registrá-la sob o prefixo mudaria a URL
+/// que a interface chama.
+pub fn space_routes() -> Routes {
+    Routes::new()
+        .prefix("/api")
+        .add("/storage-destinations-space", get(space_all))
 }

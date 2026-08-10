@@ -85,6 +85,15 @@ pub struct Settings {
     /// Dias de retencao dos logs de auditoria. `0` desliga a poda.
     #[serde(default = "default_audit_retention_days")]
     pub audit_retention_days: u32,
+
+    /// Apagar a copia local depois de enviar o backup a um destino remoto?
+    ///
+    /// Equivale ao `BACKUP_DELETE_LOCAL_AFTER_REMOTE_UPLOAD`, e nasce
+    /// **desligado** pelo mesmo motivo: manter as duas copias e' o que da' a'
+    /// listagem a marca de replica e o que permite restaurar sem rede. Ligar
+    /// economiza disco ao custo de depender do provedor para toda leitura.
+    #[serde(default)]
+    pub backup_delete_local_after_remote_upload: bool,
 }
 
 fn default_token_ttl() -> String {

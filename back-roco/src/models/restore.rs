@@ -632,6 +632,26 @@ where
         .await
         .map_err(RestoreError::Source)?;
 
+    execute_from_reader(command, file, compressed, filter, on_progress).await
+}
+
+/// Igual a [`execute`], mas lendo de qualquer origem.
+///
+/// Foi o que permitiu restaurar de um **destino remoto** sem passar por um
+/// arquivo temporário (tarefa 7.6): o objeto do bucket entra direto na mesma
+/// cadeia. Baixar para o disco antes custaria uma gravação inteira do dump,
+/// espaço que a máquina pode não ter, e um arquivo a limpar depois.
+pub async fn execute_from_reader<R, F>(
+    command: &RestoreCommand,
+    source: R,
+    compressed: bool,
+    filter: Option<LineFilter>,
+    on_progress: F,
+) -> std::result::Result<RestoreOutcome, RestoreError>
+where
+    R: tokio::io::AsyncRead + Send + Unpin + 'static,
+    F: FnMut(u64) + Send + Unpin + 'static,
+{
     let mut child = Command::new(command.program)
         .args(&command.args)
         .envs(command.env.iter().map(|(k, v)| (*k, v.as_str())))
@@ -667,7 +687,7 @@ where
         }
     });
 
-    let stream_result = feed(file, compressed, filter, stdin, on_progress).await;
+    let stream_result = feed(source, compressed, filter, stdin, on_progress).await;
 
     let status = child.wait().await.map_err(RestoreError::Source)?;
     let stdout_text = stdout_task.await.unwrap_or_default();
@@ -705,18 +725,19 @@ where
     Ok(RestoreOutcome { warnings })
 }
 
-/// Encadeia arquivo → progresso → gunzip → filtro → `stdin`.
-async fn feed<F>(
-    file: tokio::fs::File,
+/// Encadeia origem → progresso → gunzip → filtro → `stdin`.
+async fn feed<R, F>(
+    source: R,
     compressed: bool,
     filter: Option<LineFilter>,
     stdin: tokio::process::ChildStdin,
     on_progress: F,
 ) -> std::result::Result<(), RestoreError>
 where
+    R: tokio::io::AsyncRead + Send + Unpin + 'static,
     F: FnMut(u64) + Send + Unpin + 'static,
 {
-    let counted = ProgressReader::new(tokio::io::BufReader::new(file), on_progress);
+    let counted = ProgressReader::new(tokio::io::BufReader::new(source), on_progress);
 
     // O `match` duplica o corpo porque os dois ramos tem tipos diferentes de
     // leitor; embrulhar num `Box<dyn AsyncRead>` custaria uma indirecao por

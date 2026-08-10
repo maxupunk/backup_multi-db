@@ -31,6 +31,7 @@ pub mod config;
 pub mod explorer;
 pub mod local;
 pub mod sftp;
+pub mod space;
 
 use std::path::Path;
 use std::pin::Pin;

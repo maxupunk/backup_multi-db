@@ -154,8 +154,8 @@ pub struct Stats {
     pub connections: ConnectionCounts,
     pub backups: BackupCounts,
     pub recent_backups: Vec<RecentBackup>,
-    /// Vazio ate' a Fase 8 ligar o `StorageSpaceService`.
-    pub storage_spaces: Vec<serde_json::Value>,
+    /// Preenchido desde a tarefa 8.13 — ver [`crate::models::storage::space`].
+    pub storage_spaces: Vec<crate::views::storages::SpaceItem>,
     pub system: SystemOverview,
 }
 

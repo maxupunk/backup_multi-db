@@ -11,7 +11,7 @@
 
 use back_roco::app::App;
 use loco_rs::testing::prelude::*;
-use sea_orm::EntityTrait;
+use sea_orm::{ActiveModelTrait, EntityTrait};
 use serde_json::Value;
 use serial_test::serial;
 
@@ -933,6 +933,344 @@ async fn the_legacy_404_has_its_own_message() {
     .await;
 }
 
+// ================================ espaço ================================
+
+#[tokio::test]
+#[serial]
+async fn reports_the_space_of_a_local_destination() {
+    request::<App, _, _>(|request, _ctx| async move {
+        let token = admin_token(&request).await;
+        let base = tempfile::tempdir().expect("diretorio temporario");
+
+        let created = create_local(&request, &token, "Local Com Espaco", base.path()).await;
+        let id = created["data"]["id"].as_i64().expect("id");
+
+        let response = request
+            .get(&format!("/api/storage-destinations/{id}/space"))
+            .authorization_bearer(&token)
+            .await;
+
+        assert_eq!(response.status_code(), 200, "{}", response.text());
+
+        let data = &response.json::<Value>()["data"];
+        assert_eq!(data["destinationId"], id);
+        assert_eq!(data["destinationName"], "Local Com Espaco");
+        assert_eq!(data["type"], "local");
+        assert_eq!(data["spaceAvailable"], true);
+        assert_eq!(data["lowSpaceThreshold"], 10.0);
+        assert!(data["totalBytes"].as_u64().expect("total") > 0);
+    })
+    .await;
+}
+
+#[tokio::test]
+#[serial]
+async fn a_remote_destination_reports_a_null_space_with_200() {
+    // 200 com `data: null`, e nao 404: a rota existe, e a resposta e' "este
+    // tipo nao sabe informar espaco". Um 404 faria a interface tratar o
+    // destino como inexistente.
+    request::<App, _, _>(|request, _ctx| async move {
+        let token = admin_token(&request).await;
+
+        let created = create_storage(
+            &request,
+            &token,
+            &serde_json::json!({
+                "name": "Bucket Sem Espaco", "provider": "minio", "config": minio_config(),
+            }),
+        )
+        .await;
+        let id = created["data"]["id"].as_i64().expect("id");
+
+        let response = request
+            .get(&format!("/api/storage-destinations/{id}/space"))
+            .authorization_bearer(&token)
+            .await;
+
+        assert_eq!(response.status_code(), 200, "{}", response.text());
+
+        let body: Value = response.json();
+        assert_eq!(body["success"], true);
+        assert!(body["data"].is_null());
+        assert_eq!(
+            body["message"],
+            "Informações de espaço não disponíveis para este tipo de armazenamento"
+        );
+    })
+    .await;
+}
+
+#[tokio::test]
+#[serial]
+async fn the_aggregate_space_route_lists_local_and_remote_alike() {
+    request::<App, _, _>(|request, _ctx| async move {
+        let token = admin_token(&request).await;
+        let base = tempfile::tempdir().expect("diretorio temporario");
+
+        create_local(&request, &token, "Aggregate Local", base.path()).await;
+        create_storage(
+            &request,
+            &token,
+            &serde_json::json!({
+                "name": "Aggregate Bucket", "provider": "minio", "config": minio_config(),
+            }),
+        )
+        .await;
+
+        let response = request
+            .get("/api/storage-destinations-space")
+            .authorization_bearer(&token)
+            .await;
+
+        assert_eq!(response.status_code(), 200, "{}", response.text());
+
+        let body: Value = response.json();
+        let rows = body["data"].as_array().expect("lista de espacos");
+
+        let local = rows
+            .iter()
+            .find(|row| row["destinationName"] == "Aggregate Local")
+            .expect("o destino local");
+        assert_eq!(local["spaceAvailable"], true);
+
+        // O remoto entra na lista com zeros, e nao fica de fora: a interface
+        // exibe a linha com "indisponivel" em vez de esconder o destino.
+        let remote = rows
+            .iter()
+            .find(|row| row["destinationName"] == "Aggregate Bucket")
+            .expect("o destino remoto");
+        assert_eq!(remote["spaceAvailable"], false);
+        assert_eq!(remote["totalBytes"], 0);
+        assert_eq!(remote["lowSpaceThreshold"], 10.0);
+
+        // O disco padrao entra porque nenhum destino local e' o default.
+        assert!(
+            rows.iter()
+                .any(|row| row["destinationName"] == "Local (padrão)"),
+            "{rows:?}"
+        );
+    })
+    .await;
+}
+
+#[tokio::test]
+#[serial]
+async fn a_default_local_destination_replaces_the_bare_disk_row() {
+    // Com um local default cadastrado, as duas linhas apontariam para o mesmo
+    // volume e a interface somaria o mesmo espaco duas vezes.
+    request::<App, _, _>(|request, _ctx| async move {
+        let token = admin_token(&request).await;
+        let base = tempfile::tempdir().expect("diretorio temporario");
+
+        create_storage(
+            &request,
+            &token,
+            &serde_json::json!({
+                "name": "Local Default",
+                "provider": "local",
+                "isDefault": true,
+                "config": { "basePath": base.path().to_string_lossy() },
+            }),
+        )
+        .await;
+
+        let body: Value = request
+            .get("/api/storage-destinations-space")
+            .authorization_bearer(&token)
+            .await
+            .json();
+
+        let rows = body["data"].as_array().expect("lista de espacos");
+        assert!(
+            !rows
+                .iter()
+                .any(|row| row["destinationName"] == "Local (padrão)"),
+            "o disco nu apareceu junto do default local: {rows:?}"
+        );
+        assert_eq!(rows.len(), 1);
+    })
+    .await;
+}
+
+#[tokio::test]
+#[serial]
+async fn the_dashboard_carries_the_same_space_rows() {
+    request::<App, _, _>(|request, _ctx| async move {
+        let token = admin_token(&request).await;
+        let base = tempfile::tempdir().expect("diretorio temporario");
+
+        create_local(&request, &token, "Local Do Painel", base.path()).await;
+
+        let body: Value = request
+            .get("/api/stats")
+            .authorization_bearer(&token)
+            .await
+            .json();
+        let rows = body["data"]["storageSpaces"]
+            .as_array()
+            .expect("storageSpaces");
+
+        // Ate' a 8.13 este bloco saia vazio.
+        assert!(
+            rows.iter()
+                .any(|row| row["destinationName"] == "Local Do Painel"),
+            "{rows:?}"
+        );
+    })
+    .await;
+}
+
+// ===================== backups em destino remoto (7.x) =====================
+
+/// Insere um backup apontando para um destino, sem arquivo no disco.
+async fn insert_backup_at(
+    ctx: &loco_rs::app::AppContext,
+    destination_id: i64,
+) -> back_roco::models::_entities::backups::Model {
+    use back_roco::models::_entities::backups;
+    use sea_orm::ActiveValue::Set;
+
+    let now = chrono::Utc::now().naive_utc();
+
+    backups::ActiveModel {
+        connection_id: Set(None),
+        connection_database_id: Set(None),
+        database_name: Set("app_fixture".to_string()),
+        storage_destination_id: Set(Some(destination_id)),
+        status: Set("completed".to_string()),
+        file_path: Set(Some("1/app_fixture_20260809_120000.sql.gz".to_string())),
+        file_name: Set(Some("app_fixture_20260809_120000.sql.gz".to_string())),
+        file_size: Set(Some(2048)),
+        checksum: Set(Some("deadbeef".to_string())),
+        compressed: Set(Some(true)),
+        retention_type: Set("hourly".to_string()),
+        protected: Set(Some(false)),
+        trigger: Set("manual".to_string()),
+        created_at: Set(now),
+        updated_at: Set(now),
+        ..Default::default()
+    }
+    .insert(&ctx.db)
+    .await
+    .expect("insere o backup de teste")
+}
+
+#[tokio::test]
+#[serial]
+async fn a_successful_download_keeps_its_bytes_and_its_content_type() {
+    // Regressão: o `force_json` reescrevia **toda** resposta não-JSON de `/api`,
+    // inclusive as de sucesso. O download saía como um JSON de erro com status
+    // 200 — o cliente recebia a mensagem no lugar do dump e nem via que falhou.
+    request::<App, _, _>(|request, ctx| async move {
+        let token = admin_token(&request).await;
+        let base = tempfile::tempdir().expect("diretorio temporario");
+
+        let created = create_local(&request, &token, "Local Do Download", base.path()).await;
+        let destination_id = created["data"]["id"].as_i64().expect("id");
+
+        let backup = insert_backup_at(&ctx, destination_id).await;
+        let relative = backup.file_path.clone().expect("file_path");
+        let full = base
+            .path()
+            .join(relative.replace('/', std::path::MAIN_SEPARATOR_STR));
+        std::fs::create_dir_all(full.parent().expect("pasta")).expect("cria a pasta");
+        std::fs::write(&full, b"\x1f\x8bconteudo do dump").expect("grava o dump");
+
+        let response = request
+            .get(&format!("/api/backups/{}/download", backup.id))
+            .authorization_bearer(&token)
+            .await;
+
+        assert_eq!(response.status_code(), 200, "{}", response.text());
+        assert_eq!(
+            response
+                .headers()
+                .get("content-type")
+                .expect("content-type")
+                .to_str()
+                .expect("texto"),
+            "application/octet-stream"
+        );
+        assert_eq!(response.as_bytes().as_ref(), b"\x1f\x8bconteudo do dump");
+    })
+    .await;
+}
+
+#[tokio::test]
+#[serial]
+async fn downloading_from_an_unreachable_remote_is_a_404_not_a_500() {
+    // O endpoint do MinIO aponta para uma porta fechada. O que se afirma aqui
+    // e' que a tentativa **acontece** (antes da 7.6 a rota nem tentava) e que a
+    // falha vira 404, e nao um erro interno.
+    request::<App, _, _>(|request, ctx| async move {
+        let token = admin_token(&request).await;
+
+        let mut config = minio_config();
+        config["endpoint"] = Value::String("http://127.0.0.1:1".to_string());
+
+        let created = create_storage(
+            &request,
+            &token,
+            &serde_json::json!({
+                "name": "Bucket Inalcancavel", "provider": "minio", "config": config,
+            }),
+        )
+        .await;
+        let destination_id = created["data"]["id"].as_i64().expect("id");
+        let backup = insert_backup_at(&ctx, destination_id).await;
+
+        let response = request
+            .get(&format!("/api/backups/{}/download", backup.id))
+            .authorization_bearer(&token)
+            .await;
+
+        assert_eq!(response.status_code(), 404, "{}", response.text());
+        assert_eq!(
+            response.json::<Value>()["message"],
+            "Arquivo de backup não encontrado no servidor"
+        );
+    })
+    .await;
+}
+
+#[tokio::test]
+#[serial]
+async fn deleting_a_backup_survives_a_remote_that_does_not_answer() {
+    // O registro precisa sair de qualquer forma: um backup ja' inacessivel que
+    // ficasse listado para sempre seria pior que um objeto orfao no bucket.
+    request::<App, _, _>(|request, ctx| async move {
+        let token = admin_token(&request).await;
+
+        let mut config = minio_config();
+        config["endpoint"] = Value::String("http://127.0.0.1:1".to_string());
+
+        let created = create_storage(
+            &request,
+            &token,
+            &serde_json::json!({
+                "name": "Bucket Mudo", "provider": "minio", "config": config,
+            }),
+        )
+        .await;
+        let destination_id = created["data"]["id"].as_i64().expect("id");
+        let backup = insert_backup_at(&ctx, destination_id).await;
+
+        let response = request
+            .delete(&format!("/api/backups/{}", backup.id))
+            .authorization_bearer(&token)
+            .await;
+
+        assert_eq!(response.status_code(), 200, "{}", response.text());
+
+        let gone = request
+            .get(&format!("/api/backups/{}", backup.id))
+            .authorization_bearer(&token)
+            .await;
+        assert_eq!(gone.status_code(), 404);
+    })
+    .await;
+}
+
 // ============================== autorização ==============================
 
 #[tokio::test]
@@ -953,6 +1291,8 @@ async fn every_route_of_the_resource_demands_a_session() {
             request.get("/api/storage-destinations/1").await,
             request.put("/api/storage-destinations/1").await,
             request.delete("/api/storage-destinations/1").await,
+            request.get("/api/storage-destinations/1/space").await,
+            request.get("/api/storage-destinations-space").await,
         ];
 
         for response in unauthenticated {

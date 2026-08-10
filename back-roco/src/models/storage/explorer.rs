@@ -23,7 +23,8 @@ use validator::{Validate, ValidationErrors};
 
 use super::config::{normalize_path, strip_prefix, StorageConfig};
 use super::{
-    explorer_for, BucketObject, ListOptions, StorageError, StorageExplorer, MAX_LIST_LIMIT,
+    explorer_for, BucketObject, ListOptions, ObjectReader, StorageError, StorageExplorer,
+    MAX_LIST_LIMIT,
 };
 use crate::models::_entities::{backups, storage_destinations};
 use crate::models::backup_storage;
@@ -59,6 +60,69 @@ pub fn open(
     let explorer = explorer_for(&config, provider, default_base_path)?;
 
     Ok((config, explorer))
+}
+
+/// Envia o arquivo do backup para o destino (fecha a pendência **7.2**).
+///
+/// Um destino local não faz nada: o dump já foi gravado lá, e um `put_file`
+/// copiaria o arquivo sobre si mesmo. É a mesma saída antecipada do
+/// `uploadBackupFile`.
+///
+/// A chave é o `file_path` relativo do backup — o prefixo do destino é aplicado
+/// pelo próprio adapter, e aplicá-lo aqui o duplicaria.
+pub async fn upload_backup(
+    destination: &Model,
+    encryption: &EncryptionService,
+    default_base_path: &str,
+    relative_path: &str,
+    local_full_path: &Path,
+) -> Result<(), StorageError> {
+    if matches!(destination.storage_type(), Ok(StorageType::Local)) {
+        return Ok(());
+    }
+
+    let (_, adapter) = open(destination, encryption, default_base_path)?;
+    adapter.put_file(relative_path, local_full_path).await
+}
+
+/// Abre o arquivo do backup no destino (fecha a pendência **7.6**).
+///
+/// O `stat` vem **antes** da leitura, e o seu erro derruba a chamada. Não é só
+/// pelo `Content-Length`: o leitor do `opendal` é preguiçoso, então um objeto
+/// ausente só falharia no meio do stream — e aí a resposta já teria saído com
+/// status 200. O cliente receberia um dump truncado sem nenhum sinal de que
+/// algo deu errado, que é a pior forma de falhar num backup.
+pub async fn open_backup(
+    destination: &Model,
+    encryption: &EncryptionService,
+    default_base_path: &str,
+    relative_path: &str,
+) -> Result<(ObjectReader, i64), StorageError> {
+    let (_, adapter) = open(destination, encryption, default_base_path)?;
+    let metadata = adapter.object_metadata(relative_path).await?;
+
+    Ok((adapter.read_object(relative_path).await?, metadata.size))
+}
+
+/// Remove o objeto do backup no destino (fecha a pendência **7.9**).
+pub async fn remove_backup(
+    destination: &Model,
+    encryption: &EncryptionService,
+    default_base_path: &str,
+    relative_path: &str,
+) -> Result<(), StorageError> {
+    if matches!(destination.storage_type(), Ok(StorageType::Local)) {
+        return Ok(());
+    }
+
+    let (_, adapter) = open(destination, encryption, default_base_path)?;
+
+    match adapter.delete_object(relative_path, false).await {
+        // Objeto já ausente não é falha: o `DELETE` quer o arquivo fora, e ele
+        // está. É o `ignoreNotFound` / `deleteIfExists` dos SDKs do Adonis.
+        Err(StorageError::NotFound(_)) | Ok(()) => Ok(()),
+        Err(other) => Err(other),
+    }
 }
 
 /// Onde mais o mesmo arquivo existe.
@@ -336,6 +400,79 @@ impl Validate for DeleteObjectParams {
 mod tests {
     use super::*;
     use crate::models::storage::config::{LocalConfig, S3Config};
+
+    fn encryption() -> EncryptionService {
+        EncryptionService::from_hex_key(&"a".repeat(64)).expect("chave de teste")
+    }
+
+    fn destination(storage_type: &str) -> Model {
+        Model {
+            id: 5,
+            name: "Destino".to_string(),
+            r#type: storage_type.to_string(),
+            status: "active".to_string(),
+            is_default: false,
+            config_encrypted: String::new(),
+            created_at: chrono::NaiveDateTime::parse_from_str(
+                "2026-08-09 12:00:00",
+                "%Y-%m-%d %H:%M:%S",
+            )
+            .expect("data de teste"),
+            updated_at: chrono::NaiveDateTime::parse_from_str(
+                "2026-08-09 12:00:00",
+                "%Y-%m-%d %H:%M:%S",
+            )
+            .expect("data de teste"),
+            provider: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn uploading_to_a_local_destination_does_nothing() {
+        // O dump ja' foi gravado la'; um `put_file` copiaria o arquivo sobre si
+        // mesmo. A saida antecipada acontece **antes** de decifrar a config, e
+        // e' por isso que o `config_encrypted` vazio nao derruba a chamada.
+        let outcome = upload_backup(
+            &destination("local"),
+            &encryption(),
+            "/storage/backups",
+            "12/vendas.sql.gz",
+            std::path::Path::new("/storage/backups/12/vendas.sql.gz"),
+        )
+        .await;
+
+        assert!(outcome.is_ok());
+    }
+
+    #[tokio::test]
+    async fn removing_from_a_local_destination_does_nothing() {
+        // A copia local sai pelo `backup_storage`; passar por aqui a apagaria
+        // duas vezes, e a segunda falharia com "nao encontrado".
+        let outcome = remove_backup(
+            &destination("local"),
+            &encryption(),
+            "/storage/backups",
+            "12/vendas.sql.gz",
+        )
+        .await;
+
+        assert!(outcome.is_ok());
+    }
+
+    #[tokio::test]
+    async fn a_destination_with_an_unreadable_config_is_an_invalid_config() {
+        // Config vazia num destino remoto: o erro e' de configuracao, e nao um
+        // panic nem um "arquivo nao encontrado" que culparia o backup.
+        let outcome = remove_backup(
+            &destination("s3"),
+            &encryption(),
+            "/storage/backups",
+            "12/vendas.sql.gz",
+        )
+        .await;
+
+        assert!(matches!(outcome, Err(StorageError::InvalidConfig)));
+    }
 
     #[test]
     fn a_local_destination_keeps_the_key_as_the_backup_path() {

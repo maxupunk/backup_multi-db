@@ -5,15 +5,18 @@
 //! `backup-retention`) dependem do cliente Docker da Fase 9 e da politica de
 //! retencao da Fase 11, e entram junto com elas.
 //!
-//! O bloco `storageSpaces` de `GET /api/stats` sai **vazio** ate' a Fase 8
-//! ligar o servico de espaco. A alternativa seria omitir a chave, e ai' o
-//! painel do frontend quebraria ao iterar sobre `undefined`.
+//! O bloco `storageSpaces` de `GET /api/stats` foi ligado na **tarefa 8.13**;
+//! ele lista o disco local padrao e os destinos ativos, com os remotos entrando
+//! como `spaceAvailable: false`.
 
 use axum::response::{IntoResponse, Response};
 use loco_rs::prelude::*;
 
 use crate::controllers::middlewares::auth::Authenticated;
+use crate::initializers::settings::Settings;
 use crate::models::_entities::{backups, connections};
+use crate::models::backup_runner;
+use crate::models::storage::space;
 use crate::models::system_monitor;
 use crate::views::envelope::Data;
 use crate::views::errors::ApiError;
@@ -41,6 +44,11 @@ pub async fn stats(State(ctx): State<AppContext>, _session: Authenticated) -> Re
     let recent = backups::Model::recent_with_connection(&ctx.db, RECENT_BACKUPS).await?;
     let overview = system_monitor::SystemOverview::collect().await;
 
+    let settings = Settings::from_json(ctx.config.settings.as_ref())?;
+    let encryption = backup_runner::encryption_service(&settings)?;
+    let storage_spaces =
+        space::all_destinations_space(&ctx.db, &encryption, &settings.backup_storage_path).await?;
+
     Ok(axum::Json(Data::new(view::Stats {
         connections: view::ConnectionCounts {
             total: connections_total,
@@ -54,7 +62,10 @@ pub async fn stats(State(ctx): State<AppContext>, _session: Authenticated) -> Re
             .into_iter()
             .map(|(backup, name)| view::RecentBackup::new(backup, name))
             .collect(),
-        storage_spaces: Vec::new(),
+        storage_spaces: storage_spaces
+            .into_iter()
+            .map(crate::views::storages::SpaceItem::from)
+            .collect(),
         system: view::SystemOverview::from(overview),
     }))
     .into_response())

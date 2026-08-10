@@ -27,6 +27,7 @@ use loco_rs::prelude::*;
 use sea_orm::ActiveValue::Set;
 
 use crate::initializers::settings::Settings;
+use crate::models::_entities::storage_destinations;
 use crate::models::_entities::{backups, connection_databases, connections};
 use crate::models::backups::{BackupTrigger, RetentionType};
 use crate::models::database_driver::{self, DatabaseTarget};
@@ -34,6 +35,7 @@ use crate::models::dump::{self, DumpError};
 use crate::models::encryption::EncryptionService;
 use crate::models::progress::{BackupProgressEmitter, ProgressHub, RestoreProgressEmitter};
 use crate::models::restore::{self, LineFilter, RestoreError, RestoreOptions};
+use crate::models::storage;
 use crate::models::{backup_storage, backups::Model as Backup};
 
 /// O que um backup precisa saber antes de comecar.
@@ -100,7 +102,7 @@ pub async fn run_backup(ctx: &AppContext, request: BackupRequest<'_>) -> Result<
     );
     emitter.started();
 
-    let outcome = perform_dump(
+    let mut outcome = perform_dump(
         request.connection,
         &encryption,
         &request.database_name,
@@ -109,6 +111,21 @@ pub async fn run_backup(ctx: &AppContext, request: BackupRequest<'_>) -> Result<
         &mut emitter,
     )
     .await;
+
+    // Tarefa 7.2: o dump é gravado localmente e **depois** enviado ao destino.
+    // Uma falha no envio reprova o backup inteiro, como no Adonis — marcar
+    // sucesso com o arquivo só em disco faria a interface prometer uma cópia
+    // remota que não existe.
+    let upload_error = match (&outcome, destination.as_ref()) {
+        (Ok(dump), Some(destination)) => upload_dump(destination, &encryption, &settings, dump)
+            .await
+            .err(),
+        _ => None,
+    };
+
+    if let Some(message) = upload_error {
+        outcome = Err(message);
+    }
 
     let finished_at = chrono::Utc::now().naive_utc();
     let backup = finish_record(ctx, backup, started_at, finished_at, &outcome).await?;
@@ -121,18 +138,60 @@ pub async fn run_backup(ctx: &AppContext, request: BackupRequest<'_>) -> Result<
         Err(message) => emitter.failed(message),
     }
 
-    // Um destino remoto ainda nao recebe o arquivo: os adaptadores sao a Fase 8.
-    // O aviso e' explicito para que "o backup foi para o S3" nunca seja uma
-    // suposicao de quem le' o log.
-    if outcome.is_ok() && backup_storage::is_remote(destination.as_ref()) {
-        tracing::warn!(
-            backup_id = backup.id,
-            destination_id = destination.as_ref().map(|row| row.id),
-            "backup gravado apenas localmente: o envio para destinos remotos entra na Fase 8"
-        );
+    Ok(BackupRun { backup, outcome })
+}
+
+/// Envia o dump ao destino, quando ele é remoto.
+///
+/// A cópia local **fica**, salvo pedido explícito em
+/// `backup_delete_local_after_remote_upload` — é o
+/// `BACKUP_DELETE_LOCAL_AFTER_REMOTE_UPLOAD` do Adonis, desligado por padrão.
+/// Manter as duas cópias é o que dá à listagem de objetos a marca de réplica, e
+/// o que permite restaurar sem rede.
+async fn upload_dump(
+    destination: &storage_destinations::Model,
+    encryption: &EncryptionService,
+    settings: &Settings,
+    dump: &dump::DumpOutcome,
+) -> std::result::Result<(), String> {
+    if !backup_storage::is_remote(Some(destination)) {
+        return Ok(());
     }
 
-    Ok(BackupRun { backup, outcome })
+    storage::explorer::upload_backup(
+        destination,
+        encryption,
+        &settings.backup_storage_path,
+        &dump.file_path,
+        &dump.local_full_path,
+    )
+    .await
+    .map_err(|err| {
+        format!(
+            "Falha ao enviar o backup para \"{}\": {}",
+            destination.name,
+            err.message()
+        )
+    })?;
+
+    if settings.backup_delete_local_after_remote_upload {
+        match backup_storage::delete_local_file(&dump.local_full_path).await {
+            Ok(()) => tracing::info!(
+                destination_id = destination.id,
+                file_path = dump.file_path,
+                "cópia local removida após o envio ao destino remoto"
+            ),
+            // O upload já deu certo: falhar aqui deixa um arquivo a mais no
+            // disco, e não um backup perdido. Avisar basta.
+            Err(err) => tracing::warn!(
+                destination_id = destination.id,
+                error = %err,
+                "falha ao remover a cópia local após o envio remoto"
+            ),
+        }
+    }
+
+    Ok(())
 }
 
 /// Executa o dump propriamente dito, traduzindo o erro para a mensagem gravada.
@@ -390,7 +449,7 @@ async fn restore_pipeline(
         return Err("Arquivo de backup não disponível".to_string());
     };
 
-    let source = local_source_path(ctx, settings, encryption, backup, file_path).await?;
+    let source = restore_source(ctx, settings, encryption, backup, file_path).await?;
     let kind = connection
         .database_type()
         .map_err(|err| format!("tipo de banco desconhecido: {err}"))?;
@@ -401,18 +460,30 @@ async fn restore_pipeline(
     // numero conhecido de antemao.
     let total = backup.file_size.unwrap_or(0).max(0) as u64;
     let (progress_tx, mut progress_rx) = tokio::sync::mpsc::unbounded_channel::<u64>();
+    let compressed = backup.compressed.unwrap_or(false);
+    let on_progress = move |read| {
+        let _ = progress_tx.send(read);
+    };
 
-    let run = restore::execute(
-        &command,
-        &source,
-        backup.compressed.unwrap_or(false),
-        filter,
-        move |read| {
-            let _ = progress_tx.send(read);
-        },
-    );
+    // As duas origens produzem futuros de tipos diferentes; o `Box::pin` as
+    // unifica para que o laco de progresso abaixo seja um so'.
+    type Run<'a> = std::pin::Pin<
+        Box<
+            dyn std::future::Future<
+                    Output = std::result::Result<restore::RestoreOutcome, RestoreError>,
+                > + Send
+                + 'a,
+        >,
+    >;
 
-    tokio::pin!(run);
+    let mut run: Run = match source {
+        RestoreSource::Local(path) => Box::pin(async move {
+            restore::execute(&command, &path, compressed, filter, on_progress).await
+        }),
+        RestoreSource::Remote(reader) => Box::pin(async move {
+            restore::execute_from_reader(&command, reader, compressed, filter, on_progress).await
+        }),
+    };
 
     let outcome = loop {
         tokio::select! {
@@ -478,18 +549,27 @@ async fn run_safety_backup(
     }
 }
 
-/// Caminho local do arquivo do backup, recusando o que nao esta' no disco.
+/// De onde a restauração vai ler o dump.
+pub enum RestoreSource {
+    /// O arquivo está no disco desta máquina.
+    Local(PathBuf),
+    /// O arquivo está num destino remoto e chega por streaming.
+    Remote(storage::ObjectReader),
+}
+
+/// Resolve a origem do dump, preferindo o disco.
 ///
-/// Baixar de um destino remoto e' a Fase 8. A mensagem diz exatamente isso em
-/// vez de "arquivo não encontrado": um operador que ve' o backup listado com
-/// destino S3 precisa saber que a limitacao e' do porte, nao do arquivo dele.
-async fn local_source_path(
+/// A cópia local vem primeiro mesmo num destino remoto: ela existe na maioria
+/// dos casos (o envio não apaga o original), e ler do disco poupa baixar o dump
+/// inteiro pela rede. Só quando ela não está lá é que o objeto remoto é aberto
+/// — em streaming, sem arquivo temporário (tarefa 7.6).
+async fn restore_source(
     ctx: &AppContext,
     settings: &Settings,
     encryption: &EncryptionService,
     backup: &backups::Model,
     file_path: &str,
-) -> std::result::Result<PathBuf, String> {
+) -> std::result::Result<RestoreSource, String> {
     let destination =
         backup_storage::resolve_destination_for_backup(&ctx.db, backup.storage_destination_id)
             .await
@@ -506,17 +586,29 @@ async fn local_source_path(
     };
 
     if tokio::fs::metadata(&path).await.is_ok() {
-        return Ok(path);
+        return Ok(RestoreSource::Local(path));
     }
 
-    if backup_storage::is_remote(destination.as_ref()) {
-        return Err(
-            "O arquivo está em um destino remoto; o download de storages remotos entra na Fase 8"
-                .to_string(),
-        );
-    }
+    let Some(destination) = destination.filter(|row| backup_storage::is_remote(Some(row))) else {
+        return Err("Arquivo de backup não encontrado no servidor".to_string());
+    };
 
-    Err("Arquivo de backup não encontrado no servidor".to_string())
+    let (reader, _) = storage::explorer::open_backup(
+        &destination,
+        encryption,
+        &settings.backup_storage_path,
+        file_path,
+    )
+    .await
+    .map_err(|err| {
+        format!(
+            "Falha ao ler o backup em \"{}\": {}",
+            destination.name,
+            err.message()
+        )
+    })?;
+
+    Ok(RestoreSource::Remote(reader))
 }
 
 /// Servico de criptografia da aplicacao.

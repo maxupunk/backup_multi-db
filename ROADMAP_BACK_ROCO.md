@@ -62,14 +62,14 @@ Estado: **Fases 0 a 7 concluídas.**
 
 | Área | Estado |
 |---|---|
-| Endpoints sob `/api` | **44 de 87** pares método+rota (`cargo loco routes`) |
+| Endpoints sob `/api` | **46 de 87** pares método+rota (`cargo loco routes`) |
 | Controllers | `auth`, `users`, `audit_logs`, `system` (parcial), `connections`, `backups` |
 | Models | 9 entidades geradas + lógica de domínio, criptografia, senha, token, driver de banco, dump, restore, import, progresso |
 | Migrations | 4, cobrindo as 9 tabelas · diff estrutural vazio contra o schema do Adonis |
 | Workers | `downloader` (scaffold), `restore` |
-| Testes | **413** no `--lib` + 144 de integração, 0 falhas, 4 ignorados (2 de dados de produção, 2 de servidor real) |
+| Testes | **429** no `--lib` + 148 de integração, 0 falhas, 4 ignorados (2 de dados de produção, 2 de servidor real) |
 
-**Cobertura de paridade hoje: 51%** dos pares método+rota. O que falta: os jobs de storage (Fase 8), Docker
+**Cobertura de paridade hoje: 53%** dos pares método+rota. O que falta: os jobs de storage (Fase 8), Docker
 (Fase 9), SSE e scheduler (Fase 10), sistema avançado e retenção (Fase 11).
 
 ---
@@ -798,7 +798,7 @@ torna estável.
 
 ### O que ficou de fora, e por quê
 
-- **`storageSpaces` de `GET /api/stats` sai vazio** até a Fase 8 ligar o `StorageSpaceService`.
+- ~~**`storageSpaces` de `GET /api/stats` sai vazio**~~ — ligado na tarefa **8.13**.
   Sai como `[]`, e não omitido: o painel itera sobre ele.
 - **`jobs.status` responde `down`** até o scheduler da Fase 10. É a verdade; um `ok` otimista
   esconderia do painel que o agendador não existe.
@@ -922,11 +922,11 @@ dump — **Fase 7**.~~ ✅ **Feita na Fase 7**, no `controllers/connections.rs`,
 - [x] 7.2 — ✅ **Pipeline de dump** em `src/models/dump.rs`. `tokio::process::Command`, `stdout → sha256 → gzip → arquivo` num `tokio::io::copy`, sem bufferizar.
 - [x] 7.3 — ✅ SHA-256 em streaming, **antes** do gzip, via o adaptador `HashingWriter`.
 - [x] 7.4 — ✅ `src/models/process_output.rs`, teto de 256 KB com sufixo de truncamento. O porte de `child_process_exit` **não** era necessário — ver abaixo.
-- [x] 7.5 — ✅ `GET /:id/download` com `ReaderStream`, `Content-Disposition: attachment` e `Content-Length`. Storage remoto fica para a Fase 8.
+- [x] 7.5 — ✅ `GET /:id/download` com `ReaderStream`, `Content-Disposition: attachment` e `Content-Length`. **Storage remoto fechado na Fase 8**, com fallback do disco para o objeto.
 - [x] 7.6 — ✅ **Restore** em `src/models/restore.rs`, com os filtros trabalhando em **bytes**. Os casos de `restore_filters.spec.ts` foram portados.
 - [x] 7.7 — ✅ **Import** em `src/models/backup_import.rs` + o handler multipart: extensão, magic bytes, integridade opcional, checksum e gravação com sufixo `.part`.
 - [x] 7.8 — ✅ `src/models/progress.rs` — `ProgressHub` sobre `tokio::sync::broadcast`, com os dois emissores e o estrangulamento de 500 ms. A Fase 10 troca o assinante, não os emissores.
-- [~] 7.9 — Remoção **local** feita; a do objeto no storage remoto depende dos adaptadores da Fase 8. O `DELETE` emite aviso explícito em vez de silenciar — ver abaixo.
+- [x] 7.9 — ✅ Remoção local **e** do objeto no destino remoto. Nenhuma das duas falhas derruba o `DELETE` — ver abaixo.
 - [x] 7.10 — ✅ `Backup::can_be_deleted()` bloqueia `protected` **e** backup em andamento, com teste para os dois.
 - [x] 7.11 — ✅ `backup.started/completed/failed/deleted/downloaded/imported`, todos com IP e agente da requisição.
 - [x] 7.12 — ✅ **32 testes de request** em `tests/requests/backups.rs`, mais os unitários de `dump`, `restore`, `backup_import`, `progress`, `process_output`, `backup_storage` e das views.
@@ -1063,7 +1063,7 @@ restauração que falhou faria a fila tentar de novo e restaurar o banco duas ve
 - [x] 8.10 — ✅ `DELETE /:id/object`, com a raiz recusada antes de qualquer chamada ao provedor.
 - [ ] 8.11 — **Copy job** assíncrono (`bucket_copy_service`, 455 LOC) — job em background + endpoint de status.
 - [ ] 8.12 — **Archive job** (`bucket_archive_service`, 395 LOC) — streaming de tar/zip, endpoint de status e download.
-- [ ] 8.13 — `storage_space_service` — cálculo de espaço por destino e agregado.
+- [x] 8.13 — ✅ `src/models/storage/space.rs`, as duas rotas de espaço e o `storageSpaces` de `GET /api/stats`.
 - [ ] 8.14 — Retenção de jobs (porta de `storage_job_retention`).
 - [x] 8.15 — ✅ Resolvida **por construção**, e não por cache — ver abaixo.
 - [ ] 8.16 — Testes Rust + contrato contra MinIO e SFTP do compose.
@@ -1071,7 +1071,7 @@ restauração que falhou faria a fila tentar de novo e restaurar o banco duas ve
 **Pronto quando:** lote 2.5 passa para local, S3/MinIO e SFTP. GCS e Azure podem ficar
 com teste de integração opcional se não houver credencial em CI — **registrar a lacuna**.
 
-### Estado: 11 de 16 tarefas
+### Estado: 12 de 16 tarefas
 
 Os **adapters (8.1–8.6)** e as **rotas de CRUD e exploração (8.7–8.10, 8.15)** estão prontos e
 verdes: **413 testes** no `--lib` e **144** de integração — 26 deles novos, cobrindo os dois
@@ -1221,6 +1221,41 @@ do mesmo backup — não estão no bucket; estão em `backups.file_path`. A busc
 por caminho (`12/a.gz` e `12\a.gz`), porque o migrador gravou separador do Windows nas linhas
 criadas lá e a comparação do SQLite é literal.
 
+### Achados do espaço e das pendências da Fase 7
+
+**Um defeito sério no `force_json`, achado ao fechar a 7.6.** O middleware reescrevia **toda**
+resposta não-JSON de `/api`, e a condição de saída antecipada só olhava para o `content-type`
+*vazio*. Resultado: `GET /api/backups/:id/download` — que responde `application/octet-stream` —
+tinha o corpo trocado por `{"success":false,"message":"Erro ao processar a requisição"}` **com
+status 200**. O cliente recebia a mensagem no lugar do dump e não tinha como saber que falhou.
+
+Os testes existentes do download só cobriam os caminhos de **404**, que passam pela reescrita sem
+mudar de resultado; foi preciso um teste do caminho feliz para o defeito aparecer. A regra agora é a
+que a documentação do módulo já dizia: só erro é traduzido. Vale como lição de cobertura — três
+testes de download, nenhum deles baixando um arquivo de verdade.
+
+**O leitor do `opendal` é preguiçoso, e isso muda o status da resposta.** `read_object` devolve `Ok`
+sem falar com o provedor; um objeto ausente só falharia no meio do stream, com a resposta já enviada
+como 200. O `stat` passou a vir **antes** da leitura e o seu erro derruba a chamada — o cliente
+recebe 404 em vez de um dump truncado sem aviso. O SDK do Adonis falha cedo por construção
+(`GetObjectCommand` aguarda a resposta), então isto é diferença de biblioteca, não de contrato.
+
+**`statfs` não tem equivalente portável, e a troca não é neutra.** O Node lê `bfree` — blocos
+livres, **incluindo** os reservados ao root. O `sysinfo` expõe o equivalente a `bavail`, que os
+exclui. Num ext4 com os 5% de reserva padrão, o back-roco reporta *menos* espaço livre que o Adonis
+e dispara o alerta de espaço baixo **antes**. É o lado seguro de errar, e está registrado em vez de
+escondido.
+
+**O `canonicalize` do Windows quebra a comparação de ponto de montagem.** Ele devolve
+`\\?\C:\storage`, o `sysinfo` reporta `C:\`, e o `starts_with` compara componente a componente —
+nenhum disco casa, e `spaceAvailable` some da resposta na plataforma inteira. Um teste de unidade
+sobre `tempdir` pegou antes do teste de request.
+
+**Enviar o dump falha o backup; remover o objeto remoto, não.** Assimetria deliberada, e a mesma do
+Adonis: um upload que falha significa que a cópia remota **não existe**, e marcar sucesso faria a
+interface prometer o que não tem. Já uma remoção que falha deixa um objeto órfão — chato, mas
+recuperável —, enquanto abortar o `DELETE` deixaria um backup inacessível listado para sempre.
+
 ---
 
 ## Fase 9 — Docker Manager e Diagnostics
@@ -1313,8 +1348,8 @@ frontend atual consome o stream do `back-roco` sem alteração.
 | 4 | Schema e migrations | 1 semana | 🟡 | ✅ concluída |
 | 5 | Auth/Users/Audit/System | 1–2 semanas | 🟢 | ✅ concluída |
 | 6 | Connections + drivers | 2–3 semanas | 🟡 | ✅ concluída |
-| 7 | Backups/dump/restore | 3–4 semanas | 🔴 | ✅ concluída (7.9 parcial → Fase 8) |
-| 8 | Storages multi-provider | 3–4 semanas | 🔴 | 🟡 em andamento (11/16) |
+| 7 | Backups/dump/restore | 3–4 semanas | 🔴 | ✅ concluída (7.2/7.6/7.9 fechadas na Fase 8) |
+| 8 | Storages multi-provider | 3–4 semanas | 🔴 | 🟡 em andamento (12/16) |
 | 9 | Docker Manager | 2–3 semanas | 🔴 | ⬜ pode entrar em paralelo |
 | 10 | SSE/scheduler/workers | 2 semanas | 🟡 | ⬜ pode entrar em paralelo |
 | 11 | System avançado | 1–2 semanas | 🟡 | ⬜ depende de 9 e 10 |
@@ -1325,15 +1360,14 @@ frontend atual consome o stream do `back-roco` sem alteração.
 
 ### O que a Fase 8 herda
 
-Quatro pendências fecham quando os adaptadores de storage existirem. Nenhuma delas é surpresa: as
-três da Fase 7 avisam em tempo de execução, e a da Fase 5 já estava registrada lá.
+Quatro pendências esperavam os adaptadores de storage. **As quatro fecharam.**
 
-| Herdada de | O quê | Onde está sinalizado |
+| Herdada de | O quê | Estado |
 |---|---|---|
-| 7.9 | Remover o objeto no destino remoto ao apagar um backup | `tracing::warn!` no `DELETE /api/backups/:id` |
-| 7.2 | Enviar o dump para o destino remoto depois de gravá-lo | `tracing::warn!` ao fim de `run_backup` |
-| 7.6 | Baixar o arquivo de um destino remoto para restaurar | mensagem de erro nomeando a Fase 8 |
-| 5.x | `storageSpaces` de `GET /api/stats` sai como `[]` | registrado na Fase 5 |
+| 7.9 | Remover o objeto no destino remoto ao apagar um backup | ✅ `explorer::remove_backup`; falha vira aviso, e não 500 |
+| 7.2 | Enviar o dump para o destino remoto depois de gravá-lo | ✅ `explorer::upload_backup`; falha **reprova** o backup |
+| 7.6 | Ler o arquivo de um destino remoto (restaurar e baixar) | ✅ `explorer::open_backup`, em streaming e sem arquivo temporário |
+| 5.x | `storageSpaces` de `GET /api/stats` sai como `[]` | ✅ ligado na 8.13 |
 
 ---
 
@@ -1348,7 +1382,7 @@ Legenda: **T** = teste de contrato escrito (Fase 2) · **P** = portado no `back-
 | | Pares método+rota | % |
 |---|---:|---:|
 | **T** — teste de contrato escrito | 87 / 87 | 100% |
-| **P** — portado (42 ✅ + 2 🟡) | 44 / 87 | 51% |
+| **P** — portado (44 ✅ + 2 🟡) | 46 / 87 | 53% |
 | **V** — verde contra o Roco | 0 / 87 | 0% |
 
 A coluna **V** só começa a mudar na **12.1**: rodar a suíte de contrato contra o `back-roco` exige
@@ -1402,8 +1436,8 @@ contrato.
 | 21 | GET | `/api/storage-destinations/:id` | StorageDestinations.show | global | ✅ | ✅ | ⬜ |
 | 22 | PUT/PATCH | `/api/storage-destinations/:id` | StorageDestinations.update | global | ✅ | ✅ | ⬜ |
 | 23 | DELETE | `/api/storage-destinations/:id` | StorageDestinations.destroy | global | ✅ | ✅ | ⬜ |
-| 24 | GET | `/api/storage-destinations-space` | StorageDestinations.spaceAll | global | ✅ | ⬜ | ⬜ |
-| 25 | GET | `/api/storage-destinations/:id/space` | StorageDestinations.space | global | ✅ | ⬜ | ⬜ |
+| 24 | GET | `/api/storage-destinations-space` | StorageDestinations.spaceAll | global | ✅ | ✅ | ⬜ |
+| 25 | GET | `/api/storage-destinations/:id/space` | StorageDestinations.space | global | ✅ | ✅ | ⬜ |
 
 ### Storages
 

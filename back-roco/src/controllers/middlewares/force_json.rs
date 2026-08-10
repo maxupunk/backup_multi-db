@@ -55,8 +55,12 @@ fn ensure_json(response: Response) -> Response {
 
     let status = response.status();
 
-    // Corpo vazio com content-type ausente e' o 204/304 normal — nada a fazer.
-    if content_type.is_empty() && !status.is_client_error() && !status.is_server_error() {
+    // **So' erro e' traduzido.** Uma resposta de sucesso que nao e' JSON e' um
+    // download — `GET /api/backups/:id/download` responde
+    // `application/octet-stream` —, e reescreve-la entregaria um JSON de erro no
+    // lugar do dump, com status 200. A condicao anterior olhava so' para o
+    // content-type vazio e deixava esse caso passar batido.
+    if !status.is_client_error() && !status.is_server_error() {
         return response;
     }
 
@@ -157,6 +161,39 @@ mod tests {
         let result = ensure_json(original);
         assert_eq!(result.status(), StatusCode::NO_CONTENT);
         assert!(body_string(result).await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn never_rewrites_a_successful_download() {
+        // O caso que a condicao antiga deixava passar: `GET
+        // /api/backups/:id/download` responde `application/octet-stream` com
+        // 200, e a reescrita entregava um JSON de erro no lugar do dump — com
+        // status 200, de modo que nem o cliente percebia.
+        let original = text_response(
+            StatusCode::OK,
+            "application/octet-stream",
+            "\u{1f}\u{8b}bytes do dump",
+        );
+
+        let result = ensure_json(original);
+
+        assert_eq!(
+            result.headers().get(header::CONTENT_TYPE).unwrap(),
+            "application/octet-stream"
+        );
+        assert_eq!(body_string(result).await, "\u{1f}\u{8b}bytes do dump");
+    }
+
+    #[tokio::test]
+    async fn still_rewrites_a_non_json_error() {
+        let result = ensure_json(text_response(
+            StatusCode::BAD_GATEWAY,
+            "text/plain",
+            "upstream caiu",
+        ));
+
+        assert_eq!(result.status(), StatusCode::BAD_GATEWAY);
+        assert!(body_string(result).await.contains(r#""success":false"#));
     }
 
     #[tokio::test]

@@ -22,6 +22,7 @@ use serde_json::Value;
 
 use crate::models::_entities::storage_destinations::Model;
 use crate::models::storage::explorer::Replica;
+use crate::models::storage::space::SpaceInfo;
 use crate::models::storage::{BucketObject, ListPage};
 use crate::views::timestamp;
 
@@ -216,6 +217,45 @@ impl BrowseResult {
     }
 }
 
+/// Espaço de um destino, no shape do golden `storage-destinations/space-all`.
+///
+/// `type` sai como texto cru da coluna, e não como enum: o campo alimenta a
+/// legenda da barra de uso, e uma linha com `type` desconhecido continua sendo
+/// exibida em vez de sumir da lista.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SpaceItem {
+    pub destination_id: Option<i64>,
+    pub destination_name: String,
+    pub r#type: String,
+    pub space_available: bool,
+    pub total_bytes: u64,
+    pub used_bytes: u64,
+    pub free_bytes: u64,
+    pub used_percent: f64,
+    pub free_percent: f64,
+    pub is_low_space: bool,
+    pub low_space_threshold: f64,
+}
+
+impl From<SpaceInfo> for SpaceItem {
+    fn from(info: SpaceInfo) -> Self {
+        Self {
+            destination_id: info.destination_id,
+            destination_name: info.destination_name,
+            r#type: info.storage_type,
+            space_available: info.space_available,
+            total_bytes: info.total_bytes,
+            used_bytes: info.used_bytes,
+            free_bytes: info.free_bytes,
+            used_percent: info.used_percent,
+            free_percent: info.free_percent,
+            is_low_space: info.is_low_space,
+            low_space_threshold: info.low_space_threshold,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -333,6 +373,42 @@ mod tests {
 
         assert!(json["size"].is_null());
         assert_eq!(json["isDirectory"], true);
+    }
+
+    #[test]
+    fn the_space_item_has_exactly_the_eleven_golden_fields() {
+        let json = serde_json::to_value(SpaceItem::from(SpaceInfo {
+            destination_id: Some(3),
+            destination_name: "Local".to_string(),
+            storage_type: "local".to_string(),
+            space_available: true,
+            total_bytes: 1000,
+            used_bytes: 400,
+            free_bytes: 600,
+            used_percent: 40.0,
+            free_percent: 60.0,
+            is_low_space: false,
+            low_space_threshold: 10.0,
+        }))
+        .expect("serializa");
+
+        let object = json.as_object().expect("objeto");
+        for key in [
+            "destinationId",
+            "destinationName",
+            "type",
+            "spaceAvailable",
+            "totalBytes",
+            "usedBytes",
+            "freeBytes",
+            "usedPercent",
+            "freePercent",
+            "isLowSpace",
+            "lowSpaceThreshold",
+        ] {
+            assert!(object.contains_key(key), "faltou `{key}`");
+        }
+        assert_eq!(object.len(), 11, "chave a mais ou a menos no espaco");
     }
 
     #[test]

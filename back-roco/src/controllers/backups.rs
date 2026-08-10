@@ -38,6 +38,7 @@ use crate::models::backup_storage;
 use crate::models::backups::{BackupStatus, ListQuery, Model as Backup};
 use crate::models::progress;
 use crate::models::restore::RestoreOptions;
+use crate::models::storage;
 use crate::views::backups as view;
 use crate::views::envelope::{Data, Message, MessageWithData};
 use crate::views::errors::ApiError;
@@ -150,15 +151,7 @@ pub async fn download(
         return Err(ApiError::not_found("Arquivo de backup não disponível"));
     };
 
-    let path = resolve_local_path(&ctx, &backup, file_path).await?;
-
-    let file = tokio::fs::File::open(&path).await.map_err(|_| {
-        // O 404 nao expoe o caminho absoluto: ele revela a arvore de diretorios
-        // do servidor sem ajudar em nada quem consome a API.
-        ApiError::not_found("Arquivo de backup não encontrado no servidor")
-    })?;
-
-    let content_length = file.metadata().await.ok().map(|meta| meta.len());
+    let (body, content_length) = open_for_download(&ctx, &backup, file_path).await?;
 
     audit(
         &ctx,
@@ -171,8 +164,7 @@ pub async fn download(
     )
     .await;
 
-    let stream = tokio_util::io::ReaderStream::new(file);
-    let mut response = Body::from_stream(stream).into_response();
+    let mut response = body.into_response();
 
     let headers = response.headers_mut();
     headers.insert(
@@ -718,12 +710,65 @@ async fn resolve_local_path(
         .ok_or_else(|| ApiError::not_found("Arquivo de backup não encontrado no servidor"))
 }
 
-/// Remove a copia local, avisando quando o objeto remoto fica para tras.
+/// Abre o arquivo do backup para download, no disco ou no destino remoto.
 ///
-/// Nao derruba o `DELETE`: o registro precisa sair de qualquer forma, senao um
-/// arquivo ja' apagado ficaria listado para sempre. O que **nao** pode acontecer
-/// e' o silencio — dai o aviso explicito sobre o remoto (tarefa 7.9, que so'
-/// fecha com os adaptadores da Fase 8).
+/// A cópia local vem primeiro: ela existe na maioria dos casos, e servi-la
+/// poupa baixar o dump inteiro do provedor só para reenviá-lo ao cliente. O
+/// caminho remoto (tarefa 7.6) é o fallback, em streaming — o arquivo nunca é
+/// materializado nem em disco nem em memória.
+async fn open_for_download(
+    ctx: &AppContext,
+    backup: &backups::Model,
+    file_path: &str,
+) -> std::result::Result<(Body, Option<u64>), ApiError> {
+    if let Ok(path) = resolve_local_path(ctx, backup, file_path).await {
+        if let Ok(file) = tokio::fs::File::open(&path).await {
+            let length = file.metadata().await.ok().map(|meta| meta.len());
+            return Ok((
+                Body::from_stream(tokio_util::io::ReaderStream::new(file)),
+                length,
+            ));
+        }
+    }
+
+    let settings = Settings::from_json(ctx.config.settings.as_ref())?;
+    let encryption = backup_runner::encryption_service(&settings)?;
+    let destination =
+        backup_storage::resolve_destination_for_backup(&ctx.db, backup.storage_destination_id)
+            .await?
+            .filter(|row| backup_storage::is_remote(Some(row)));
+
+    // O 404 não expõe o caminho absoluto: ele revela a árvore de diretórios do
+    // servidor sem ajudar em nada quem consome a API.
+    let Some(destination) = destination else {
+        return Err(ApiError::not_found(
+            "Arquivo de backup não encontrado no servidor",
+        ));
+    };
+
+    let (reader, size) = storage::explorer::open_backup(
+        &destination,
+        &encryption,
+        &settings.backup_storage_path,
+        file_path,
+    )
+    .await
+    .map_err(|err| {
+        tracing::warn!(backup_id = backup.id, error = %err, "falha ao abrir o backup no destino remoto");
+        ApiError::not_found("Arquivo de backup não encontrado no servidor")
+    })?;
+
+    Ok((
+        Body::from_stream(tokio_util::io::ReaderStream::new(reader)),
+        u64::try_from(size).ok(),
+    ))
+}
+
+/// Remove a cópia local e o objeto no destino remoto (tarefa 7.9).
+///
+/// Nenhuma das duas falhas derruba o `DELETE`: o registro precisa sair de
+/// qualquer forma, senão um arquivo já apagado ficaria listado para sempre. O
+/// que **não** pode acontecer é o silêncio — daí o aviso em cada ramo.
 async fn remove_backup_file(ctx: &AppContext, backup: &backups::Model, file_path: &str) {
     match resolve_local_path(ctx, backup, file_path).await {
         Ok(path) => {
@@ -739,17 +784,42 @@ async fn remove_backup_file(ctx: &AppContext, backup: &backups::Model, file_path
         }
     }
 
-    if let Ok(Some(destination)) =
-        backup_storage::resolve_destination_for_backup(&ctx.db, backup.storage_destination_id).await
-    {
-        if backup_storage::is_remote(Some(&destination)) {
-            tracing::warn!(
-                backup_id = backup.id,
-                destination_id = destination.id,
-                "o objeto no destino remoto NÃO foi removido: os adaptadores entram na Fase 8"
-            );
-        }
+    if let Err(err) = remove_remote_object(ctx, backup, file_path).await {
+        tracing::warn!(
+            backup_id = backup.id,
+            error = %err,
+            "o objeto no destino remoto NÃO foi removido"
+        );
     }
+}
+
+/// Remove o objeto no destino remoto, se houver um.
+async fn remove_remote_object(
+    ctx: &AppContext,
+    backup: &backups::Model,
+    file_path: &str,
+) -> std::result::Result<(), String> {
+    let destination =
+        backup_storage::resolve_destination_for_backup(&ctx.db, backup.storage_destination_id)
+            .await
+            .map_err(|err| err.to_string())?
+            .filter(|row| backup_storage::is_remote(Some(row)));
+
+    let Some(destination) = destination else {
+        return Ok(());
+    };
+
+    let settings = Settings::from_json(ctx.config.settings.as_ref()).map_err(|e| e.to_string())?;
+    let encryption = backup_runner::encryption_service(&settings).map_err(|err| err.to_string())?;
+
+    storage::explorer::remove_backup(
+        &destination,
+        &encryption,
+        &settings.backup_storage_path,
+        file_path,
+    )
+    .await
+    .map_err(|err| err.message())
 }
 
 fn connection_label(connection: Option<&connections::Model>) -> String {
