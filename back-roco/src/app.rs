@@ -69,6 +69,7 @@ impl Hooks for App {
         // proprio ciclo de vida e a Fase 10 poder trocar a implementacao.
         crate::models::storage::copy::register(ctx);
         crate::models::storage::archive::register(ctx);
+        crate::models::docker_diagnostics::register(ctx);
 
         // O limitador `auth` (5/min por IP+e-mail) e' pendurado nas rotas de
         // `register` e `login`; os demais grupos so' levam o global, que entra
@@ -96,7 +97,7 @@ impl Hooks for App {
             .add_route(controllers::users::routes())
             .add_route(controllers::audit_logs::routes())
             .add_route(controllers::system::routes())
-            .add_route(controllers::docker::routes())
+            .add_route(controllers::docker::routes(&limiters))
     }
     async fn connect_workers(ctx: &AppContext, queue: &Queue) -> Result<()> {
         queue.register(DownloadWorker::build(ctx)).await?;

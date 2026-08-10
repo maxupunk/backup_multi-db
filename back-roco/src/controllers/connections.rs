@@ -437,13 +437,24 @@ pub async fn create_database(
 /// (a tela de nova conexao trata a ausencia, nao um erro).
 #[debug_handler]
 pub async fn docker_hosts(State(_ctx): State<AppContext>, _session: Authenticated) -> Reply {
+    let environment = crate::models::docker::environment().await;
+    let docker_available = environment["dockerAvailable"].as_bool().unwrap_or(false);
+    let hosts = if docker_available {
+        crate::models::docker::discover_database_hosts()
+            .await
+            .unwrap_or_default()
+    } else {
+        Vec::new()
+    };
     Ok(axum::Json(Data::new(view::DockerHosts {
-        docker_available: false,
-        unavailable_reason: Some(
-            "Integração com o Docker ainda não disponível neste servidor".to_string(),
-        ),
-        backend_container_id: None,
-        hosts: Vec::new(),
+        docker_available,
+        unavailable_reason: environment["unavailableReason"]
+            .as_str()
+            .map(ToString::to_string),
+        backend_container_id: environment["backendContainerId"]
+            .as_str()
+            .map(ToString::to_string),
+        hosts,
     }))
     .into_response())
 }

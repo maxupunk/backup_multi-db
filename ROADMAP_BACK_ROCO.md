@@ -1263,16 +1263,16 @@ recuperável —, enquanto abortar o `DELETE` deixaria um backup inacessível li
 **Duração estimada:** 2–3 semanas · **Depende de:** Fase 3 · **Cobre lote 2.7** · Independente das Fases 5–8
 
 - [x] 9.1 — ✅ Cliente Docker `bollard`, com socket Unix e named pipe do Windows via `connect_with_local_defaults`.
-- [ ] 9.2 — `docker_environment_service` — detecção de ambiente (dentro/fora de container, socket disponível).
+- [x] 9.2 — ✅ Detecção de ambiente (dentro/fora de container e disponibilidade do socket), sem depender do CLI Docker.
 - [x] 9.3 — ✅ `GET /api/docker/status`, com ping limitado a 3 s e degradação para `available: false`.
-- [ ] 9.4 — **Containers** (9 endpoints): list, inspect, logs com filtros, clear logs, start, stop, restart, remove.
+- [x] 9.4 — ✅ **Containers**: list, inspect, logs com filtros, clear logs, start, stop, restart e remove.
 - [ ] 9.5 — **Volumes** (5): list, inspect, export (streaming tar), backup para storage, remove.
-- [ ] 9.6 — **Networks** (5): list, inspect, create, connect, disconnect.
-- [ ] 9.7 — **Images** (4): list, inspect, remove, prune.
-- [ ] 9.8 — **Diagnostics** (2): job assíncrono + os 3 runners (ping, curl, port-scan).
-- [ ] 9.9 — `docker_container_discovery_service` — alimenta `GET /api/connections/docker-hosts` (fecha a pendência 6.7).
+- [x] 9.6 — ✅ **Networks**: list, inspect, create, connect e disconnect.
+- [x] 9.7 — ✅ **Images**: list, inspect, remove e prune.
+- [x] 9.8 — ✅ **Diagnostics**: job assíncrono + runners ping, curl e port-scan.
+- [x] 9.9 — ✅ Descoberta de containers de banco alimenta `GET /api/connections/docker-hosts` (fecha a pendência 6.7).
 - [ ] 9.10 — `docker_container_monitoring_service` (757 LOC) — coleta de stats, alimenta a Fase 11.
-- [ ] 9.11 — `container_memory_probe` — leitura de cgroup v1/v2.
+- [x] 9.11 — ✅ `container_memory_probe` — leitura de cgroup v1/v2 com fallback seguro para o host.
 - [ ] 9.12 — Testes Rust + contrato (usar containers descartáveis criados pelo próprio teste).
 
 **Pronto quando:** lote 2.7 passa com Docker disponível **e** com Docker indisponível (degradação idêntica).

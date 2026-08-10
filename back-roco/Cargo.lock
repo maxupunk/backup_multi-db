@@ -617,6 +617,7 @@ dependencies = [
  "bollard",
  "chrono",
  "crc32fast",
+ "futures-util",
  "getrandom 0.3.4",
  "hex",
  "include_dir",

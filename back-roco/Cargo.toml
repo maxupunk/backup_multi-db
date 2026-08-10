@@ -92,6 +92,7 @@ russh-sftp = "2.4"
 # Fase 9: cliente oficial de fato para a API do Docker, com transporte local
 # por socket Unix e named pipe do Windows. O Loco não encapsula a Engine API.
 bollard = { version = "0.18.1", default-features = false, features = ["http", "pipe"] }
+futures-util = "0.3"
 
 [[bin]]
 name = "back_roco-cli"

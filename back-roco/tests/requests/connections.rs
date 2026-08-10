@@ -596,9 +596,9 @@ async fn a_hostile_database_name_never_reaches_the_engine() {
 
 #[tokio::test]
 #[serial]
-async fn docker_hosts_answers_200_even_without_docker() {
-    // O contrato exige 200 tambem quando o Docker nao esta' disponivel: a tela
-    // de nova conexao trata a ausencia, e um 5xx a quebraria.
+async fn docker_hosts_answers_200_with_or_without_docker() {
+    // A tela continua abrindo sem Docker, mas uma máquina com Engine disponível
+    // passa a receber as sugestões reais da Fase 9.
     request::<App, _, _>(|request, _ctx| async move {
         let token = admin_token(&request).await;
 
@@ -609,9 +609,13 @@ async fn docker_hosts_answers_200_even_without_docker() {
 
         assert_eq!(response.status_code(), 200);
         let data = &response.json::<Value>()["data"];
-        assert_eq!(data["dockerAvailable"], false);
-        assert_eq!(data["hosts"], serde_json::json!([]));
-        assert!(data["unavailableReason"].is_string());
+        assert!(data["dockerAvailable"].is_boolean());
+        assert!(data["hosts"].is_array());
+        if data["dockerAvailable"] == true {
+            assert!(data["unavailableReason"].is_null());
+        } else {
+            assert!(data["unavailableReason"].is_string());
+        }
     })
     .await;
 }
