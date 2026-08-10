@@ -1,4 +1,6 @@
 use async_trait::async_trait;
+use axum::http::StatusCode;
+use axum::response::{Html, IntoResponse};
 use loco_rs::{
     app::{AppContext, Hooks, Initializer},
     bgworker::{BackgroundWorker, Queue},
@@ -58,11 +60,38 @@ impl Hooks for App {
         // Valida o bloco `settings:` antes da primeira requisicao. Sem isto,
         // uma `db_encryption_key` ausente so' apareceria na primeira tentativa
         // de descriptografar uma senha — possivelmente semanas apos o deploy.
-        Ok(vec![Box::new(initializers::settings::SettingsInitializer)])
+        Ok(vec![
+            Box::new(initializers::settings::SettingsInitializer),
+            Box::new(initializers::default_storage::DefaultStorageInitializer),
+        ])
     }
 
     async fn after_routes(router: axum::Router, ctx: &AppContext) -> Result<axum::Router> {
         crate::workers::resource_metrics::start(ctx).await?;
+
+        // Fallback da SPA (Fase 12.4): `GET /*` serve o `index.html` quando o
+        // caminho não casa com nenhuma rota da API. O diretório vem das
+        // settings, com default `public/`; em produção o build do Vue é copiado
+        // para lá. Se o arquivo não existir, servimos um HTML mínimo embutido —
+        // isso garante que o fallback nunca devolva 404 numa rota de frontend,
+        // mesmo antes do build do Vue.
+        //
+        // Outros métodos num caminho desconhecido devem virar 404 JSON da API,
+        // e não 405 do service estático.
+        let settings =
+            crate::initializers::settings::Settings::from_json(ctx.config.settings.as_ref())?;
+        let index_path = Path::new(&settings.frontend_spa_path).join("index.html");
+        let index_html = tokio::fs::read_to_string(&index_path)
+            .await
+            .unwrap_or_else(|_| SPA_FALLBACK_HTML.to_string());
+
+        let router = router.fallback(move |method: axum::http::Method| async move {
+            if method != axum::http::Method::GET && method != axum::http::Method::HEAD {
+                return StatusCode::NOT_FOUND.into_response();
+            }
+            Html(index_html.clone()).into_response()
+        });
+
         // Camadas globais: `force_json` e o limitador de 600 req/min por IP.
         // Os limitadores por rota (`auth`, `strict`, `backup`) entram junto com
         // as rotas que os usam, nas fases seguintes.
@@ -96,6 +125,7 @@ impl Hooks for App {
             });
 
         AppRoutes::with_default_routes()
+            .add_route(controllers::public::routes())
             .add_route(controllers::transmit::routes())
             .add_route(controllers::auth::routes(&limiters))
             .add_route(controllers::connections::routes(&limiters))
@@ -172,3 +202,17 @@ impl Hooks for App {
         Ok(())
     }
 }
+
+/// HTML mínimo servido pelo fallback da SPA quando `public/index.html` ainda
+/// não foi construído. Em produção o build do Vue sobrescreve este conteúdo.
+const SPA_FALLBACK_HTML: &str = r#"<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>DB Backup Manager</title>
+  </head>
+  <body>
+    <div id="app"></div>
+  </body>
+</html>"#;

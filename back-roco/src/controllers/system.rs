@@ -17,11 +17,11 @@ use crate::initializers::settings::Settings;
 use crate::models::_entities::{backups, connections};
 use crate::models::audit_log::{AuditAction, AuditEntityType};
 use crate::models::audit_logs;
-use crate::models::backup_retention_policy::BackupRetentionPolicy;
+use crate::models::backup_retention_policy::UpdateBackupRetentionPolicy;
 use crate::models::backup_runner;
 use crate::models::storage::space;
 use crate::models::system_monitor;
-use crate::views::envelope::{Data, Message};
+use crate::views::envelope::{Data, Message, MessageWithData};
 use crate::views::errors::ApiError;
 use crate::views::system as view;
 
@@ -126,16 +126,20 @@ pub async fn update_backup_retention_policy(
     State(ctx): State<AppContext>,
     _session: Authenticated,
     origin: RequestOrigin,
-    Json(payload): Json<BackupRetentionPolicy>,
+    Json(payload): Json<UpdateBackupRetentionPolicy>,
 ) -> Reply {
-    if !crate::models::backup_retention_policy::is_valid_cron(&payload.prune_cron) {
+    validator::Validate::validate(&payload)
+        .map_err(|errors| ApiError::from_validation_errors(&errors))?;
+
+    let prune_cron = payload.prune_cron.as_deref().unwrap_or_default();
+    if !crate::models::backup_retention_policy::is_valid_cron(prune_cron) {
         return Err(ApiError::unprocessable(
             "Expressao cron invalida para o prune automatico",
         ));
     }
 
     let (policy, changes) =
-        crate::models::backup_retention_policy::update_policy(&ctx, payload).await?;
+        crate::models::backup_retention_policy::update_policy(&ctx, payload.into_policy()).await?;
 
     if !changes.is_empty() {
         let details = serde_json::json!({ "changes": changes });
@@ -152,7 +156,11 @@ pub async fn update_backup_retention_policy(
         .await;
     }
 
-    Ok(axum::Json(Data::new(view::BackupRetentionPolicy::from(policy))).into_response())
+    Ok(axum::Json(MessageWithData::new(
+        "Política de retenção atualizada com sucesso",
+        view::BackupRetentionPolicy::from(policy),
+    ))
+    .into_response())
 }
 
 /// `POST /api/system/backup-retention/run` — executa o prune de retencao.
@@ -162,7 +170,11 @@ pub async fn run_backup_retention(
     __session: Authenticated,
 ) -> Reply {
     let result = crate::models::retention::prune_backups(&ctx).await?;
-    Ok(axum::Json(Data::new(result)).into_response())
+    Ok(axum::Json(MessageWithData::new(
+        "Prune de backups executado com sucesso",
+        result,
+    ))
+    .into_response())
 }
 
 /// `GET /api/system/diagnostics` — lista artefatos de diagnostico.

@@ -8,6 +8,7 @@ use std::str::FromStr;
 use loco_rs::prelude::*;
 use sea_orm::ActiveValue::Set;
 use serde::{Deserialize, Serialize};
+use validator::Validate;
 
 use crate::models::system_settings;
 
@@ -59,6 +60,50 @@ pub type PolicyChanges = std::collections::HashMap<String, PolicyChange>;
 pub struct PolicyChange {
     pub from: serde_json::Value,
     pub to: serde_json::Value,
+}
+
+/// Payload de entrada para `PUT /api/system/backup-retention`.
+///
+/// Usa `Option<i64>` para poder distinguir campo ausente de zero, que o VineJS
+/// trata como `required`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct UpdateBackupRetentionPolicy {
+    pub daily: Option<i64>,
+    pub weekly: Option<i64>,
+    pub monthly: Option<i64>,
+    pub yearly: Option<i64>,
+    #[serde(rename = "pruneCron")]
+    pub prune_cron: Option<String>,
+}
+
+impl Validate for UpdateBackupRetentionPolicy {
+    fn validate(&self) -> std::result::Result<(), validator::ValidationErrors> {
+        use crate::models::validation;
+
+        let mut errors = validator::ValidationErrors::new();
+        validation::required_number(&mut errors, "daily", self.daily, i64::MAX);
+        validation::required_number(&mut errors, "weekly", self.weekly, i64::MAX);
+        validation::required_number(&mut errors, "monthly", self.monthly, i64::MAX);
+        validation::required_number(&mut errors, "yearly", self.yearly, i64::MAX);
+        validation::required_str(&mut errors, "pruneCron", self.prune_cron.as_deref(), 1, 256);
+        validation::finish(errors)
+    }
+}
+
+impl UpdateBackupRetentionPolicy {
+    /// Converte para a politica normalizada, preenchendo defaults quando o
+    /// payload omitir um campo. A validacao ja' garantiu que nenhum campo
+    /// obrigatorio esta' ausente.
+    pub fn into_policy(self) -> BackupRetentionPolicy {
+        let default = BackupRetentionPolicy::default_policy();
+        BackupRetentionPolicy {
+            daily: self.daily.map(|n| n as u32).unwrap_or(default.daily),
+            weekly: self.weekly.map(|n| n as u32).unwrap_or(default.weekly),
+            monthly: self.monthly.map(|n| n as u32).unwrap_or(default.monthly),
+            yearly: self.yearly.map(|n| n as u32).unwrap_or(default.yearly),
+            prune_cron: self.prune_cron.unwrap_or(default.prune_cron),
+        }
+    }
 }
 
 /// Le a politica atual, criando-a com defaults se necessario.

@@ -644,6 +644,8 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "tokio-util",
+ "tower",
+ "tower-http",
  "tracing",
  "tracing-subscriber",
  "ts-rs",

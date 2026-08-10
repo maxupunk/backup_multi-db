@@ -118,16 +118,21 @@ export interface DiffEntry {
  *
  * Serve ao `contract:diff`: rodar a suite contra o back-roco e sair com a
  * lista do que ainda nao bate, agrupada por tipo, em vez de um dump do vitest.
+ *
+ * Quando nao ha divergencias (o caso feliz da Fase 12.2), ainda gera o arquivo
+ * com uma declaracao positiva, para que o relatorio de paridade exista.
  */
 export function buildDiffReport(): { total: number; reportPath: string } | null {
   const config = loadConfig()
-  const file = diffFilePath(config)
-  if (!existsSync(file)) return null
+  if (!config.emitDiffReport) return null
 
-  const entries: DiffEntry[] = readFileSync(file, 'utf8')
-    .split('\n')
-    .filter((line) => line.trim() !== '')
-    .map((line) => JSON.parse(line) as DiffEntry)
+  const file = diffFilePath(config)
+  const entries: DiffEntry[] = existsSync(file)
+    ? readFileSync(file, 'utf8')
+        .split('\n')
+        .filter((line) => line.trim() !== '')
+        .map((line) => JSON.parse(line) as DiffEntry)
+    : []
 
   const byKind = new Map<string, DiffEntry[]>()
   let total = 0
@@ -149,6 +154,13 @@ export function buildDiffReport(): { total: number; reportPath: string } | null 
     `- Divergencias: **${total}** em **${entries.length}** golden(s)`,
     '',
   ]
+
+  if (total === 0) {
+    lines.push(
+      'Nenhuma divergencia encontrada entre a resposta do back-roco e os golden files gerados a partir do Adonis.',
+      ''
+    )
+  }
 
   for (const [kind, items] of [...byKind.entries()].sort()) {
     lines.push(`## ${kind} (${items.length})`, '')

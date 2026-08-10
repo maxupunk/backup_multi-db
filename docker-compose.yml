@@ -1,14 +1,14 @@
 # =============================================================================
-# DOCKER COMPOSE - PRODUÇÃO
-# DB Backup Manager
+# Docker Compose - Producao
+# DB Backup Manager (back-roco / Rust / Loco)
 # =============================================================================
 
 services:
   backend:
     build:
       context: .
-      dockerfile: Dockerfile
-      target: production
+      dockerfile: back-roco/Dockerfile
+      target: runtime
     restart: unless-stopped
     env_file:
       - path: ./.env
@@ -18,19 +18,22 @@ services:
     networks:
       - system-network
     environment:
-      NODE_ENV: production
-      HOST: 0.0.0.0
+      LOCO_ENV: production
+      BINDING: 0.0.0.0
       PORT: 3333
       LOG_LEVEL: ${LOG_LEVEL:-info}
       TZ: ${TZ:-America/Sao_Paulo}
       BACKUP_STORAGE_PATH: /storage/backups
-      SQLITE_DATABASE_PATH: /storage/database/app.sqlite3
-      NODE_MAX_OLD_SPACE_MB: ${NODE_MAX_OLD_SPACE_MB:-}
+      # O Loco usa `database.url` no YAML; em producao apontamos para o volume.
+      DATABASE_URL: sqlite:///storage/database/app.sqlite3
+      DB_ENCRYPTION_KEY: ${DB_ENCRYPTION_KEY}
+      AUTH_ACCESS_TOKEN_EXPIRES_IN: ${AUTH_ACCESS_TOKEN_EXPIRES_IN:-7d}
+      INITIAL_ADMIN_BOOTSTRAP_TOKEN: ${INITIAL_ADMIN_BOOTSTRAP_TOKEN:-}
+      BACKUP_DELETE_LOCAL_AFTER_REMOTE_UPLOAD: ${BACKUP_DELETE_LOCAL_AFTER_REMOTE_UPLOAD:-false}
       DIAGNOSTICS_PATH: /storage/diagnostics
-      RETENTION_DAILY: ${RETENTION_DAILY:-7}
-      RETENTION_WEEKLY: ${RETENTION_WEEKLY:-4}
-      RETENTION_MONTHLY: ${RETENTION_MONTHLY:-12}
-      RETENTION_YEARLY: ${RETENTION_YEARLY:-5}
+      AUDIT_RETENTION_DAYS: ${AUDIT_RETENTION_DAYS:-30}
+      # ID deste container, para exclui-lo das metricas do Docker Manager.
+      BACKEND_CONTAINER_ID: ${BACKEND_CONTAINER_ID:-}
     volumes:
       - backup_data:/storage/backups
       - database_data:/storage/database
@@ -41,9 +44,9 @@ services:
       test:
         [
           'CMD',
-          'node',
-          '-e',
-          "fetch('http://localhost:3333/api/health').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))",
+          'curl',
+          '-fsS',
+          'http://localhost:3333/api/health',
         ]
       interval: 30s
       timeout: 10s
@@ -54,7 +57,7 @@ services:
         limits:
           memory: 512M
         reservations:
-          # Alinhado ao RSS ocioso real medido após o MEMORY_ROADMAP.md (F0–F3).
+          # Alinhado ao RSS ocioso real medido apos o MEMORY_ROADMAP.md (F0-F3).
           memory: 128M
 
 networks:

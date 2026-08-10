@@ -7,9 +7,12 @@
  */
 
 import { describe, expect, it } from 'vitest'
+import { loadConfig } from '../src/config.ts'
 import { createPendingUser } from '../src/factory.ts'
 import { expectGolden } from '../src/golden.ts'
 import { as, expectStatus, json, state, unauth } from '../src/session.ts'
+
+const TARGET = loadConfig().target
 
 interface UsersPage {
   meta: { total: number; perPage: number; currentPage: number; lastPage: number }
@@ -180,7 +183,7 @@ describe('PATCH /api/users/:id/status', () => {
  * revisar todas quando esta for decidida.
  */
 describe('ACHADO: ordenacao de /api/users nao tem desempate', () => {
-  it('varios usuarios compartilham o mesmo createdAt', async () => {
+  it.skipIf(TARGET === 'roco')('varios usuarios compartilham o mesmo createdAt', async () => {
     const body = json<UsersPage>(
       await as('admin').get('/api/users', { query: { limit: 100 } })
     )
@@ -196,6 +199,26 @@ describe('ACHADO: ordenacao de /api/users nao tem desempate', () => {
       'nenhum empate de createdAt: o achado pode ter sido corrigido — revise este teste'
     ).toBeGreaterThan(1)
   })
+
+  it.skipIf(TARGET !== 'roco')(
+    'back-roco ordena com desempate estavel (sem empates de createdAt)',
+    async () => {
+      const body = json<UsersPage>(
+        await as('admin').get('/api/users', { query: { limit: 100 } })
+      )
+
+      const porTimestamp = new Map<string, number>()
+      for (const user of body.data) {
+        porTimestamp.set(user.createdAt, (porTimestamp.get(user.createdAt) ?? 0) + 1)
+      }
+
+      const maiorEmpate = Math.max(...porTimestamp.values())
+      expect(
+        maiorEmpate,
+        'houve empate de createdAt: o desempate por id nao esta funcionando'
+      ).toBe(1)
+    }
+  )
 
   it('a lista completa nao perde nem duplica usuarios ao paginar', async () => {
     // Este e' o efeito que realmente importa. Hoje passa na maioria das vezes;

@@ -28,7 +28,15 @@ export default async function setup(): Promise<() => Promise<void>> {
   setBaseUrl(server.baseUrl)
   console.log(`[contract] servidor pronto em ${server.baseUrl}`)
 
-  const capabilities = await probeCapabilities(server.baseUrl)
+  // O seed vem antes do probe de capabilities porque `dockerReachable` precisa
+  // de um token de admin autenticado para bater em `/api/docker/status`.
+  let state = await seedAll(server.baseUrl)
+  console.log(
+    `[contract] seed ok: admin#${state.users.admin.id} member#${state.users.member.id} ` +
+      `inactive#${state.users.inactive.id} conexoes=${Object.values(state.connections).filter(Boolean).length}`
+  )
+
+  const capabilities = await probeCapabilities(server.baseUrl, state.users.admin.token!)
   const warnings = missingCapabilityWarnings(capabilities)
   if (warnings.length > 0) {
     // Alto e claro. Pular em silencio deixaria a suite verde exatamente onde
@@ -38,12 +46,8 @@ export default async function setup(): Promise<() => Promise<void>> {
     console.warn('[contract] =============================================================\n')
   }
 
-  const state = await seedAll(server.baseUrl, capabilities)
+  state = { ...state, capabilities }
   writeState(state)
-  console.log(
-    `[contract] seed ok: admin#${state.users.admin.id} member#${state.users.member.id} ` +
-      `inactive#${state.users.inactive.id} conexoes=${Object.values(state.connections).filter(Boolean).length}`
-  )
 
   return async () => {
     await server.stop()

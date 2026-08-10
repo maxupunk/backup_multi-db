@@ -99,14 +99,11 @@ pub fn resolve(ctx: &AppContext, file_name: &str) -> Result<Option<PathBuf>> {
     }
 
     let settings = Settings::from_json(ctx.config.settings.as_ref())?;
-    let directory = PathBuf::from(&settings.diagnostics_path)
-        .canonicalize()
-        .map_err(|err| {
-            Error::Message(format!(
-                "diretorio de diagnosticos invalido ({}): {err}",
-                settings.diagnostics_path
-            ))
-        })?;
+    let directory = match PathBuf::from(&settings.diagnostics_path).canonicalize() {
+        Ok(path) => path,
+        // Diretorio inexistente e' o mesmo que "nenhum artefato": 404, nao 500.
+        Err(_) => return Ok(None),
+    };
 
     let target = directory.join(trimmed);
     if std::fs::metadata(&target).is_err() {

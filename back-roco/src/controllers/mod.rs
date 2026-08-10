@@ -4,6 +4,7 @@ pub mod backups;
 pub mod connections;
 pub mod docker;
 pub mod middlewares;
+pub mod public;
 pub mod storage_destinations;
 pub mod storages;
 pub mod system;

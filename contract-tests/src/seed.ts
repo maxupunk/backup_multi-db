@@ -249,7 +249,10 @@ async function seedStorages(token: string): Promise<SeedState['storages']> {
   }
 }
 
-export async function seedAll(baseUrl: string, capabilities: Capabilities): Promise<SeedState> {
+export async function seedAll(
+  baseUrl: string,
+  capabilities?: Capabilities
+): Promise<SeedState> {
   const config = loadConfig()
 
   const admin = await registerAdmin()
@@ -291,7 +294,16 @@ export async function seedAll(baseUrl: string, capabilities: Capabilities): Prom
     connections,
     storages,
     backups: {},
-    capabilities,
+    capabilities: capabilities ?? {
+      mysql: false,
+      mariadb: false,
+      postgres: false,
+      minio: false,
+      sftp: false,
+      mysqldump: false,
+      pgdump: false,
+      docker: false,
+    },
   }
 }
 

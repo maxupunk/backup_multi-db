@@ -20,3 +20,6 @@ target/
 *.sqlite-*
 # Banco descartavel dos testes do migrador de dados.
 .contract-tmp/
+
+# Build do frontend Vue servido como SPA fallback (Fase 12.4).
+public/

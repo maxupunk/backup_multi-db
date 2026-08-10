@@ -239,7 +239,149 @@ cargo fmt && cargo clippy --all-targets -- -D warnings
 
 ---
 
-## 12. Quando o padrão não cobrir o caso
+## 12. Runbook de cutover e rollback (Fase 12)
+
+O cutover do AdonisJS para o back-roco é **big-bang**: uma janela de downtime
+planejada onde o backend legado é substituído pela implementação Rust. Este
+runbook deve ser seguido literalmente; desvios só após atualizar este arquivo.
+
+### 12.1 Pré-requisitos
+
+- A suíte de contrato passa 100% contra o back-roco:
+  `cd contract-tests && pnpm contract:roco`
+- O diff automatizado contra o AdonisJS também passa:
+  ```sh
+  cd contract-tests
+  pnpm contract:adonis   # compara o Adonis com os golden files
+  pnpm contract:diff     # gera reports/contract-diff.md a partir do back-roco
+  ```
+- `cargo fmt` e `cargo clippy --all-targets -- -D warnings` estão limpos.
+- O migrador `migrate_data` foi testado em uma cópia do banco de produção e
+devolveu checksums idênticos nas tabelas críticas.
+- **Feature freeze** no `backend/` — nenhuma alteração entra durante o cutover.
+- O frontend builda sem alterações e é servido pelo back-roco:
+  ```sh
+  cd frontend && pnpm build        # gera ../backend/public
+  cp -r backend/public/* back-roco/public/
+  cd back-roco && cargo loco start # / e /api/health respondem
+  ```
+
+### 12.2 Snapshot pré-cutover
+
+1. Pare o container do AdonisJS:
+   ```sh
+   docker compose stop backend
+   ```
+2. Copie o SQLite de produção:
+   ```sh
+   cp backend/storage/database/app.sqlite3 \
+      /backup/app-pre-cutover-<YYYYMMDD-HHMMSS>.sqlite3
+   ```
+3. Copie o diretório de backups:
+   ```sh
+   cp -a backend/storage/backups /backup/backups-pre-cutover-<YYYYMMDD-HHMMSS>
+   ```
+4. Guarde o `.env` atual:
+   ```sh
+   cp .env /backup/env-pre-cutover-<YYYYMMDD-HHMMSS>
+   ```
+
+### 12.3 Migração de dados
+
+O schema do back-roco é novo (decisão D4). Execute o migrador no banco copiado:
+
+```sh
+cd back-roco
+export DB_ENCRYPTION_KEY=<mesma-chave-do-adonis>
+export SOURCE_DATABASE_URL=sqlite:///backup/app-pre-cutover-<...>.sqlite3
+export TARGET_DATABASE_URL=sqlite:///storage/database/app.sqlite3
+
+cargo run --bin migrate_data -- \
+  --source "$SOURCE_DATABASE_URL" \
+  --target "$TARGET_DATABASE_URL"
+```
+
+Verifique o relatório final: nenhuma tabela crítica pode ter diferença de
+checksum. O migrador roda em uma transação só; se falhar, o target permanece
+vazio.
+
+### 12.4 Subida do back-roco
+
+1. Atualize o `.env` para apontar para o back-roco:
+   ```sh
+   # manter DB_ENCRYPTION_KEY idêntica
+   DATABASE_URL=sqlite:///storage/database/app.sqlite3
+   LOCO_ENV=production
+   PORT=3333
+   BINDING=0.0.0.0
+   ```
+2. Suba o novo backend:
+   ```sh
+   docker compose up -d backend
+   ```
+3. Valide o healthcheck:
+   ```sh
+   curl -fsS http://localhost:3333/api/health
+   ```
+4. Teste um login com usuário existente (D1/D2 garantem que senha e token
+continuam válidos).
+5. Dispare um backup de teste para confirmar conectividade e caminho de
+armazenamento.
+
+### 12.5 Rollback
+
+Se qualquer validação falhar, volte ao AdonisJS sem hesitar:
+
+1. Derrube o back-roco:
+   ```sh
+   docker compose stop backend
+   docker compose rm -f backend
+   ```
+2. Restaure o SQLite do snapshot:
+   ```sh
+   cp /backup/app-pre-cutover-<...>.sqlite3 backend/storage/database/app.sqlite3
+   ```
+3. Restaure o `.env` pré-cutover.
+4. Suba o AdonisJS:
+   ```sh
+   docker compose up -d backend
+   ```
+5. Valide login e uma operação de leitura.
+
+### 12.6 Pós-cutover
+
+- Mantenha o snapshot pré-cutover até o período de estabilidade acordado
+( recomenda-se 7–14 dias).
+- Monitore logs, métricas de memória e taxas de erro.
+- Só remova o `backend/` após o período de estabilidade.
+
+## 13. Shadow traffic e diff automatizado (Fases 12.2 e 12.13)
+
+Antes do cutover real, os dois backends devem rodar lado a lado. A suíte de
+contrato é o mecanismo de diff: ela compara as respostas do back-roco com os
+*golden files* extraídos do AdonisJS.
+
+```sh
+cd contract-tests
+pnpm contract:adonis                     # Adonis vs golden
+pnpm contract:roco                       # back-roco vs golden
+pnpm contract:diff                       # back-roco + reports/contract-diff.md
+CONTRACT_BASE_URL=http://127.0.0.1:<porta-roco> pnpm contract:roco  # servidor externo
+```
+
+O relatório `reports/contract-diff.md` deve apresentar **zero divergências**
+antes do cutover.
+
+> **Limitação conhecida:** a validação byte-a-byte de backup/restore herdada da
+> Fase 7 exige `mysqldump`/`pg_dump` no PATH e o `docker-compose.test.yml` de
+> pé. Sem essas ferramentas, os testes de caminho feliz de backup são pulados,
+> mas todo o restante do diff continua executado.
+
+Em produção, o shadow traffic real (espelhamento de tráfego) exige
+infraestrutura de proxy/espelhamento fora do escopo deste repositório; este
+runbook cobre o procedimento de validação e cutover/rollback propriamente dito.
+
+## 14. Quando o padrão não cobrir o caso
 
 Se a solução exigir sair do que está escrito aqui: **pare e explique antes de
 implementar** — qual regra está sendo quebrada, por quê o caminho padrão não

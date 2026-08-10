@@ -481,7 +481,22 @@ mod tests {
         );
 
         schedule_expiration_after(registry.clone(), id.clone(), Duration::from_millis(5));
-        tokio::time::sleep(Duration::from_millis(25)).await;
+
+        // Espera ativa: o runtime pode estar ocupado compilando outros testes,
+        // entao um sleep fixo vira flaky. Damos ate' 1s para a tarefa spawned
+        // executar e atualizar o registro.
+        let mut attempts = 0;
+        loop {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+            let status = registry.jobs.read().await.get(&id).map(|job| job.status);
+            if status == Some(ArchiveStatus::Expired) && !file.exists() {
+                break;
+            }
+            attempts += 1;
+            if attempts > 100 {
+                panic!("a expiracao do archive nao completou em 1s");
+            }
+        }
 
         assert!(!file.exists());
         assert_eq!(

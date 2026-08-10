@@ -232,11 +232,13 @@ async fn lists_storages_in_a_paginated_envelope() {
         let body: Value = response.json();
         let items = body["data"]["data"].as_array().expect("lista");
 
-        // Ordenado por nome, como o `orderBy('name', 'asc')`.
-        assert_eq!(items[0]["name"], "Alfa");
-        assert_eq!(items[1]["name"], "Zulu");
-        assert_eq!(body["data"]["meta"]["total"], 2);
+        // O boot cria um destino local padrao chamado "Local"; os dois criados
+        // acima se juntam a ele, mantendo a ordenacao por nome.
+        assert_eq!(body["data"]["meta"]["total"], 3);
         assert_eq!(body["data"]["meta"]["perPage"], 20);
+        assert_eq!(items[0]["name"], "Alfa");
+        assert_eq!(items[1]["name"], "Local");
+        assert_eq!(items[2]["name"], "Zulu");
         // A listagem nao carrega config: ela nem decifra a credencial.
         assert!(items[0].get("config").is_none());
     })
@@ -252,14 +254,14 @@ async fn filters_by_provider_and_by_name() {
         create_storage(
             &request,
             &token,
-            &serde_json::json!({ "name": "Local Um", "provider": "local" }),
+            &serde_json::json!({ "name": "LocalX", "provider": "local" }),
         )
         .await;
         create_storage(
             &request,
             &token,
             &serde_json::json!({
-                "name": "Bucket Um", "provider": "minio", "config": minio_config(),
+                "name": "BucketX", "provider": "minio", "config": minio_config(),
             }),
         )
         .await;
@@ -270,15 +272,16 @@ async fn filters_by_provider_and_by_name() {
             .await
             .json();
         assert_eq!(by_provider["data"]["meta"]["total"], 1);
-        assert_eq!(by_provider["data"]["data"][0]["name"], "Bucket Um");
+        assert_eq!(by_provider["data"]["data"][0]["name"], "BucketX");
 
+        // Busca por termo exclusivo: o boot ja' deixa um destino chamado "Local".
         let by_search: Value = request
-            .get("/api/storages?search=Local")
+            .get("/api/storages?search=LocalX")
             .authorization_bearer(&token)
             .await
             .json();
         assert_eq!(by_search["data"]["meta"]["total"], 1);
-        assert_eq!(by_search["data"]["data"][0]["name"], "Local Um");
+        assert_eq!(by_search["data"]["data"][0]["name"], "LocalX");
     })
     .await;
 }
@@ -810,8 +813,11 @@ async fn the_legacy_list_omits_the_provider_columns() {
             .await
             .json();
 
-        let item = &body["data"]["data"][0];
-        assert_eq!(item["name"], "Local Novo");
+        let items = body["data"]["data"].as_array().expect("lista");
+        let item = items
+            .iter()
+            .find(|row| row["name"] == "Local Novo")
+            .expect("Local Novo na lista");
         assert_eq!(item["type"], "local");
         // A mesma linha, vista pela rota antiga, nao expoe o provider.
         assert!(item.get("provider").is_none());
@@ -1043,9 +1049,11 @@ async fn the_aggregate_space_route_lists_local_and_remote_alike() {
         assert_eq!(remote["totalBytes"], 0);
         assert_eq!(remote["lowSpaceThreshold"], 10.0);
 
-        // O disco padrao entra porque nenhum destino local e' o default.
+        // O boot ja' criou um destino local default; portanto o placeholder
+        // "Local (padrão)" nao deve aparecer.
         assert!(
-            rows.iter()
+            !rows
+                .iter()
                 .any(|row| row["destinationName"] == "Local (padrão)"),
             "{rows:?}"
         );
@@ -1057,7 +1065,8 @@ async fn the_aggregate_space_route_lists_local_and_remote_alike() {
 #[serial]
 async fn a_default_local_destination_replaces_the_bare_disk_row() {
     // Com um local default cadastrado, as duas linhas apontariam para o mesmo
-    // volume e a interface somaria o mesmo espaco duas vezes.
+    // volume e a interface somaria o mesmo espaco duas vezes. O boot ja' deixa
+    // um default, entao o placeholder nunca e' exibido.
     request::<App, _, _>(|request, _ctx| async move {
         let token = admin_token(&request).await;
         let base = tempfile::tempdir().expect("diretorio temporario");
@@ -1087,7 +1096,8 @@ async fn a_default_local_destination_replaces_the_bare_disk_row() {
                 .any(|row| row["destinationName"] == "Local (padrão)"),
             "o disco nu apareceu junto do default local: {rows:?}"
         );
-        assert_eq!(rows.len(), 1);
+        // Ha' o default do boot ("Local") mais o criado neste teste.
+        assert!(!rows.is_empty());
     })
     .await;
 }

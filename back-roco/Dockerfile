@@ -18,6 +18,22 @@
 
 ARG RUST_IMAGE=rust:1.96-trixie
 ARG RUNTIME_IMAGE=debian:trixie-slim
+ARG NODE_IMAGE=node:26.0.0-trixie-slim
+
+# -----------------------------------------------------------------------------
+# Stage: frontend-builder
+# Compila o frontend Vue/Vite. O resultado (`dist/`) vira `public/` do Loco,
+# servido pelo fallback da SPA (Fase 12.4).
+# -----------------------------------------------------------------------------
+FROM ${NODE_IMAGE} AS frontend-builder
+
+WORKDIR /app-frontend
+
+COPY frontend/package*.json ./
+RUN npm ci
+
+COPY frontend/ .
+RUN npm run build-only -- --outDir dist
 
 # -----------------------------------------------------------------------------
 # Stage: chef
@@ -45,6 +61,8 @@ COPY --from=planner /app/recipe.json recipe.json
 RUN cargo chef cook --release --recipe-path recipe.json
 
 COPY back-roco/ .
+# O build do Vue embutido na imagem; o fallback `GET /*` o servira'.
+COPY --from=frontend-builder /app-frontend/dist ./public
 RUN cargo build --release --bin back_roco-cli
 
 # -----------------------------------------------------------------------------
@@ -74,6 +92,7 @@ WORKDIR /app
 COPY --from=builder /app/target/release/back_roco-cli /usr/local/bin/back-roco
 COPY --chown=roco:roco back-roco/config ./config
 COPY --chown=roco:roco back-roco/src/fixtures ./src/fixtures
+COPY --chown=roco:roco --from=builder /app/public ./public
 
 RUN mkdir -p /storage/backups /storage/database /storage/diagnostics \
     && chown -R roco:roco /storage /app

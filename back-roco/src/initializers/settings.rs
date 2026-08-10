@@ -86,6 +86,11 @@ pub struct Settings {
     #[serde(default = "default_audit_retention_days")]
     pub audit_retention_days: u32,
 
+    /// Caminho no filesystem do `index.html` e assets da SPA (Fase 12.4).
+    /// Em producao o frontend Vue e' construido e copiado para ca'.
+    #[serde(default = "default_frontend_spa_path")]
+    pub frontend_spa_path: String,
+
     /// Apagar a copia local depois de enviar o backup a um destino remoto?
     ///
     /// Equivale ao `BACKUP_DELETE_LOCAL_AFTER_REMOTE_UPLOAD`, e nasce
@@ -110,6 +115,10 @@ fn default_diagnostics_path() -> String {
 
 const fn default_audit_retention_days() -> u32 {
     30
+}
+
+fn default_frontend_spa_path() -> String {
+    "public".to_string()
 }
 
 impl Settings {

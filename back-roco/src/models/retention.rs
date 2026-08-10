@@ -153,7 +153,9 @@ async fn load_prunable_backups(db: &DatabaseConnection) -> Result<Vec<PrunableBa
         .column(crate::models::_entities::backups::Column::RetentionType)
         .column(crate::models::_entities::backups::Column::FilePath)
         .column(crate::models::_entities::backups::Column::FileName)
+        .column(crate::models::_entities::backups::Column::Trigger)
         .column(crate::models::_entities::backups::Column::CreatedAt)
+        .column(crate::models::_entities::backups::Column::UpdatedAt)
         .filter(crate::models::_entities::backups::Column::Protected.eq(false))
         .filter(
             crate::models::_entities::backups::Column::Status.is_not_in([

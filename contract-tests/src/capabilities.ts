@@ -14,7 +14,7 @@
 
 import { spawnSync } from 'node:child_process'
 import { connect } from 'node:net'
-import { request as undiciRequest } from 'undici'
+import { httpRequest } from './http.ts'
 import { MARIADB, MINIO, MYSQL, POSTGRES, SFTP } from './fixtures.ts'
 
 export interface Capabilities {
@@ -59,25 +59,30 @@ function binaryOnPath(command: string): boolean {
  * Pergunta ao **proprio backend** se ele enxerga o Docker.
  *
  * Sondar com o CLI `docker` daria a resposta errada: no Windows o CLI fala com
- * o daemon por named pipe e funciona, enquanto o backend procura
- * `/var/run/docker.sock` e nao acha nada. A capacidade que interessa e' a de
+ * o daemon por named pipe e funciona, enquanto o backend pode procurar
+ * `/var/run/docker.sock` e nao achar nada. A capacidade que interessa e' a de
  * quem esta' sob teste, nao a da maquina.
+ *
+ * A rota `/api/docker/status` requer autenticacao, entao o probe precisa do
+ * token de admin obtido no seed. Sem isso a resposta e' 401 e a suite marca
+ * `docker: false` mesmo quando o backend enxerga o daemon.
  */
-async function dockerReachable(baseUrl: string): Promise<boolean> {
+async function dockerReachable(baseUrl: string, adminToken: string): Promise<boolean> {
   try {
-    const response = await undiciRequest(`${baseUrl}/api/docker/status`, {
-      method: 'GET',
-      headersTimeout: 5_000,
-      bodyTimeout: 5_000,
+    const response = await httpRequest('GET', '/api/docker/status', {
+      token: adminToken,
+      timeoutMs: 5_000,
+      skipCoverage: true,
+      test: 'probe',
     })
-    const body = (await response.body.json()) as { available?: boolean }
-    return body.available === true
+    const body = response.body as { available?: boolean }
+    return response.status === 200 && body.available === true
   } catch {
     return false
   }
 }
 
-export async function probeCapabilities(baseUrl: string): Promise<Capabilities> {
+export async function probeCapabilities(baseUrl: string, adminToken: string): Promise<Capabilities> {
   const [mysql, mariadb, postgres, minio, sftp] = await Promise.all([
     tcpReachable(MYSQL.host, MYSQL.port),
     tcpReachable(MARIADB.host, MARIADB.port),
@@ -94,7 +99,7 @@ export async function probeCapabilities(baseUrl: string): Promise<Capabilities> 
     sftp,
     mysqldump: binaryOnPath('mysqldump'),
     pgdump: binaryOnPath('pg_dump'),
-    docker: await dockerReachable(baseUrl),
+    docker: await dockerReachable(baseUrl, adminToken),
   }
 }
 

@@ -97,6 +97,10 @@ tokio-stream = { version = "0.1", features = ["sync"] }
 # Fase 11: validacao de `pruneCron` da politica de retencao. So' parse/validacao;
 # o agendamento fica com o scheduler nativo do Loco.
 cron = "0.15"
+# Fase 12: fallback SPA (`GET /*`) e arquivos estaticos.
+# O Loco ja' traz tower-http e tower na arvore, mas usamos os services/trait
+tower = { version = "0.5", default-features = false }
+tower-http = { version = "0.6", default-features = false, features = ["fs"] }
 
 [[bin]]
 name = "back_roco-cli"

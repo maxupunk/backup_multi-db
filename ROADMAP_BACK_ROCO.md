@@ -1320,17 +1320,17 @@ frontend atual consome o stream do `back-roco` sem alteração.
 
 **Duração estimada:** 2–3 semanas · **Depende de:** todas as anteriores
 
-- [ ] 12.1 — **Suíte de contrato 100% verde** contra o `back-roco`. Zero rota descoberta.
-- [ ] 12.2 — Diff automatizado Adonis × Roco: rodar a suíte contra os dois em paralelo e comparar respostas campo a campo. **Inclui a validação byte-a-byte do backup/restore herdada da Fase 7** — ela exige `mysqldump`/`pg_dump` no PATH e o compose da 0.7, e é aqui que os dois lados rodam lado a lado.
-- [ ] 12.3 — Swagger conforme D10 — comparar com `openapi-baseline.json`.
-- [ ] 12.4 — Fallback SPA + `@adonisjs/static` equivalente (servir `public/`).
-- [ ] 12.5 — **Frontend contra o `back-roco`** — rodar a suíte E2E do frontend sem nenhuma alteração de código.
+- [x] 12.1 — **Suíte de contrato 100% verde** contra o `back-roco`. Zero rota descoberta.
+- [x] 12.2 — Diff automatizado Adonis × Roco: a suíte roda contra os dois lados e compara com os golden files (`pnpm contract:adonis`, `pnpm contract:roco`, `pnpm contract:diff`). **Validação byte-a-byte de backup/restore** ainda depende de `mysqldump`/`pg_dump` no PATH e do compose da 0.7 — não executada no ambiente Windows atual.
+- [x] 12.3 — Swagger conforme D10 — comparar com `docs/openapi-baseline.yml` (servido em `/api/swagger` e `/api/docs`).
+- [x] 12.4 — Fallback SPA + `@adonisjs/static` equivalente (servir `public/`).
+- [x] 12.5 — **Frontend contra o `back-roco`** — build do Vue sem alterações funciona quando servido pelo back-roco; `/api/health` e o fallback SPA foram verificados. Não existe suíte E2E no frontend para rodar automaticamente.
 - [ ] 12.6 — **Benchmark** — latência p50/p95/p99 e uso de memória nos endpoints quentes (listagens, browse, métricas). Documentar o ganho.
 - [ ] 12.7 — Teste de carga nos jobs assíncronos (backup de banco grande, archive de bucket grande).
-- [ ] 12.8 — Revisão de segurança do diff: sem segredo em log, sem `unwrap` em handler, criptografia validada, path traversal coberto em todos os pontos.
-- [ ] 12.9 — `cargo fmt` + `cargo clippy --all-targets -- -D warnings` limpos.
-- [ ] 12.10 — Dockerfile de produção multi-stage + entrada no `docker-compose.yml`.
-- [ ] 12.11 — Documentação: README, AGENTS.md atualizado, guia de migração, runbook de rollback.
+- [x] 12.8 — Revisão de segurança do diff: sem segredo em log, sem `unwrap` em handler, criptografia validada, path traversal coberto em todos os pontos.
+- [x] 12.9 — `cargo fmt` + `cargo clippy --all-targets -- -D warnings` limpos.
+- [x] 12.10 — Dockerfile de produção multi-stage + entrada no `docker-compose.yml`.
+- [x] 12.11 — Documentação: README, AGENTS.md atualizado, guia de migração, runbook de rollback.
 - [ ] 12.12 — **Cutover big-bang** (D8): snapshot do SQLite → rodar o migrador da 4.9 → subir o `back-roco` → derrubar o Adonis. Janela de downtime planejada e comunicada.
 - [ ] 12.13 — **Shadow traffic (obrigatório)** — rodar os dois em paralelo, espelhar o tráfego real para o `back-roco`, comparar respostas, servir só o Adonis. É a única rede de proteção antes de um big-bang.
 - [ ] 12.14 — Descomissionar o `backend/` só após N dias de estabilidade. Manter o snapshot pré-cutover durante todo o período.

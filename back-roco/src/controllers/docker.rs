@@ -415,7 +415,50 @@ pub async fn start_diagnostic(
     _session: Authenticated,
     body: Bytes,
 ) -> Reply {
+    use validator::ValidationErrors;
+
     let params: DiagnosticParams = json_body(&body)?;
+
+    // A validacao emite o shape de erro do VineJS (422 com `errors[]`), nao o
+    // envelope de controller, para bater com o contrato da suite.
+    let mut errors = ValidationErrors::new();
+    let tool = params.tool.as_deref().unwrap_or_default().to_string();
+    if !matches!(tool.as_str(), "ping" | "curl" | "port_scan") {
+        errors.add(
+            "tool",
+            crate::models::validation::rule(
+                "enum",
+                "Ferramenta de diagnóstico não suportada".into(),
+            ),
+        );
+    }
+    let target = params
+        .target
+        .as_deref()
+        .unwrap_or_default()
+        .trim()
+        .to_string();
+    if target.is_empty() || target.len() > 253 || target.chars().any(char::is_whitespace) {
+        errors.add(
+            "target",
+            crate::models::validation::rule(
+                "required",
+                "Destino do diagnóstico é obrigatório".into(),
+            ),
+        );
+    }
+    if tool == "port_scan" && params.port.is_none() {
+        errors.add(
+            "port",
+            crate::models::validation::rule(
+                "required",
+                "Porta é obrigatória para scan de porta".into(),
+            ),
+        );
+    }
+    crate::models::validation::finish(errors)
+        .map_err(|errors| ApiError::from_validation_errors(&errors))?;
+
     let job = docker_diagnostics::start(
         &ctx,
         docker_diagnostics::StartParams {
