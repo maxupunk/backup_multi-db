@@ -5,6 +5,7 @@ pub mod connections;
 pub mod envelope;
 pub mod errors;
 pub mod pagination;
+pub mod storages;
 pub mod system;
 pub mod timestamp;
 pub mod users;

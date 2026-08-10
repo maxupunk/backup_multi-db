@@ -71,6 +71,17 @@ impl AuditEntry {
         }
     }
 
+    /// Troca o `entity_type` inferido da acao.
+    ///
+    /// O controller de storages registra `connection.created` com
+    /// `entityType: 'settings'` — combinacao que a inferencia nao produz, e que
+    /// nao e' engano: a acao reaproveita o icone de conexao, mas a entidade e'
+    /// configuracao, e e' por `entityType` que a tela de auditoria filtra.
+    pub const fn entity_type(mut self, entity_type: AuditEntityType) -> Self {
+        self.entity_type = entity_type;
+        self
+    }
+
     pub fn entity(mut self, id: i64, name: impl Into<String>) -> Self {
         self.entity_id = Some(id);
         self.entity_name = Some(name.into());

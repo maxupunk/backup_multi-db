@@ -84,6 +84,8 @@ impl Hooks for App {
             // mais especifica que `/{id}`, e o Axum casa a primeira que servir.
             .add_route(controllers::backups::connection_routes())
             .add_route(controllers::backups::routes(&limiters))
+            .add_route(controllers::storages::routes(&limiters))
+            .add_route(controllers::storage_destinations::routes())
             .add_route(controllers::users::routes())
             .add_route(controllers::audit_logs::routes())
             .add_route(controllers::system::routes())

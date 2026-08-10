@@ -62,14 +62,14 @@ Estado: **Fases 0 a 7 concluídas.**
 
 | Área | Estado |
 |---|---|
-| Endpoints sob `/api` | **30 de 87** pares método+rota (`cargo loco routes`) |
+| Endpoints sob `/api` | **44 de 87** pares método+rota (`cargo loco routes`) |
 | Controllers | `auth`, `users`, `audit_logs`, `system` (parcial), `connections`, `backups` |
 | Models | 9 entidades geradas + lógica de domínio, criptografia, senha, token, driver de banco, dump, restore, import, progresso |
 | Migrations | 4, cobrindo as 9 tabelas · diff estrutural vazio contra o schema do Adonis |
 | Workers | `downloader` (scaffold), `restore` |
-| Testes | **371** no `--lib` + 135 de integração, 0 falhas, 4 ignorados (2 de dados de produção, 2 de servidor real) |
+| Testes | **413** no `--lib` + 144 de integração, 0 falhas, 4 ignorados (2 de dados de produção, 2 de servidor real) |
 
-**Cobertura de paridade hoje: 34%** dos pares método+rota. O que falta: storages (Fase 8), Docker
+**Cobertura de paridade hoje: 51%** dos pares método+rota. O que falta: os jobs de storage (Fase 8), Docker
 (Fase 9), SSE e scheduler (Fase 10), sistema avançado e retenção (Fase 11).
 
 ---
@@ -1057,25 +1057,43 @@ restauração que falhou faria a fila tentar de novo e restaurar o banco duas ve
 - [x] 8.4 — ✅ Adapter **GCS**, no mesmo arquivo. Nem `google-cloud-storage` nem REST direto — ver a avaliação abaixo.
 - [x] 8.5 — ✅ Adapter **Azure Blob**, no mesmo arquivo, com o parser da *connection string*.
 - [x] 8.6 — ✅ Adapter **SFTP** em `src/models/storage/sftp.rs`, sobre `russh`/`russh-sftp`. Autentica por senha, por chave privada e por chave com passphrase.
-- [ ] 8.7 — CRUD de `storages` + `storage-destinations` (rotas legadas mantidas).
-- [ ] 8.8 — `POST /:id/test` por provider.
-- [ ] 8.9 — `GET /:id/browse` — paginação por continuation token, mesma ordenação e shape.
-- [ ] 8.10 — `DELETE /:id/object`.
+- [x] 8.7 — ✅ CRUD de `storages` (5 rotas) + `storage-destinations` (5 rotas legadas), com validação por provider.
+- [x] 8.8 — ✅ `POST /:id/test`, com o limitador `strict` e falha em **422**, não em 500.
+- [x] 8.9 — ✅ `GET /:id/browse`, com paginação por cursor e o enriquecimento de **réplicas**.
+- [x] 8.10 — ✅ `DELETE /:id/object`, com a raiz recusada antes de qualquer chamada ao provedor.
 - [ ] 8.11 — **Copy job** assíncrono (`bucket_copy_service`, 455 LOC) — job em background + endpoint de status.
 - [ ] 8.12 — **Archive job** (`bucket_archive_service`, 395 LOC) — streaming de tar/zip, endpoint de status e download.
 - [ ] 8.13 — `storage_space_service` — cálculo de espaço por destino e agregado.
 - [ ] 8.14 — Retenção de jobs (porta de `storage_job_retention`).
-- [ ] 8.15 — Memoização da config descriptografada — o equivalente ao `WeakMap` do TS (o custo que motivou o cache é real: 2 operações de cripto **por objeto listado**).
+- [x] 8.15 — ✅ Resolvida **por construção**, e não por cache — ver abaixo.
 - [ ] 8.16 — Testes Rust + contrato contra MinIO e SFTP do compose.
 
 **Pronto quando:** lote 2.5 passa para local, S3/MinIO e SFTP. GCS e Azure podem ficar
 com teste de integração opcional se não houver credencial em CI — **registrar a lacuna**.
 
-### Estado: 6 de 16 tarefas
+### Estado: 11 de 16 tarefas
 
-A **camada de adapters (8.1–8.6) está pronta e verde**: 67 testes unitários próprios, dentro de
-uma suíte de **371 testes** no `--lib`, com `fmt` e `clippy -D warnings` limpos. O que falta são as
-**rotas** (8.7–8.14) e a memoização da 8.15.
+Os **adapters (8.1–8.6)** e as **rotas de CRUD e exploração (8.7–8.10, 8.15)** estão prontos e
+verdes: **413 testes** no `--lib` e **144** de integração — 26 deles novos, cobrindo os dois
+recursos —, com `fmt` e `clippy --all-targets -D warnings` limpos.
+
+O que falta são os **jobs**: cópia (8.11), archive (8.12), retenção (8.14), o cálculo de espaço
+(8.13) e a suíte contra MinIO/SFTP do compose (8.16).
+
+### A memoização que não precisou existir (8.15)
+
+O `storage_destination.ts` mantém um `WeakMap` de config decifrada, e o motivo é real: lá a config
+viaja como **parâmetro**, então cada método de cada adapter chama `getDecryptedConfig()` de novo —
+a listagem chegava a duas operações de cripto **por objeto listado**.
+
+Aqui o problema não voltou por cache, e sim por construção. O `decrypt_config` devolve um handle
+(`DecryptedConfig`) que decifra uma vez, e cada consumidor tira dele o que precisa: a máscara para a
+resposta, a config tipada para o adapter, o JSON cru para a fusão de segredos. O adapter **carrega**
+a config em vez de recebê-la, então listar mil objetos custa uma decifragem, e não duas mil. O `PUT`,
+que decifraria duas vezes (fundir os segredos + mascarar a resposta), decifra uma.
+
+O handle não deriva `Serialize`, de propósito: o valor cru contém a credencial, e o único caminho
+dele até uma resposta passa por `safe()`.
 
 ### A avaliação do `object_store` — e por que ela terminou noutro lugar
 
@@ -1162,6 +1180,46 @@ garante o resto: não existe caminho em que o adapter de S3 receba credencial de
 **Sem cache de adapter por provider.** O `bucket_explorer_service` cacheia a instância por
 provider, e faz sentido lá: os adapters dele são *stateless*. Aqui o adapter **carrega** a
 credencial — cachear por provider entregaria a credencial de um destino a outro.
+
+### Achados das rotas (8.7–8.10)
+
+**Dois controllers sobre a mesma tabela discordam de propósito — em três pontos.** Não é
+inconsistência herdada; é o que os dois arquivos do Adonis fazem, e cada divergência tem um teste
+que a fixa:
+
+| | `/api/storages` | `/api/storage-destinations` |
+|---|---|---|
+| Remoção com backup/conexão vinculada | **422**, recusa | apaga, e o `ON DELETE SET NULL` cuida do resto |
+| Segredo vazio no `PUT` | mantém o gravado (funde) | **422**, exige o valor |
+| Auditoria | registra | não registra |
+
+Unificar qualquer uma delas mudaria o comportamento de uma rota que a interface antiga ainda usa —
+por isso ficaram separadas, com a diferença escrita no topo de cada controller.
+
+**A config gravada é construída campo a campo, e não copiada do corpo.** O `vine.object()` descarta
+chave desconhecida; aceitar o objeto cru deixaria qualquer campo entrar na config **cifrada** e
+reaparecer no `show`. Como a máscara de segredos é escolhida pelo `type`, um campo estranho seria
+devolvido em claro — construir a partir do enum tipado é o que fecha essa porta.
+
+**`provider` sai cru; `providerLabel` sai derivado.** O golden `storages/index` traz uma linha com
+`"provider": null` e `"providerLabel": "Local"`. Emitir o provider *efetivo* no campo `provider`
+preencheria uma coluna que o banco tem vazia — e é justamente por esse campo que a interface sabe
+se o destino já foi migrado para o cadastro novo.
+
+**Provider desconhecido não produz erro de campo.** O VineJS reprova o **objeto inteiro**:
+`{"field": "", "rule": "unionGroup", "message": "Invalid value provided for data field"}`. Um 422
+apontando para o campo `provider` seria mais útil e mais errado — o golden
+`storages/store-invalid-provider` fixa exatamente esse corpo.
+
+**A auditoria grava `action: connection.created` com `entityType: settings`.** A combinação que a
+inferência de tipo não produz, e que não é engano: a ação reaproveita o ícone de conexão, mas a
+entidade é configuração — e é por `entityType` que a tela de auditoria filtra. Foi preciso abrir um
+`entity_type()` no builder para reproduzi-la em vez de "corrigi-la".
+
+**A listagem de um destino remoto termina com uma consulta local.** As réplicas — as outras cópias
+do mesmo backup — não estão no bucket; estão em `backups.file_path`. A busca usa **duas variantes**
+por caminho (`12/a.gz` e `12\a.gz`), porque o migrador gravou separador do Windows nas linhas
+criadas lá e a comparação do SQLite é literal.
 
 ---
 
@@ -1256,7 +1314,7 @@ frontend atual consome o stream do `back-roco` sem alteração.
 | 5 | Auth/Users/Audit/System | 1–2 semanas | 🟢 | ✅ concluída |
 | 6 | Connections + drivers | 2–3 semanas | 🟡 | ✅ concluída |
 | 7 | Backups/dump/restore | 3–4 semanas | 🔴 | ✅ concluída (7.9 parcial → Fase 8) |
-| 8 | Storages multi-provider | 3–4 semanas | 🔴 | 🟡 em andamento (6/16) |
+| 8 | Storages multi-provider | 3–4 semanas | 🔴 | 🟡 em andamento (11/16) |
 | 9 | Docker Manager | 2–3 semanas | 🔴 | ⬜ pode entrar em paralelo |
 | 10 | SSE/scheduler/workers | 2 semanas | 🟡 | ⬜ pode entrar em paralelo |
 | 11 | System avançado | 1–2 semanas | 🟡 | ⬜ depende de 9 e 10 |
@@ -1290,7 +1348,7 @@ Legenda: **T** = teste de contrato escrito (Fase 2) · **P** = portado no `back-
 | | Pares método+rota | % |
 |---|---:|---:|
 | **T** — teste de contrato escrito | 87 / 87 | 100% |
-| **P** — portado (28 ✅ + 2 🟡) | 30 / 87 | 34% |
+| **P** — portado (42 ✅ + 2 🟡) | 44 / 87 | 51% |
 | **V** — verde contra o Roco | 0 / 87 | 0% |
 
 A coluna **V** só começa a mudar na **12.1**: rodar a suíte de contrato contra o `back-roco` exige
@@ -1339,11 +1397,11 @@ contrato.
 
 | # | Método | Rota | Controller | Limiter | T | P | V |
 |---|---|---|---|---|:-:|:-:|:-:|
-| 19 | GET | `/api/storage-destinations` | StorageDestinations.index | global | ✅ | ⬜ | ⬜ |
-| 20 | POST | `/api/storage-destinations` | StorageDestinations.store | global | ✅ | ⬜ | ⬜ |
-| 21 | GET | `/api/storage-destinations/:id` | StorageDestinations.show | global | ✅ | ⬜ | ⬜ |
-| 22 | PUT/PATCH | `/api/storage-destinations/:id` | StorageDestinations.update | global | ✅ | ⬜ | ⬜ |
-| 23 | DELETE | `/api/storage-destinations/:id` | StorageDestinations.destroy | global | ✅ | ⬜ | ⬜ |
+| 19 | GET | `/api/storage-destinations` | StorageDestinations.index | global | ✅ | ✅ | ⬜ |
+| 20 | POST | `/api/storage-destinations` | StorageDestinations.store | global | ✅ | ✅ | ⬜ |
+| 21 | GET | `/api/storage-destinations/:id` | StorageDestinations.show | global | ✅ | ✅ | ⬜ |
+| 22 | PUT/PATCH | `/api/storage-destinations/:id` | StorageDestinations.update | global | ✅ | ✅ | ⬜ |
+| 23 | DELETE | `/api/storage-destinations/:id` | StorageDestinations.destroy | global | ✅ | ✅ | ⬜ |
 | 24 | GET | `/api/storage-destinations-space` | StorageDestinations.spaceAll | global | ✅ | ⬜ | ⬜ |
 | 25 | GET | `/api/storage-destinations/:id/space` | StorageDestinations.space | global | ✅ | ⬜ | ⬜ |
 
@@ -1351,17 +1409,17 @@ contrato.
 
 | # | Método | Rota | Controller | Limiter | T | P | V |
 |---|---|---|---|---|:-:|:-:|:-:|
-| 26 | GET | `/api/storages` | Storages.index | global | ✅ | ⬜ | ⬜ |
-| 27 | POST | `/api/storages` | Storages.store | global | ✅ | ⬜ | ⬜ |
+| 26 | GET | `/api/storages` | Storages.index | global | ✅ | ✅ | ⬜ |
+| 27 | POST | `/api/storages` | Storages.store | global | ✅ | ✅ | ⬜ |
 | 28 | GET | `/api/storages/copy-jobs/:jobId` | Storages.copyStatus | global | ✅ | ⬜ | ⬜ |
 | 29 | GET | `/api/storages/archive-jobs/:jobId` | Storages.archiveJobStatus | global | ✅ | ⬜ | ⬜ |
 | 30 | GET | `/api/storages/archive-jobs/:jobId/download` | Storages.downloadArchive | global | ✅ | ⬜ | ⬜ |
-| 31 | GET | `/api/storages/:id` | Storages.show | global | ✅ | ⬜ | ⬜ |
-| 32 | PUT | `/api/storages/:id` | Storages.update | global | ✅ | ⬜ | ⬜ |
-| 33 | DELETE | `/api/storages/:id` | Storages.destroy | global | ✅ | ⬜ | ⬜ |
-| 34 | POST | `/api/storages/:id/test` | Storages.test | strict | ✅ | ⬜ | ⬜ |
-| 35 | GET | `/api/storages/:id/browse` | Storages.browse | global | ✅ | ⬜ | ⬜ |
-| 36 | DELETE | `/api/storages/:id/object` | Storages.destroyObject | global | ✅ | ⬜ | ⬜ |
+| 31 | GET | `/api/storages/:id` | Storages.show | global | ✅ | ✅ | ⬜ |
+| 32 | PUT | `/api/storages/:id` | Storages.update | global | ✅ | ✅ | ⬜ |
+| 33 | DELETE | `/api/storages/:id` | Storages.destroy | global | ✅ | ✅ | ⬜ |
+| 34 | POST | `/api/storages/:id/test` | Storages.test | strict | ✅ | ✅ | ⬜ |
+| 35 | GET | `/api/storages/:id/browse` | Storages.browse | global | ✅ | ✅ | ⬜ |
+| 36 | DELETE | `/api/storages/:id/object` | Storages.destroyObject | global | ✅ | ✅ | ⬜ |
 | 37 | POST | `/api/storages/:id/copy` | Storages.startCopy | backup | ✅ | ⬜ | ⬜ |
 | 38 | POST | `/api/storages/:id/archive` | Storages.startArchive | backup | ✅ | ⬜ | ⬜ |
 

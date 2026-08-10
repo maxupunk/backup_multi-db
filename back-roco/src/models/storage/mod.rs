@@ -28,6 +28,7 @@
 
 pub mod cloud;
 pub mod config;
+pub mod explorer;
 pub mod local;
 pub mod sftp;
 

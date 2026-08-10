@@ -47,6 +47,21 @@ pub fn required_text(
     min: usize,
     max: usize,
 ) -> bool {
+    required_str(errors, field, value.map(String::as_str), min, max)
+}
+
+/// Igual a [`required_text`], para quem ja' tem um `&str`.
+///
+/// Os campos de `config` chegam de um `serde_json::Map`, onde o valor e' um
+/// `&str` emprestado — clonar so' para satisfazer a assinatura seria copia por
+/// conta da API, e nao por necessidade.
+pub fn required_str(
+    errors: &mut ValidationErrors,
+    field: &'static str,
+    value: Option<&str>,
+    min: usize,
+    max: usize,
+) -> bool {
     let Some(value) = value else {
         errors.add(
             field,
