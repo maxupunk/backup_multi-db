@@ -78,11 +78,8 @@ pub async fn status() -> Status {
     Status { available }
 }
 
-/// Identifica se o backend executa dentro de um container e se a Engine esta
-/// acessivel. `HOSTNAME` so e' considerado id quando possui o formato Docker.
-pub async fn environment() -> Value {
-    let available = status().await.available;
-    let backend_container_id = std::env::var("BACKEND_CONTAINER_ID")
+fn resolve_backend_container_id() -> Option<String> {
+    std::env::var("BACKEND_CONTAINER_ID")
         .ok()
         .filter(|id| !id.trim().is_empty())
         .or_else(|| {
@@ -90,24 +87,84 @@ pub async fn environment() -> Value {
                 let id = id.trim();
                 (12..=64).contains(&id.len()) && id.chars().all(|c| c.is_ascii_hexdigit())
             })
-        });
+        })
+}
+
+/// Identifica se o backend executa dentro de um container e se a Engine esta
+/// acessivel. `HOSTNAME` so e' considerado id quando possui o formato Docker.
+pub async fn environment() -> Value {
+    let available = status().await.available;
+    let backend_container_id = resolve_backend_container_id();
+    let backend_networks = if available {
+        match backend_container_id.as_deref() {
+            Some(id) => inspect_container_networks(id).await.unwrap_or_default(),
+            None => Vec::new(),
+        }
+    } else {
+        Vec::new()
+    };
+    let backend_network_ids: Vec<String> = backend_networks
+        .iter()
+        .map(|network| network.network_id.clone())
+        .collect();
     let docker_host_ip = std::env::var("DOCKER_HOST_IP")
         .ok()
         .filter(|value| !value.trim().is_empty())
         .unwrap_or_else(|| {
-            if backend_container_id.is_some() {
-                "host.docker.internal".into()
-            } else {
-                "127.0.0.1".into()
-            }
+            backend_networks
+                .iter()
+                .find(|network| network.gateway.is_some())
+                .and_then(|network| network.gateway.clone())
+                .unwrap_or_else(|| {
+                    if backend_container_id.is_some() {
+                        "host.docker.internal".into()
+                    } else {
+                        std::env::var("DOCKER_FALLBACK_HOST")
+                            .ok()
+                            .filter(|value| !value.trim().is_empty())
+                            .unwrap_or_else(|| "127.0.0.1".into())
+                    }
+                })
         });
     json!({
         "dockerAvailable": available,
         "unavailableReason": if available { Value::Null } else { Value::String("Docker indisponivel".into()) },
         "backendContainerId": backend_container_id,
-        "backendNetworkIds": [],
+        "backendNetworkIds": backend_network_ids,
         "dockerHostIp": docker_host_ip,
     })
+}
+
+async fn inspect_container_networks(
+    container_id: &str,
+) -> Result<Vec<crate::models::docker_connection_suggestion::NetworkAttachment>, DockerError> {
+    let client = client()?;
+    let inspect = call(client.inspect_container(container_id, None)).await?;
+    let inspect: bollard::models::ContainerInspectResponse =
+        serde_json::from_value(serde_json::to_value(inspect).map_err(|_| DockerError::Engine)?)
+            .map_err(|_| DockerError::Engine)?;
+    Ok(inspect
+        .network_settings
+        .as_ref()
+        .and_then(|settings| settings.networks.as_ref())
+        .map(|networks| {
+            networks
+                .iter()
+                .map(|(network_name, endpoint)| {
+                    crate::models::docker_connection_suggestion::NetworkAttachment {
+                        network_id: endpoint
+                            .network_id
+                            .clone()
+                            .unwrap_or_else(|| network_name.clone()),
+                        network_name: network_name.clone(),
+                        aliases: endpoint.aliases.clone().unwrap_or_default(),
+                        gateway: endpoint.gateway.clone(),
+                        ip_address: endpoint.ip_address.clone(),
+                    }
+                })
+                .collect()
+        })
+        .unwrap_or_default())
 }
 
 /// Lista containers, inclusive os parados, agrupados por projeto compose.
@@ -135,8 +192,10 @@ pub async fn list_containers() -> Result<Value, DockerError> {
     Ok(Value::Array(result))
 }
 
-/// Descobre containers de banco em execução para a tela de conexões.
+/// Descobre containers de banco em execucao para a tela de conexoes.
 pub async fn discover_database_hosts() -> Result<Vec<Value>, DockerError> {
+    use crate::models::docker_connection_suggestion as suggestion;
+
     let client = client()?;
     let containers = call(
         client.list_containers(Some(ListContainersOptions::<String> {
@@ -145,73 +204,34 @@ pub async fn discover_database_hosts() -> Result<Vec<Value>, DockerError> {
         })),
     )
     .await?;
-    let mut hosts = Vec::new();
-    for container in containers {
-        let summary = value(container)?;
-        let id = summary
-            .get("Id")
-            .and_then(Value::as_str)
-            .unwrap_or_default();
-        let name = summary
-            .get("Names")
-            .and_then(Value::as_array)
-            .and_then(|items| items.first())
-            .and_then(Value::as_str)
-            .unwrap_or(id)
-            .trim_start_matches('/');
-        let image = summary
-            .get("Image")
-            .and_then(Value::as_str)
-            .unwrap_or_default();
-        let text = format!("{name} {image}").to_ascii_lowercase();
-        let ports = summary
-            .get("Ports")
-            .and_then(Value::as_array)
-            .cloned()
-            .unwrap_or_default();
-        let database_type = if text.contains("postgres")
-            || ports
-                .iter()
-                .any(|port| port.get("PrivatePort").and_then(Value::as_i64) == Some(5432))
-        {
-            Some("postgresql")
-        } else if text.contains("mariadb") {
-            Some("mariadb")
-        } else if text.contains("mysql")
-            || ports
-                .iter()
-                .any(|port| port.get("PrivatePort").and_then(Value::as_i64) == Some(3306))
-        {
-            Some("mysql")
-        } else {
-            None
-        };
-        let Some(database_type) = database_type else {
+
+    let backend_container_id = resolve_backend_container_id();
+    let backend_networks = match backend_container_id.as_deref() {
+        Some(id) => inspect_container_networks(id).await.unwrap_or_default(),
+        None => Vec::new(),
+    };
+    let context =
+        suggestion::BackendContext::from_environment(backend_container_id, backend_networks);
+
+    let mut descriptors = Vec::new();
+    for summary in containers {
+        let id = summary.id.as_deref().unwrap_or_default();
+        if id.is_empty() {
             continue;
-        };
-        let port_options: Vec<Value> = ports.into_iter().filter_map(|port| {
-            let container_port = port.get("PrivatePort").and_then(Value::as_i64)?;
-            if container_port != 3306 && container_port != 5432 { return None; }
-            let host_port = port.get("PublicPort").and_then(Value::as_i64);
-            Some(json!({ "containerPort": container_port, "hostPort": host_port.unwrap_or(container_port), "protocol": port.get("Type").and_then(Value::as_str).unwrap_or("tcp"), "display": format!("{}:{}", name, host_port.unwrap_or(container_port)), "isExternal": host_port.is_some() }))
-        }).collect();
-        let recommended_port = port_options
-            .first()
-            .and_then(|port| port.get("hostPort"))
-            .cloned()
-            .unwrap_or_else(|| {
-                json!(if database_type == "postgresql" {
-                    5432
-                } else {
-                    3306
-                })
-            });
-        let has_external_port = port_options
-            .iter()
-            .any(|port| port.get("isExternal") == Some(&Value::Bool(true)));
-        hosts.push(json!({ "containerId": id, "containerName": name, "databaseTypeHint": database_type, "sameNetwork": false, "suggestedHost": "127.0.0.1", "hostResolutionSource": "fallback", "networkNames": [], "portOptions": port_options, "recommendedPort": recommended_port, "hasExternalPort": has_external_port, "connectivityWarning": "O backend não está no mesmo network Docker; use a porta publicada no host." }));
+        }
+        let inspect = call(client.inspect_container(id, None)).await?;
+        let inspect: bollard::models::ContainerInspectResponse =
+            serde_json::from_value(value(inspect)?).map_err(|_| DockerError::Engine)?;
+        if let Some(descriptor) = suggestion::descriptor_from_bollard(&summary, &inspect) {
+            descriptors.push(descriptor);
+        }
     }
-    Ok(hosts)
+
+    let suggestions = suggestion::ConnectionSuggestionMapper::map(&descriptors, &context);
+    Ok(suggestions
+        .iter()
+        .map(suggestion::suggestion_to_value)
+        .collect())
 }
 
 pub async fn inspect_container(id: &str) -> Result<Value, DockerError> {

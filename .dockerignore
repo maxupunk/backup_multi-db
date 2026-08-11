@@ -12,6 +12,7 @@ frontend/node_modules/
 backend/build/
 frontend/dist/
 frontend/dev-dist/
+back-roco/target/
 
 # --- Git
 .git/

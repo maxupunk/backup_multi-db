@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use axum::http::StatusCode;
+use axum::extract::Request;
 use axum::response::{Html, IntoResponse};
 use loco_rs::{
     app::{AppContext, Hooks, Initializer},
@@ -14,6 +14,7 @@ use loco_rs::{
 };
 use migration::Migrator;
 use std::path::Path;
+use tower_http::services::ServeDir;
 
 #[allow(unused_imports)]
 use crate::{
@@ -69,28 +70,34 @@ impl Hooks for App {
     async fn after_routes(router: axum::Router, ctx: &AppContext) -> Result<axum::Router> {
         crate::workers::resource_metrics::start(ctx).await?;
 
-        // Fallback da SPA (Fase 12.4): `GET /*` serve o `index.html` quando o
-        // caminho não casa com nenhuma rota da API. O diretório vem das
-        // settings, com default `public/`; em produção o build do Vue é copiado
-        // para lá. Se o arquivo não existir, servimos um HTML mínimo embutido —
-        // isso garante que o fallback nunca devolva 404 numa rota de frontend,
-        // mesmo antes do build do Vue.
+        // Fallback da SPA (Fase 12.4): arquivos estáticos do build Vue são
+        // servidos pelo `ServeDir` a partir de `public/`; quando o caminho não
+        // casa com um arquivo real (rotas de frontend como `/backups`), o
+        // próprio `ServeDir` cai no fallback e devolve `index.html`. Isso evita
+        // que o handler genérico sirva HTML com `text/html` para assets `.js`,
+        // `.css`, `manifest.webmanifest`, etc., quebrando o carregamento da SPA.
         //
-        // Outros métodos num caminho desconhecido devem virar 404 JSON da API,
-        // e não 405 do service estático.
+        // Requisições que não são GET/HEAD continuam retornando 404, para que a
+        // API não transforme métodos estranhos em 405 do serviço de arquivos.
         let settings =
             crate::initializers::settings::Settings::from_json(ctx.config.settings.as_ref())?;
-        let index_path = Path::new(&settings.frontend_spa_path).join("index.html");
+        let spa_path = Path::new(&settings.frontend_spa_path).to_path_buf();
+        let index_path = spa_path.join("index.html");
         let index_html = tokio::fs::read_to_string(&index_path)
             .await
             .unwrap_or_else(|_| SPA_FALLBACK_HTML.to_string());
 
-        let router = router.fallback(move |method: axum::http::Method| async move {
-            if method != axum::http::Method::GET && method != axum::http::Method::HEAD {
-                return StatusCode::NOT_FOUND.into_response();
+        let serve_dir = ServeDir::new(&spa_path).fallback(tower::service_fn({
+            let index_html = index_html.clone();
+            move |_req: Request| {
+                let index_html = index_html.clone();
+                async move {
+                    Ok::<_, std::convert::Infallible>(Html(index_html).into_response())
+                }
             }
-            Html(index_html.clone()).into_response()
-        });
+        }));
+
+        let router = router.fallback_service(serve_dir);
 
         // Camadas globais: `force_json` e o limitador de 600 req/min por IP.
         // Os limitadores por rota (`auth`, `strict`, `backup`) entram junto com

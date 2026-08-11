@@ -25,7 +25,7 @@ server:
   # Out of the box middleware configuration. to disable middleware you can changed the `enable` field to `false` of comment the middleware block
   middlewares:
     fallback:
-      enable: false
+      enable: true
 
 # Worker Configuration
 workers:

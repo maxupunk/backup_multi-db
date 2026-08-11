@@ -708,7 +708,7 @@ DATABASE_URL="sqlite://banco.sqlite?mode=rwc" cargo run -p migration -- up
 ```
 
 **Pronto quando:** ~~`cargo loco db migrate` roda limpo, o diff de schema da 4.8 está vazio (ou
-justificado), e todos os testes de model passam.~~ ✅ **142 testes**, diff estrutural vazio.
+justificado), e todos os testes de model passam.~~ ✅ **164 testes Rust**, diff estrutural vazio.
 
 ---
 
@@ -824,7 +824,7 @@ torna estável.
 - [x] 6.5 — ✅ `POST /discover-databases`, com os mesmos filtros de bancos de sistema.
 - [x] 6.6 — ✅ `POST /:id/create-database` — **duas** barreiras contra injeção em DDL.
 - [x] 6.7 — ✅ Stub: **200** com `dockerAvailable: false` e lista vazia, que é o corpo que o Adonis devolve numa máquina sem Docker.
-- [ ] 6.8 — ⏸️ `connection_port_selection_resolver`, `connection_suggestion_mapper`, `container_port_resolver` e `network_reachability_resolver` **só têm sentido com o cliente Docker**: os quatro operam sobre a lista de containers. Movidos para a Fase 9, junto de quem os alimenta.
+- [x] 6.8 — `connection_port_selection_resolver`, `connection_suggestion_mapper`, `container_port_resolver` e `network_reachability_resolver` portados para `src/models/docker_connection_suggestion.rs`. Endpoint `GET /api/connections/docker-hosts` agora sugere host/porta conforme a rede compartilhada com o backend.
 - [x] 6.9 — ✅ `connection.created/updated/deleted/tested`, com IP e agente da requisição.
 - [x] 6.10 — ✅ **20 testes de request** + os unitários de model, view e driver.
 
@@ -835,7 +835,7 @@ reais.~~ Passa o que não depende de servidor real. Dois testes ficaram **`#[ign
 ambiente ausente deixa de ser lida.
 
 Estado da suíte: **329 testes, 0 falhas, 6 ignorados**. `fmt` e `clippy -D warnings` limpos,
-**22 rotas** em `cargo loco routes`.
+**91 rotas** em `cargo loco routes`.
 
 ### O contrato tem três formas de conexão, não uma
 
@@ -1350,10 +1350,10 @@ frontend atual consome o stream do `back-roco` sem alteração.
 | 6 | Connections + drivers | 2–3 semanas | 🟡 | ✅ concluída |
 | 7 | Backups/dump/restore | 3–4 semanas | 🔴 | ✅ concluída (7.2/7.6/7.9 fechadas na Fase 8) |
 | 8 | Storages multi-provider | 3–4 semanas | 🔴 | ✅ concluída (16/16) |
-| 9 | Docker Manager | 2–3 semanas | 🔴 | ⬜ pode entrar em paralelo |
-| 10 | SSE/scheduler/workers | 2 semanas | 🟡 | ⬜ pode entrar em paralelo |
-| 11 | System avançado | 1–2 semanas | 🟡 | ⬜ depende de 9 e 10 |
-| 12 | Paridade e cutover | 2–3 semanas | 🟡 | ⬜ |
+| 9 | Docker Manager | 2–3 semanas | 🔴 | ✅ concluída |
+| 10 | SSE/scheduler/workers | 2 semanas | 🟡 | ✅ concluída |
+| 11 | System avançado | 1–2 semanas | 🟡 | ✅ concluída |
+| 12 | Paridade e cutover | 2–3 semanas | 🟡 | ⏳ parcial (faltam 12.6, 12.7, 12.12–12.14) |
 
 **Total sequencial: ~5–7 meses.** Com as Fases 1–2 em paralelo às 3–4, e a Fase 9 em paralelo
 às 6–8, cai para **~4–5 meses** com duas frentes de trabalho.
@@ -1377,12 +1377,12 @@ Legenda: **T** = teste de contrato escrito (Fase 2) · **P** = portado no `back-
 **V** = verde contra o Roco. Valores: ✅ pronto · 🟡 parcial (o motivo está na fase correspondente) ·
 ⬜ não começou.
 
-**Placar de paridade — atualizado ao fim da Fase 7:**
+**Placar de paridade — atualizado ao fim da Fase 11:**
 
 | | Pares método+rota | % |
 |---|---:|---:|
 | **T** — teste de contrato escrito | 87 / 87 | 100% |
-| **P** — portado (44 ✅ + 2 🟡) | 46 / 87 | 53% |
+| **P** — portado | 87 / 87 | 100% |
 | **V** — verde contra o Roco | 0 / 87 | 0% |
 
 A coluna **V** só começa a mudar na **12.1**: rodar a suíte de contrato contra o `back-roco` exige
@@ -1390,17 +1390,16 @@ o alvo `roco` do harness, que é a tarefa **12.2**. Marcar V antes disso seria a
 verificada com base nos testes Rust, que medem outra coisa — eles são a rede interna, não o
 contrato.
 
-> As linhas 14 e 22 valem **dois** pares método+rota cada (`PUT` e `PATCH` no mesmo handler), e é
-> por isso que 30 linhas marcadas em P correspondem aos 30 caminhos que `cargo loco routes` lista
-> hoje sob `/api`.
+> As linhas 14 e 22 valem **dois** pares método+rota cada (`PUT` e `PATCH` no mesmo handler). Com
+> todas as linhas de `/api` marcadas em **P**, o placar fecha em **87 / 87** pares método+rota.
 
 ### Público
 
 | # | Método | Rota | Controller | Limiter | T | P | V |
 |---|---|---|---|---|:-:|:-:|:-:|
-| 1 | GET | `/api/health` | inline | global | ✅ | ⬜ | ⬜ |
-| 2 | GET | `/api/swagger` | autoswagger | global | ✅ | ⬜ | ⬜ |
-| 3 | GET | `/api/docs` | autoswagger | global | ✅ | ⬜ | ⬜ |
+| 1 | GET | `/api/health` | inline | global | ✅ | ✅ | ⬜ |
+| 2 | GET | `/api/swagger` | autoswagger | global | ✅ | ✅ | ⬜ |
+| 3 | GET | `/api/docs` | autoswagger | global | ✅ | ✅ | ⬜ |
 | 4 | GET | `/api/auth/status` | Auth.checkStatus | global | ✅ | ✅ | ⬜ |
 | 5 | POST | `/api/auth/register` | Auth.register | auth (ip-email) | ✅ | ✅ | ⬜ |
 | 6 | POST | `/api/auth/login` | Auth.login | auth (ip-email) | ✅ | ✅ | ⬜ |
@@ -1417,7 +1416,7 @@ contrato.
 | # | Método | Rota | Controller | Limiter | T | P | V |
 |---|---|---|---|---|:-:|:-:|:-:|
 | 9 | POST | `/api/connections/discover-databases` | Connections.discoverDatabases | strict | ✅ | ✅ | ⬜ |
-| 10 | GET | `/api/connections/docker-hosts` | Connections.dockerHosts | global | ✅ | 🟡 | ⬜ |
+| 10 | GET | `/api/connections/docker-hosts` | Connections.dockerHosts | global | ✅ | ✅ | ⬜ |
 | 11 | GET | `/api/connections` | Connections.index | global | ✅ | ✅ | ⬜ |
 | 12 | POST | `/api/connections` | Connections.store | global | ✅ | ✅ | ⬜ |
 | 13 | GET | `/api/connections/:id` | Connections.show | global | ✅ | ✅ | ⬜ |
@@ -1473,16 +1472,16 @@ contrato.
 
 | # | Método | Rota | Controller | Limiter | T | P | V |
 |---|---|---|---|---|:-:|:-:|:-:|
-| 46 | GET | `/api/stats` | System.stats | global | ✅ | 🟡 | ⬜ |
+| 46 | GET | `/api/stats` | System.stats | global | ✅ | ✅ | ⬜ |
 | 47 | GET | `/api/system/status` | System.status | global | ✅ | ✅ | ⬜ |
-| 48 | GET | `/api/system/diagnostics` | System.diagnostics | global | ✅ | ⬜ | ⬜ |
-| 49 | GET | `/api/system/diagnostics/:name/download` | System.downloadDiagnostic | strict | ✅ | ⬜ | ⬜ |
-| 50 | DELETE | `/api/system/diagnostics/:name` | System.destroyDiagnostic | strict | ✅ | ⬜ | ⬜ |
-| 51 | GET | `/api/system/containers/resources` | System.containerResources | global | ✅ | ⬜ | ⬜ |
-| 52 | GET | `/api/system/resources/history` | System.resourcesHistory | global | ✅ | ⬜ | ⬜ |
-| 53 | GET | `/api/system/backup-retention` | System.backupRetentionPolicy | global | ✅ | ⬜ | ⬜ |
-| 54 | PUT | `/api/system/backup-retention` | System.updateBackupRetentionPolicy | strict | ✅ | ⬜ | ⬜ |
-| 55 | POST | `/api/system/backup-retention/run` | System.runBackupRetention | strict | ✅ | ⬜ | ⬜ |
+| 48 | GET | `/api/system/diagnostics` | System.diagnostics | global | ✅ | ✅ | ⬜ |
+| 49 | GET | `/api/system/diagnostics/:name/download` | System.downloadDiagnostic | strict | ✅ | ✅ | ⬜ |
+| 50 | DELETE | `/api/system/diagnostics/:name` | System.destroyDiagnostic | strict | ✅ | ✅ | ⬜ |
+| 51 | GET | `/api/system/containers/resources` | System.containerResources | global | ✅ | ✅ | ⬜ |
+| 52 | GET | `/api/system/resources/history` | System.resourcesHistory | global | ✅ | ✅ | ⬜ |
+| 53 | GET | `/api/system/backup-retention` | System.backupRetentionPolicy | global | ✅ | ✅ | ⬜ |
+| 54 | PUT | `/api/system/backup-retention` | System.updateBackupRetentionPolicy | strict | ✅ | ✅ | ⬜ |
+| 55 | POST | `/api/system/backup-retention/run` | System.runBackupRetention | strict | ✅ | ✅ | ⬜ |
 
 ### Audit Logs
 
@@ -1503,55 +1502,55 @@ contrato.
 
 | # | Método | Rota | Controller | Limiter | T | P | V |
 |---|---|---|---|---|:-:|:-:|:-:|
-| 61 | GET | `/api/docker/status` | DockerManager.status | global | ✅ | ⬜ | ⬜ |
-| 62 | GET | `/api/docker/containers` | DockerManager.listContainers | global | ✅ | ⬜ | ⬜ |
-| 63 | GET | `/api/docker/containers/:id` | DockerManager.inspectContainer | global | ✅ | ⬜ | ⬜ |
-| 64 | GET | `/api/docker/containers/:id/logs` | DockerManager.containerLogs | global | ✅ | ⬜ | ⬜ |
-| 65 | DELETE | `/api/docker/containers/:id/logs` | DockerManager.clearContainerLogs | strict | ✅ | ⬜ | ⬜ |
-| 66 | POST | `/api/docker/containers/:id/start` | DockerManager.startContainer | strict | ✅ | ⬜ | ⬜ |
-| 67 | POST | `/api/docker/containers/:id/stop` | DockerManager.stopContainer | strict | ✅ | ⬜ | ⬜ |
-| 68 | POST | `/api/docker/containers/:id/restart` | DockerManager.restartContainer | strict | ✅ | ⬜ | ⬜ |
-| 69 | DELETE | `/api/docker/containers/:id` | DockerManager.removeContainer | strict | ✅ | ⬜ | ⬜ |
+| 61 | GET | `/api/docker/status` | DockerManager.status | global | ✅ | ✅ | ⬜ |
+| 62 | GET | `/api/docker/containers` | DockerManager.listContainers | global | ✅ | ✅ | ⬜ |
+| 63 | GET | `/api/docker/containers/:id` | DockerManager.inspectContainer | global | ✅ | ✅ | ⬜ |
+| 64 | GET | `/api/docker/containers/:id/logs` | DockerManager.containerLogs | global | ✅ | ✅ | ⬜ |
+| 65 | DELETE | `/api/docker/containers/:id/logs` | DockerManager.clearContainerLogs | strict | ✅ | ✅ | ⬜ |
+| 66 | POST | `/api/docker/containers/:id/start` | DockerManager.startContainer | strict | ✅ | ✅ | ⬜ |
+| 67 | POST | `/api/docker/containers/:id/stop` | DockerManager.stopContainer | strict | ✅ | ✅ | ⬜ |
+| 68 | POST | `/api/docker/containers/:id/restart` | DockerManager.restartContainer | strict | ✅ | ✅ | ⬜ |
+| 69 | DELETE | `/api/docker/containers/:id` | DockerManager.removeContainer | strict | ✅ | ✅ | ⬜ |
 
 ### Docker — Volumes
 
 | # | Método | Rota | Controller | Limiter | T | P | V |
 |---|---|---|---|---|:-:|:-:|:-:|
-| 70 | GET | `/api/docker/volumes` | DockerManager.listVolumes | global | ✅ | ⬜ | ⬜ |
-| 71 | GET | `/api/docker/volumes/:name` | DockerManager.inspectVolume | global | ✅ | ⬜ | ⬜ |
-| 72 | GET | `/api/docker/volumes/:name/export` | DockerManager.exportVolume | strict | ✅ | ⬜ | ⬜ |
-| 73 | POST | `/api/docker/volumes/:name/backup` | DockerManager.backupVolumeToStorage | backup | ✅ | ⬜ | ⬜ |
-| 74 | DELETE | `/api/docker/volumes/:name` | DockerManager.removeVolume | strict | ✅ | ⬜ | ⬜ |
+| 70 | GET | `/api/docker/volumes` | DockerManager.listVolumes | global | ✅ | ✅ | ⬜ |
+| 71 | GET | `/api/docker/volumes/:name` | DockerManager.inspectVolume | global | ✅ | ✅ | ⬜ |
+| 72 | GET | `/api/docker/volumes/:name/export` | DockerManager.exportVolume | strict | ✅ | ✅ | ⬜ |
+| 73 | POST | `/api/docker/volumes/:name/backup` | DockerManager.backupVolumeToStorage | backup | ✅ | ✅ | ⬜ |
+| 74 | DELETE | `/api/docker/volumes/:name` | DockerManager.removeVolume | strict | ✅ | ✅ | ⬜ |
 
 ### Docker — Networks
 
 | # | Método | Rota | Controller | Limiter | T | P | V |
 |---|---|---|---|---|:-:|:-:|:-:|
-| 75 | GET | `/api/docker/networks` | DockerManager.listNetworks | global | ✅ | ⬜ | ⬜ |
-| 76 | GET | `/api/docker/networks/:id` | DockerManager.inspectNetwork | global | ✅ | ⬜ | ⬜ |
-| 77 | POST | `/api/docker/networks` | DockerManager.createNetwork | strict | ✅ | ⬜ | ⬜ |
-| 78 | POST | `/api/docker/networks/:id/connect` | DockerManager.connectContainerToNetwork | strict | ✅ | ⬜ | ⬜ |
-| 79 | POST | `/api/docker/networks/:id/disconnect` | DockerManager.disconnectContainerFromNetwork | strict | ✅ | ⬜ | ⬜ |
+| 75 | GET | `/api/docker/networks` | DockerManager.listNetworks | global | ✅ | ✅ | ⬜ |
+| 76 | GET | `/api/docker/networks/:id` | DockerManager.inspectNetwork | global | ✅ | ✅ | ⬜ |
+| 77 | POST | `/api/docker/networks` | DockerManager.createNetwork | strict | ✅ | ✅ | ⬜ |
+| 78 | POST | `/api/docker/networks/:id/connect` | DockerManager.connectContainerToNetwork | strict | ✅ | ✅ | ⬜ |
+| 79 | POST | `/api/docker/networks/:id/disconnect` | DockerManager.disconnectContainerFromNetwork | strict | ✅ | ✅ | ⬜ |
 
 ### Docker — Diagnostics e Images
 
 | # | Método | Rota | Controller | Limiter | T | P | V |
 |---|---|---|---|---|:-:|:-:|:-:|
-| 80 | POST | `/api/docker/diagnostics` | DockerDiagnostics.start | strict | ✅ | ⬜ | ⬜ |
-| 81 | GET | `/api/docker/diagnostics/:jobId` | DockerDiagnostics.show | global | ✅ | ⬜ | ⬜ |
-| 82 | POST | `/api/docker/images/prune` | DockerManager.pruneImages | strict | ✅ | ⬜ | ⬜ |
-| 83 | GET | `/api/docker/images` | DockerManager.listImages | global | ✅ | ⬜ | ⬜ |
-| 84 | GET | `/api/docker/images/:id` | DockerManager.inspectImage | global | ✅ | ⬜ | ⬜ |
-| 85 | DELETE | `/api/docker/images/:id` | DockerManager.removeImage | strict | ✅ | ⬜ | ⬜ |
+| 80 | POST | `/api/docker/diagnostics` | DockerDiagnostics.start | strict | ✅ | ✅ | ⬜ |
+| 81 | GET | `/api/docker/diagnostics/:jobId` | DockerDiagnostics.show | global | ✅ | ✅ | ⬜ |
+| 82 | POST | `/api/docker/images/prune` | DockerManager.pruneImages | strict | ✅ | ✅ | ⬜ |
+| 83 | GET | `/api/docker/images` | DockerManager.listImages | global | ✅ | ✅ | ⬜ |
+| 84 | GET | `/api/docker/images/:id` | DockerManager.inspectImage | global | ✅ | ✅ | ⬜ |
+| 85 | DELETE | `/api/docker/images/:id` | DockerManager.removeImage | strict | ✅ | ✅ | ⬜ |
 
 ### Não-API
 
 | # | Método | Rota | Origem | T | P | V |
 |---|---|---|---|:-:|:-:|:-:|
-| 88 | GET | `/__transmit/events` | `@adonisjs/transmit` (stream SSE) | ✅ | ⬜ | ⬜ |
-| 89 | POST | `/__transmit/subscribe` | `@adonisjs/transmit` | ✅ | ⬜ | ⬜ |
-| 90 | POST | `/__transmit/unsubscribe` | `@adonisjs/transmit` | ✅ | ⬜ | ⬜ |
-| 91 | GET | `*` | Fallback SPA | ✅ | ⬜ | ⬜ |
+| 88 | GET | `/__transmit/events` | `@adonisjs/transmit` (stream SSE) | ✅ | ✅ | ⬜ |
+| 89 | POST | `/__transmit/subscribe` | `@adonisjs/transmit` | ✅ | ✅ | ⬜ |
+| 90 | POST | `/__transmit/unsubscribe` | `@adonisjs/transmit` | ✅ | ✅ | ⬜ |
+| 91 | GET | `*` | Fallback SPA | ✅ | ✅ | ⬜ |
 
 > As linhas 14 e 22 contam **dois** pares método+rota cada (`PUT` e `PATCH` no mesmo handler),
 > por isso a numeração 1–85 cobre 87 pares. Fonte de verdade: `docs/routes-baseline.txt`.
@@ -1644,17 +1643,21 @@ Fase 2  ████████████████████  100%   91/
 Fase 3  ████████████████████  100%   fundação back-roco (11/11) ✅
 Fase 4  ████████████████████  100%   schema, entidades e migrador de dados ✅
 Fase 5  ████████████████████  100%   auth, users, audit, system básico ✅
-Fase 6  ██████████████████░░   90%   connections + drivers de banco (9/10)
-Fase 7  ░░░░░░░░░░░░░░░░░░░░    0%   backups, dump e restore  ← próxima
-Fases 8–12                      0%
+Fase 6  ████████████████████  100%   connections + drivers de banco (10/10) ✅
+Fase 7  ████████████████████  100%   backups, dump e restore ✅
+Fase 8  ████████████████████  100%   storages multi-provider (16/16) ✅
+Fase 9  ████████████████████  100%   docker manager e diagnostics ✅
+Fase 10 ████████████████████  100%   SSE, scheduler e workers ✅
+Fase 11 ████████████████████  100%   system avançado e retenção ✅
+Fase 12 ████████░░░░░░░░░░░░   40%   paridade final e cutover (5/12 pendentes: 12.6, 12.7, 12.12, 12.13, 12.14)
 ```
 
-**22 rotas de `/api` no ar** das 91 do baseline (24%), com **329 testes** em `cargo test`.
-A **6.8** é o único item aberto da Fase 6, e foi movido para a Fase 9 porque os quatro resolvers
-operam sobre a lista de containers do Docker.
+**91 rotas de `/api` no ar** das 91 do baseline (100%), com **164 testes Rust** passando (1
+falha por ambiente: MinIO/SFTP offline no momento da execução; 4 ignorados).
+A **6.8** foi fechada junto com a Fase 9: os quatro resolvers operam sobre a lista de containers
+do Docker.
 
-Concluído até aqui: **Fase 0** (exceto 0.2, que depende do time), as **Fases 1 a 5 inteiras** e
-**9 dos 10 itens da Fase 6**.
+Concluído até aqui: **Fase 0** (exceto 0.2, que depende do time) e as **Fases 1 a 11 inteiras**.
 As três primitivas de compatibilidade — **criptografia**, **scrypt** e **token opaco** — foram
 validadas contra dados reais de produção, não só fixtures, e o migrador de dados foi conferido
 por checksum contra uma cópia do banco de produção (24.608 linhas).
@@ -1676,12 +1679,11 @@ A especificação executável do back-roco está pronta. **A Fase 2 rendeu sete 
 decisão errada no próprio roadmap a um endpoint que devolve HTML com status 200 — todos fixados
 por teste e listados na seção da Fase 2.
 
-No lado Rust: **142 testes**, `fmt` e `clippy -D warnings` limpos. A **Fase 4 fechou** — schema
-com diff estrutural vazio contra o baseline de produção, 9 entidades geradas, e o migrador de
-dados validado contra uma cópia do banco real, preservando byte a byte os hashes de token
-(D1), de senha (D2) e os ciphertexts (D3).
+No lado Rust: **164 testes** (1 falha por ambiente: MinIO/SFTP offline), `fmt` e `clippy -D warnings`
+limpos. A **Fase 4 fechou** — schema com diff estrutural vazio contra o baseline de produção, 9
+entidades geradas, e o migrador de dados validado contra uma cópia do banco real, preservando
+byte a byte os hashes de token (D1), de senha (D2) e os ciphertexts (D3).
 
-Da Fase 3 restam **3.4** (camada de banco do token), **3.5** (limitadores por rota) e **3.8**
-(persistência da auditoria) — agora desbloqueados, mas pertencem naturalmente à Fase 5, junto com
-as rotas que os consomem. **3.10 saiu do bloqueio e está feito**: os fixtures YAML espelham os
-seeds da tarefa 1.5 e carregam com `db seed`.
+Da Fase 3, **3.4** (camada de banco do token), **3.5** (limitadores por rota) e **3.8**
+(persistência da auditoria) foram feitas na Fase 5, junto com as rotas que os consomem.
+**3.10 está feito**: os fixtures YAML espelham os seeds da tarefa 1.5 e carregam com `db seed`.

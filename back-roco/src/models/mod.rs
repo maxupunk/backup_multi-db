@@ -16,6 +16,7 @@ pub mod container_memory;
 pub mod database_driver;
 pub mod diagnostics;
 pub mod docker;
+pub mod docker_connection_suggestion;
 pub mod docker_container_monitoring;
 pub mod docker_diagnostics;
 pub mod docker_volume;
