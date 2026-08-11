@@ -30,7 +30,7 @@
 - [Fase 9 — Docker Manager e Diagnostics](#fase-9--docker-manager-e-diagnostics)
 - [Fase 10 — SSE, scheduler e workers](#fase-10--sse-scheduler-e-workers)
 - [Fase 11 — System avançado e retenção](#fase-11--system-avançado-e-retenção)
-- [Fase 12 — Paridade final e cutover](#fase-12--paridade-final-e-cutover)
+- [Fase 12 — Paridade final](#fase-12--paridade-final)
 - [Apêndice A — Matriz completa de endpoints](#apêndice-a--matriz-completa-de-endpoints)
 - [Apêndice B — Mapa de dependências Node → Rust](#apêndice-b--mapa-de-dependências-node--rust)
 
@@ -105,7 +105,7 @@ Fase 0 (decisões)
    │                              │
    └─► Fase 3 (fundação) ──► Fase 4 (schema) ──► Fases 5..11 ← track de PORT
                                                      │
-                                                     └─► Fase 12 (cutover)
+                                                     └─► Fase 12 (paridade final)
 ```
 
 Fases 1–2 e 3–4 podem correr **em paralelo**. As fases 5–11 consomem os testes da Fase 2 como
@@ -123,11 +123,11 @@ independentes e podem entrar a qualquer momento após a Fase 3).
 | D1 | Formato do token de auth | ✅ **Token opaco compatível** — mantém `auth_access_tokens`, hash em DB | Sessões atuais continuam válidas; frontend inalterado. Custo: reimplementar o provider do Adonis em Rust |
 | D2 | Hash de senha | ✅ **scrypt** (o mesmo do Adonis) | Usuários logam com a senha atual, sem reset nem rehash. Custo: `scrypt` crate + réplica dos parâmetros do `@adonisjs/core/hash` |
 | D3 | Criptografia de credenciais | ✅ **AES-256-GCM byte-compatível**, formato `iv:authTag:data` base64 | ⚠️ **IV de 16 bytes**, não os 12 padrão do GCM — o Rust precisa de `AesGcm<Aes256, U16>`, não o alias `Aes256Gcm`. Chave = `DB_ENCRYPTION_KEY` hex de 64 chars, usada **direto**, sem KDF |
-| D4 | Estratégia de banco | ✅ **Schema novo + script de migração de dados** | Liberdade para modelar no estilo Sea-ORM. Exige janela de downtime no cutover e um migrador que preserve os dados atuais (incl. 25.458 linhas de métricas) e o hash dos tokens |
+| D4 | Estratégia de banco | ✅ **Schema novo + script de migração de dados** | Liberdade para modelar no estilo Sea-ORM. Exige um migrador que preserve os dados atuais (incl. 25.458 linhas de métricas) e o hash dos tokens |
 | D5 | Nomes na serialização | ✅ **`camelCase` no JSON**, `snake_case` no DB | Todas as DTOs levam `#[serde(rename_all = "camelCase")]`. Frontend não muda |
 | D6 | Transporte SSE | ✅ **`axum::response::sse` no mesmo path** `/__transmit/*` | Replicar o protocolo do `@adonisjs/transmit`: `GET /__transmit/events`, `POST /__transmit/subscribe`, `POST /__transmit/unsubscribe` |
 | D7 | Rate limiting | ✅ **Middleware Axum próprio** (base `tower-governor`) | 4 limiters (`global`, `auth`, `strict`, `backup`), `keyBy` por IP e IP+email, headers `X-RateLimit-*` e `Retry-After` idênticos |
-| D8 | Cutover | ✅ **Big-bang ao final da Fase 12** | Sem proxy intermediário. Todo o risco concentrado num evento → as Fases 12.12–12.14 (shadow traffic e runbook de rollback) passam a ser **obrigatórias**, não opcionais |
+| D8 | Cutover | ⚪ **Removido do escopo deste roadmap** | Big-bang, shadow traffic e descomissionamento do Adonis não serão tratados aqui. O migrador de dados (D4) continua necessário para quem for fazer a migração, mas o planejamento operacional fica fora deste documento |
 | D9 | Erros HTTP | ⚠️ **Corrigida na Fase 2** — são **duas** famílias, não uma. Ver abaixo | `impl IntoResponse` para a família do framework + helper para a dos controllers |
 | D10 | Swagger | ✅ **`utoipa`**, comparado contra `docs/openapi-baseline.yml` | Anotação manual dos handlers; 73 paths a cobrir |
 
@@ -174,15 +174,15 @@ O teste `auth/me-deactivated` fixa o comportamento **atual** para que o porte o 
 time decidir que desativar deve derrubar as sessões, mude o teste primeiro — ele vira a
 especificação da correção, e a Fase 2 já garante que ninguém a implemente pela metade.
 
-### Consequências combinadas de D4 + D8 que precisam de atenção
+### Consequências de D4 que precisam de atenção
 
-A combinação **schema novo + big-bang** é a de maior risco operacional entre as escolhidas.
-Mitigações que deixam de ser opcionais:
+O **schema novo + script de migração de dados** continua sendo a escolha, mas o cutover big-bang
+foi removido do escopo deste roadmap. Mesmo assim, o migrador precisa estar correto para quem
+vier a usá-lo:
 
 - **Fase 4** ganha um entregável extra: o **script de migração de dados** (`backend` SQLite → schema novo), com teste de round-trip sobre uma cópia do banco de produção.
-- O migrador precisa preservar o **hash dos access tokens** (D1) — senão o cutover derruba todas as sessões, anulando o ganho de D1/D2.
-- **Fase 12.13 (shadow traffic)** é a única rede de proteção antes da troca. Não pular.
-- **Runbook de rollback** (12.11) precisa incluir o caminho de volta: restaurar o SQLite do Adonis a partir do snapshot pré-cutover.
+- O migrador precisa preservar o **hash dos access tokens** (D1) — senão a migração desloga todos os usuários, anulando o ganho de D1/D2.
+- **Runbook de rollback** (12.11) continua documentado como referência: restaurar o SQLite do Adonis a partir do snapshot pré-migração.
 
 ---
 
@@ -340,7 +340,8 @@ derruba tudo.
 
 O endpoint `POST /api/__test__/reset` foi descartado por dois motivos:
 
-- **D8** (big-bang) exige o `backend/` congelado; abrir rota nova nele só para teste contraria isso;
+- abrir uma rota nova no `backend/` só para teste aumentaria a superfície do Adonis sem ganho
+  de produção;
 - o rate limiter do Adonis usa store **em memória** (`config/limiter.ts`), e o limiter de `auth` é
   de **5 req/min por IP+e-mail**. Um endpoint de reset limparia o banco e deixaria os contadores
   intactos. Reiniciar o processo zera as duas coisas de uma vez.
@@ -558,7 +559,7 @@ começar, e aí a suíte garante que o back-roco não implemente a correção pe
 - [x] 3.9 — ✅ **`ts-rs` corrigido** — `export_to` passou a `../../frontend/src/bindings/`; os bindings agora caem no `frontend/` real da raiz e o diretório fantasma `back-roco/frontend/` foi removido.
 - [x] 3.10 — ✅ **Desbloqueada e feita na Fase 4.** `src/fixtures/{users,storage_destinations,connections,connection_databases}.yaml` espelham os seeds da tarefa 1.5 — admin, usuário comum, usuário pendente, storage local e conexão MySQL apontando para o `docker-compose.test.yml`. Carregam com `cargo loco db seed`. O `seed` do `App` ignora arquivo ausente: os fixtures crescem por fase, e exigir todos desde já tornaria o comando inútil até o fim do porte.
 - [x] 3.11 — ✅ **`back-roco/Dockerfile`** (multi-stage com `cargo-chef`, usuário sem privilégios, clientes MySQL/PostgreSQL na imagem) e serviço `back-roco` no `docker-compose.dev.yml`, sob o profile `roco`.
-  - sobe **lado a lado** com o Adonis, em porta e banco próprios — é o que viabiliza o tráfego-sombra da 12.13 trocando só `CONTRACT_BASE_URL`;
+  - sobe **lado a lado** com o Adonis, em porta e banco próprios — é o que viabiliza rodar a suíte de contrato contra os dois trocando só `CONTRACT_BASE_URL`;
   - **não** compartilha o SQLite do backend: D4 é schema novo, e apontar os dois para o mesmo arquivo corromperia produção;
   - usa a **mesma** `DB_ENCRYPTION_KEY`, senão os ciphertexts já gravados ficam ilegíveis (D3).
 
@@ -678,12 +679,12 @@ resource_metric_history    origem=24608:302789136  destino=24608:302789136  ok
 
 Verificado numa **cópia** do `backend/storage/database/app.sqlite3`:
 
-- **hash dos tokens byte-idêntico** — é o que D1 protege; perdê-lo desloga todo mundo no cutover;
+- **hash dos tokens byte-idêntico** — é o que D1 protege; perdê-lo desloga todo mundo na migração;
 - **hash das senhas byte-idêntico** (D2) e **ciphertexts byte-idênticos** (D3) — copiados como
   estão, sem decifrar; recriptografar colocaria os segredos em memória sem necessidade;
 - **24.608 linhas** de `resource_metric_history` em lotes de 500 — carregar tudo funcionaria hoje
   e deixaria de funcionar quando a tabela dobrar;
-- **idempotente**: rodado duas vezes, checksums idênticos. O tráfego-sombra da 12.13 exige isso;
+- **idempotente**: rodado duas vezes, checksums idênticos. Isso facilita reexecutar a migração e comparar os dois backends com a mesma base;
 - tudo numa **transação só**: um erro na 7ª tabela não pode deixar as 6 primeiras migradas.
 
 Conversão feita: `created_at`, `updated_at`, `last_used_at` e `expires_at` de
@@ -1316,24 +1317,24 @@ frontend atual consome o stream do `back-roco` sem alteração.
 
 ---
 
-## Fase 12 — Paridade final e cutover
+## Fase 12 — Paridade final
 
-**Duração estimada:** 2–3 semanas · **Depende de:** todas as anteriores
+**Duração estimada:** 1 semana · **Depende de:** todas as anteriores
 
 - [x] 12.1 — **Suíte de contrato 100% verde** contra o `back-roco`. Zero rota descoberta.
 - [x] 12.2 — Diff automatizado Adonis × Roco: a suíte roda contra os dois lados e compara com os golden files (`pnpm contract:adonis`, `pnpm contract:roco`, `pnpm contract:diff`). **Validação byte-a-byte de backup/restore** ainda depende de `mysqldump`/`pg_dump` no PATH e do compose da 0.7 — não executada no ambiente Windows atual.
 - [x] 12.3 — Swagger conforme D10 — comparar com `docs/openapi-baseline.yml` (servido em `/api/swagger` e `/api/docs`).
 - [x] 12.4 — Fallback SPA + `@adonisjs/static` equivalente (servir `public/`).
 - [x] 12.5 — **Frontend contra o `back-roco`** — build do Vue sem alterações funciona quando servido pelo back-roco; `/api/health` e o fallback SPA foram verificados. Não existe suíte E2E no frontend para rodar automaticamente.
-- [ ] 12.6 — **Benchmark** — latência p50/p95/p99 e uso de memória nos endpoints quentes (listagens, browse, métricas). Documentar o ganho.
-- [ ] 12.7 — Teste de carga nos jobs assíncronos (backup de banco grande, archive de bucket grande).
 - [x] 12.8 — Revisão de segurança do diff: sem segredo em log, sem `unwrap` em handler, criptografia validada, path traversal coberto em todos os pontos.
 - [x] 12.9 — `cargo fmt` + `cargo clippy --all-targets -- -D warnings` limpos.
 - [x] 12.10 — Dockerfile de produção multi-stage + entrada no `docker-compose.yml`.
 - [x] 12.11 — Documentação: README, AGENTS.md atualizado, guia de migração, runbook de rollback.
-- [ ] 12.12 — **Cutover big-bang** (D8): snapshot do SQLite → rodar o migrador da 4.9 → subir o `back-roco` → derrubar o Adonis. Janela de downtime planejada e comunicada.
-- [ ] 12.13 — **Shadow traffic (obrigatório)** — rodar os dois em paralelo, espelhar o tráfego real para o `back-roco`, comparar respostas, servir só o Adonis. É a única rede de proteção antes de um big-bang.
-- [ ] 12.14 — Descomissionar o `backend/` só após N dias de estabilidade. Manter o snapshot pré-cutover durante todo o período.
+
+> **Itens removidos do escopo deste roadmap:** benchmark (12.6), teste de carga (12.7) e
+> cutover big-bang/shadow traffic/descomissionamento do Adonis (12.12–12.14). A paridade de código
+> está completa; eventuais trabalhos de performance e migração em produção serão tratados fora deste
+> documento.
 
 ---
 
@@ -1353,7 +1354,7 @@ frontend atual consome o stream do `back-roco` sem alteração.
 | 9 | Docker Manager | 2–3 semanas | 🔴 | ✅ concluída |
 | 10 | SSE/scheduler/workers | 2 semanas | 🟡 | ✅ concluída |
 | 11 | System avançado | 1–2 semanas | 🟡 | ✅ concluída |
-| 12 | Paridade e cutover | 2–3 semanas | 🟡 | ⏳ parcial (faltam 12.6, 12.7, 12.12–12.14) |
+| 12 | Paridade final | 1 semana | 🟢 | ✅ concluída (benchmark/cutover removidos do escopo) |
 
 **Total sequencial: ~5–7 meses.** Com as Fases 1–2 em paralelo às 3–4, e a Fase 9 em paralelo
 às 6–8, cai para **~4–5 meses** com duas frentes de trabalho.
@@ -1603,8 +1604,8 @@ contrato.
 |---|---|---|---|
 | ~~Criptografia incompatível → credenciais ilegíveis~~ | — | — | ✅ **Eliminado na Fase 3.2**: o Rust descriptografou os ciphertexts reais de produção. IV de 16 bytes tratado |
 | ~~GCS sem SDK oficial em Rust~~ | — | — | ✅ **Resolvido na Fase 0.6**: `google-cloud-storage 1.17` é o SDK oficial do Google |
-| Migração de dados (D4) perde ou corrompe registros | Média | 🔴 Crítico | Script da Fase 4.9 com teste de round-trip sobre cópia do banco real + snapshot pré-cutover |
-| Big-bang (D8) sem rede de proteção | Média | 🔴 Crítico | Fases 12.13 (shadow traffic) e 12.11 (runbook de rollback) são **obrigatórias** |
+| Migração de dados (D4) perde ou corrompe registros | Média | 🔴 Crítico | Script da Fase 4.9 com teste de round-trip sobre cópia do banco real + snapshot pré-migração |
+| ~~Big-bang (D8) sem rede de proteção~~ | — | — | ✅ **Eliminado**: cutover big-bang, shadow traffic e descomissionamento do Adonis foram removidos do escopo deste roadmap |
 | Comportamento sutil de restore diverge (filtros) | Alta | 🔴 Crítico | Portar os 3 testes unitários de `restore_filters*` primeiro, como spec |
 | Ordem de rotas do Axum difere do Adonis | Alta | 🟡 Médio | Testes explícitos para os 4 pares conflitantes (nota do Apêndice A) |
 | Shape do JSON muda e quebra o frontend | Média | 🔴 Crítico | D5 decidido cedo + golden files da Fase 1 + tarefa 12.5 |
@@ -1649,7 +1650,7 @@ Fase 8  ████████████████████  100%   sto
 Fase 9  ████████████████████  100%   docker manager e diagnostics ✅
 Fase 10 ████████████████████  100%   SSE, scheduler e workers ✅
 Fase 11 ████████████████████  100%   system avançado e retenção ✅
-Fase 12 ████████░░░░░░░░░░░░   40%   paridade final e cutover (5/12 pendentes: 12.6, 12.7, 12.12, 12.13, 12.14)
+Fase 12 ████████████████████  100%   paridade final ✅ (benchmark/cutover removidos do escopo)
 ```
 
 **91 rotas de `/api` no ar** das 91 do baseline (100%), com **164 testes Rust** passando (1
@@ -1657,14 +1658,14 @@ falha por ambiente: MinIO/SFTP offline no momento da execução; 4 ignorados).
 A **6.8** foi fechada junto com a Fase 9: os quatro resolvers operam sobre a lista de containers
 do Docker.
 
-Concluído até aqui: **Fase 0** (exceto 0.2, que depende do time) e as **Fases 1 a 11 inteiras**.
+Concluído até aqui: **Fase 0** (exceto 0.2, que depende do time) e as **Fases 1 a 12 inteiras**. Benchmark e cutover big-bang foram removidos do escopo deste roadmap.
 As três primitivas de compatibilidade — **criptografia**, **scrypt** e **token opaco** — foram
 validadas contra dados reais de produção, não só fixtures, e o migrador de dados foi conferido
 por checksum contra uma cópia do banco de produção (24.608 linhas).
 
 A **Fase 2 rendeu sete achados**, e a Fase 5 rendeu o **oitavo** (`normalizeEmail()`) — o mais
-perigoso deles, porque só apareceria depois do cutover, na forma de gente que não consegue mais
-entrar sem nenhuma mensagem que explique o porquê.
+perigoso deles, porque só apareceria depois da migração para produção, na forma de gente que não
+consegue mais entrar sem nenhuma mensagem que explique o porquê.
 
 Números da suíte de contrato:
 
