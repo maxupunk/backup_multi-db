@@ -28,7 +28,7 @@ describe('GET /api/auth/me', () => {
   })
 
   it('nao vaza o hash da senha', async () => {
-    // `password` e' `serializeAs: null` no model. Se o back-roco esquecer o
+    // `password` e' `serializeAs: null` no model. Se o backend esquecer o
     // equivalente, o hash scrypt de todo mundo passa a sair no `/me`.
     const response = await as('admin').get('/api/auth/me')
     expect(response.text).not.toContain('$scrypt$')
@@ -47,7 +47,7 @@ describe('GET /api/auth/me', () => {
   it('recusa token bem-formado que nao existe', async () => {
     // 401 e nao 500: o formato e' valido (`oat_<id>.<secret>`), so' o registro
     // nao existe. Confundir "malformado" com "inexistente" e' o erro classico
-    // dessa camada, e o back-roco vai ter que acertar os dois.
+    // dessa camada, e o backend vai ter que acertar os dois.
     expectStatus(await withBogusToken().get('/api/auth/me'), 401)
   })
 

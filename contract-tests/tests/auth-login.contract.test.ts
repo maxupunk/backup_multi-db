@@ -85,7 +85,7 @@ describe('POST /api/auth/login — credenciais invalidas', () => {
 
     // Repare: **400**, nao 401, e o corpo vem no shape `{ errors: [...] }` do
     // framework, sem o `success` que os controllers usam. Sao duas familias de
-    // erro convivendo na mesma API — ver a nota sobre a decisao D9 no roadmap.
+    // erro convivendo na mesma API — ver a nota sobre a decisao D9 em `src/views/errors.rs`.
     const body = json<{ errors: Array<{ message: string }> }>(response)
     expect(body.errors.length).toBeGreaterThan(0)
 
@@ -94,7 +94,7 @@ describe('POST /api/auth/login — credenciais invalidas', () => {
 
   it('responde igual para usuario inexistente e senha errada', async () => {
     // Diferenciar os dois casos entrega a um atacante quais e-mails existem.
-    // O `verifyCredentials` do Adonis ja' unifica; o back-roco tem que
+    // O `verifyCredentials` do Adonis ja' unifica; o backend tem que
     // unificar tambem, e este teste e' o que trava esse comportamento.
     const inexistente = await unauth().post('/api/auth/login', {
       json: { email: 'ninguem@contract.test', password: 'qualquer-senha' },

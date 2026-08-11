@@ -8,10 +8,10 @@
 
 ## Backend — Quality Gates
 
-After every code change in `back-roco/`, always run these commands and fix any failures before considering the task done:
+After every code change in `backend/`, always run these commands and fix any failures before considering the task done:
 
 ```bash
-cd back-roco
+cd backend
 cargo fmt --check
 cargo clippy --all-targets -- -D warnings
 cargo test
@@ -29,11 +29,11 @@ Domain logic must NOT live in controllers or models.
 
 ## Testing
 
-- Backend tests are in `back-roco/tests/`.
-- Contract tests are in `contract-tests/` and run black-box against the back-roco HTTP API.
+- Backend tests are in `backend/tests/`.
+- Contract tests are in `contract-tests/` and run black-box against the backend HTTP API.
 
 ## Git Hygiene
 
 - Never commit secrets or `.env` files.
-- Keep `back-roco/.gitignore` specific: use `/storage` (leading slash) to only ignore the top-level `storage/` directory.
+- Keep `backend/.gitignore` specific: use `/storage` (leading slash) to only ignore the top-level `storage/` directory.
 - Stage and commit new files before building the Docker image.

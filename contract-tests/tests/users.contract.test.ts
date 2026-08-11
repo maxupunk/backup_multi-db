@@ -110,7 +110,7 @@ describe('PATCH /api/users/:id/status', () => {
     expectGolden('users/toggle-status', ativado, { as: 'admin' })
 
     // Segundo toggle volta ao estado anterior. E' o que prova que a rota
-    // alterna, e nao apenas ativa — o back-roco precisa reproduzir isso.
+    // alterna, e nao apenas ativa — o backend precisa reproduzir isso.
     const desativado = expectStatus(await as('admin').patch(`/api/users/${user.id}/status`), 200)
     expect(json<{ data: { isActive: boolean } }>(desativado).data.isActive).toBe(false)
   })
@@ -176,7 +176,7 @@ describe('PATCH /api/users/:id/status', () => {
  * ser favorável.
  *
  * A correção é um desempate estável (`orderBy('createdAt','desc').orderBy('id','desc')`).
- * O back-roco não deveria copiar o defeito sem que a escolha seja consciente.
+ * O backend não deveria copiar o defeito sem que a escolha seja consciente.
  *
  * O mesmo padrão aparece em outras listagens paginadas do projeto; vale
  * revisar todas quando esta for decidida.
@@ -200,7 +200,7 @@ describe('ACHADO: ordenacao de /api/users nao tem desempate', () => {
   })
 
   it.skipIf(TARGET !== 'roco')(
-    'back-roco ordena com desempate estavel (sem empates de createdAt)',
+    'backend ordena com desempate estavel (sem empates de createdAt)',
     async () => {
       const body = json<UsersPage>(
         await as('admin').get('/api/users', { query: { limit: 100 } })

@@ -1,7 +1,7 @@
-# Suite de contrato contra o back-roco (Rust/Loco).
+# Suite de contrato contra o backend (Rust/Loco).
 #
 # Roda a cada PR pelo motivo mais importante e menos obvio: os golden files sao
-# a especificacao do back-roco. Se o back-roco mudar uma resposta e ninguem
+# a especificacao do backend. Se o backend mudar uma resposta e ninguem
 # regravar o golden, a suite passa a testar um contrato que nao existe mais.
 # Este job e' o que garante que os golden files nao apodrecam sem aviso.
 
@@ -10,7 +10,7 @@ name: contract-tests
 on:
   pull_request:
     paths:
-      - 'back-roco/**'
+      - 'backend/**'
       - 'contract-tests/**'
       - 'docs/routes-baseline.txt'
       - '.github/workflows/contract-tests.yml'
@@ -50,7 +50,7 @@ jobs:
         working-directory: contract-tests
         run: pnpm contract:selftest
 
-      - name: Suite de contrato contra o back-roco
+      - name: Suite de contrato contra o backend
         working-directory: contract-tests
         run: pnpm contract:roco
 

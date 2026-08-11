@@ -6,7 +6,7 @@
 # --- Dependências (platform-native, devem ser compiladas dentro do container)
 node_modules/
 frontend/node_modules/
-back-roco/target/
+backend/target/
 
 # --- Builds locais
 frontend/dist/
@@ -25,9 +25,9 @@ frontend/dev-dist/
 !.env.example
 
 # --- Dados locais (montados via volume)
-back-roco/storage/backups/
-back-roco/storage/database/
-back-roco/storage/diagnostics/
+backend/storage/backups/
+backend/storage/database/
+backend/storage/diagnostics/
 
 # --- Editores / IDEs
 .vscode/

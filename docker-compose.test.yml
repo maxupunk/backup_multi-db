@@ -1,5 +1,5 @@
 # Ambiente de teste para a suíte de contrato (contract-tests/) e para as fases
-# 6–8 do port para o back-roco.
+# 6–8 do port para o backend.
 #
 # Portas deslocadas para a faixa 1xxxx para não colidir com serviços de
 # desenvolvimento já em uso na máquina (3333, 5433, 8081 estão ocupadas).

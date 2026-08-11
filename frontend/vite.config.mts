@@ -130,7 +130,7 @@ export default defineConfig(({ mode }) => {
     },
   },
   build: {
-    outDir: '../back-roco/public',
+    outDir: '../backend/public',
     emptyOutDir: true,
   },
   }

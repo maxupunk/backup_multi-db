@@ -200,7 +200,7 @@ describe('efeito colateral: acoes geram registro de auditoria', () => {
     expect(registro!.entityName).toBe(connection.name)
     expect(registro!.status).toBe('success')
     // A descricao legivel e' derivada da action pelo model, nao gravada no
-    // banco. O back-roco precisa da mesma tabela de traducao.
+    // banco. O backend precisa da mesma tabela de traducao.
     expect(registro!.actionDescription).toBeTruthy()
   })
 

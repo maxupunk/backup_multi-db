@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Suite de contrato black-box do back-roco (Rust/Loco).",
+  "description": "Suite de contrato black-box do backend (Rust/Loco).",
   "packageManager": "pnpm@10.33.0",
   "scripts": {
     "contract:record": "node scripts/run.mjs --record",

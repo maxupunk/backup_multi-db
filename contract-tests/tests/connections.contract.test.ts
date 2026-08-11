@@ -225,7 +225,7 @@ describe('PUT e PATCH /api/connections/:id', () => {
 
   it('PATCH e PUT batem no mesmo handler', async () => {
     // As duas rotas existem no baseline apontando para `update`. Se o
-    // back-roco registrar so' uma, metade do frontend para de funcionar sem
+    // backend registrar so' uma, metade do frontend para de funcionar sem
     // que nenhum outro teste perceba.
     const connection = await createConnection({ name: 'Patch Ou Put' })
 

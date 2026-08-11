@@ -1,10 +1,10 @@
 /**
- * Matchers tolerantes (tarefa 1.7 do roadmap).
+ * Matchers tolerantes.
  *
  * A suite compara o *formato* da resposta, nao o valor. Comparar valor
  * literal produziria falso-negativo em toda execucao: id incremental,
  * timestamp, duracao, ordem de chaves. O que precisa continuar igual entre o
- * Adonis e o back-roco e' a estrutura — quais chaves existem e de que tipo
+ * Adonis e o backend e' a estrutura — quais chaves existem e de que tipo
  * sao —, porque e' disso que o frontend depende.
  *
  * As tolerancias sao deliberadas e cada uma esta anotada onde e' aplicada.
@@ -113,8 +113,8 @@ export interface CompareOptions {
    * Chaves extras na resposta observada sao um problema?
    *
    * Sao, sim, para a paridade que a Fase 2 exige: um campo a mais no
-   * back-roco e' desvio de contrato mesmo que o frontend o ignore hoje. Fica
-   * configuravel porque durante a Fase 4-11 o back-roco vai crescer aos
+   * backend e' desvio de contrato mesmo que o frontend o ignore hoje. Fica
+   * configuravel porque durante a Fase 4-11 o backend vai crescer aos
    * poucos e pode ser util afrouxar temporariamente.
    */
   allowExtraKeys?: boolean

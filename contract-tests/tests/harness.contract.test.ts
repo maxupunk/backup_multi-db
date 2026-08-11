@@ -23,7 +23,7 @@ describe('autenticacao do harness', () => {
   it('recusa token bem-formado que nao existe no banco', async () => {
     // 401 e nao 500: o formato do token e' valido (`oat_<id>.<secret>`), so' o
     // registro nao existe. Confundir "malformado" com "inexistente" e' o erro
-    // classico dessa camada, e o back-roco vai ter que acertar os dois.
+    // classico dessa camada, e o backend vai ter que acertar os dois.
     const response = await withBogusToken().get('/api/auth/me')
     expect(response.status).toBe(401)
   })

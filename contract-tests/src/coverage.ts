@@ -1,5 +1,5 @@
 /**
- * Rastro de cobertura de rotas (tarefa 1.8 do roadmap).
+ * Rastro de cobertura de rotas.
  *
  * Cada chamada do cliente HTTP anota qual template do baseline foi
  * exercitado. O rastro vai para um JSONL em modo append porque os testes

@@ -1,5 +1,5 @@
 /**
- * Sessoes e assercoes de resposta (tarefa 1.3 do roadmap).
+ * Sessoes e assercoes de resposta.
  *
  * `as('admin')` devolve um cliente ja' autenticado com o token que o seed
  * obteve. Os tokens sao emitidos **uma unica vez por execucao**, no seed, e

@@ -173,7 +173,7 @@ async function waitForHealth(baseUrl: string, timeoutMs: number, tail: () => str
 }
 
 async function startRoco(config: ContractConfig): Promise<RunningServer> {
-  const cwd = join(REPO_ROOT, 'back-roco')
+  const cwd = join(REPO_ROOT, 'backend')
   const port = await findFreePort(config.port)
   const logFile = join(config.workDir, 'server.log')
 
@@ -194,13 +194,13 @@ async function startRoco(config: ContractConfig): Promise<RunningServer> {
 
   // Compila antes de medir o boot: `cargo run` a frio leva minutos e estouraria
   // qualquer timeout razoavel de health check.
-  await runOnce('cargo', ['build', '--bin', 'back_roco-cli'], cwd, env, logFile)
-  await runOnce('cargo', ['run', '--bin', 'back_roco-cli', '--', 'db', 'migrate'], cwd, env, logFile)
+  await runOnce('cargo', ['build', '--bin', 'backend-cli'], cwd, env, logFile)
+  await runOnce('cargo', ['run', '--bin', 'backend-cli', '--', 'db', 'migrate'], cwd, env, logFile)
   assertDisposableDatabase(config)
 
   const { child, tail } = spawnLogged(
     'cargo',
-    ['run', '--bin', 'back_roco-cli', '--', 'start'],
+    ['run', '--bin', 'backend-cli', '--', 'start'],
     cwd,
     env,
     logFile

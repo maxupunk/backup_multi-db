@@ -15,7 +15,7 @@ const here = dirname(fileURLToPath(import.meta.url))
 /** Raiz de `contract-tests/`. */
 export const CONTRACT_ROOT = resolve(here, '..')
 
-/** Raiz do repositorio — onde vivem `back-roco/`, `frontend/` e `docs/`. */
+/** Raiz do repositorio — onde vivem `backend/`, `frontend/` e `docs/`. */
 export const REPO_ROOT = resolve(CONTRACT_ROOT, '..')
 
 /** Qual implementacao esta sob teste. */

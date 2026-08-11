@@ -1,5 +1,5 @@
 ---
-description: "Executa o quality gate completo do backend: fmt, clippy e testes. Use ao finalizar qualquer feature ou correção no back-roco."
+description: "Executa o quality gate completo do backend: fmt, clippy e testes. Use ao finalizar qualquer feature ou correção no backend."
 name: "Backend Quality Gate"
 argument-hint: "Descreva brevemente a feature finalizada (opcional)"
 agent: "agent"
@@ -12,7 +12,7 @@ Execute o quality gate completo do backend em sequência. Corrija todos os erros
 ### 1. Formatação — Zero diferenças
 
 ```bash
-cd back-roco
+cd backend
 cargo fmt --check
 ```
 
@@ -22,7 +22,7 @@ cargo fmt --check
 ### 2. Clippy — Zero warnings
 
 ```bash
-cd back-roco
+cd backend
 cargo clippy --all-targets -- -D warnings
 ```
 
@@ -31,7 +31,7 @@ cargo clippy --all-targets -- -D warnings
 ### 3. Testes — Todos passando
 
 ```bash
-cd back-roco
+cd backend
 cargo test
 ```
 
@@ -45,5 +45,5 @@ A tarefa só está **concluída** quando os três comandos acima terminam com **
 
 ## Observações
 
-- Testes ficam em `back-roco/tests/`. Novos testes devem seguir o padrão do Loco.
+- Testes ficam em `backend/tests/`. Novos testes devem seguir o padrão do Loco.
 - Rode a suíte de contrato quando alterar o contrato HTTP: `cd contract-tests && pnpm contract:roco`.

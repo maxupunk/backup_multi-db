@@ -116,7 +116,7 @@ export interface DiffEntry {
 /**
  * Consolida as divergencias de golden em `reports/contract-diff.md`.
  *
- * Serve ao `contract:diff`: rodar a suite contra o back-roco e sair com a
+ * Serve ao `contract:diff`: rodar a suite contra o backend e sair com a
  * lista do que ainda nao bate, agrupada por tipo, em vez de um dump do vitest.
  *
  * Quando nao ha divergencias (o caso feliz da Fase 12.2), ainda gera o arquivo
@@ -157,7 +157,7 @@ export function buildDiffReport(): { total: number; reportPath: string } | null 
 
   if (total === 0) {
     lines.push(
-      'Nenhuma divergencia encontrada entre a resposta do back-roco e os golden files gerados a partir do Adonis.',
+      'Nenhuma divergencia encontrada entre a resposta do backend e os golden files gerados a partir do Adonis.',
       ''
     )
   }

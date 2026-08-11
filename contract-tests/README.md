@@ -1,6 +1,6 @@
 # contract-tests
 
-Suíte de contrato **black-box** do back-roco (Rust/Loco).
+Suíte de contrato **black-box** do backend (Rust/Loco).
 
 Roda por HTTP, sem importar nada da implementação, e valida o contrato da API
 contra os golden files versionados em `__golden__/`.
@@ -12,8 +12,8 @@ cd contract-tests
 pnpm install
 
 pnpm contract:selftest    # testa os matchers do próprio harness (sem servidor)
-pnpm contract:record      # sobe o back-roco e GRAVA os golden files
-pnpm contract:roco        # roda contra o back-roco e COMPARA com os golden
+pnpm contract:record      # sobe o backend e GRAVA os golden files
+pnpm contract:roco        # roda contra o backend e COMPARA com os golden
 pnpm contract:coverage    # reprova se alguma rota do baseline ficar sem teste
 ```
 

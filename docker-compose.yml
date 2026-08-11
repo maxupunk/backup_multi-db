@@ -1,13 +1,13 @@
 # =============================================================================
 # Docker Compose - Producao
-# DB Backup Manager (back-roco / Rust / Loco)
+# DB Backup Manager (backend / Rust / Loco)
 # =============================================================================
 
 services:
   backend:
     build:
       context: .
-      dockerfile: back-roco/Dockerfile
+      dockerfile: backend/Dockerfile
       target: runtime
     restart: unless-stopped
     # O socket do Docker é montado como root:root 660 no host; sem acesso ao
@@ -65,7 +65,7 @@ services:
         limits:
           memory: 512M
         reservations:
-          # Alinhado ao RSS ocioso real medido apos o MEMORY_ROADMAP.md (F0-F3).
+          # Alinhado ao RSS ocioso real medido em repouso.
           memory: 128M
 
 networks:

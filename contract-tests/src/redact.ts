@@ -156,7 +156,7 @@ export function redact(value: unknown, options: RedactOptions = {}, path = ''): 
 /**
  * Cabecalhos que entram no golden.
  *
- * Lista de bloqueio, nao de permissao: um cabecalho novo no back-roco tem que
+ * Lista de bloqueio, nao de permissao: um cabecalho novo no backend tem que
  * aparecer como diferenca, e uma lista de permissao o esconderia.
  */
 const VOLATILE_HEADERS = new Set([

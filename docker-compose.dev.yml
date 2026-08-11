@@ -1,9 +1,9 @@
 # =============================================================================
 # Docker Compose - Desenvolvimento
-# DB Backup Manager (back-roco / Rust / Loco)
+# DB Backup Manager (backend / Rust / Loco)
 # =============================================================================
 #
-# Sobe o backend back-roco em modo desenvolvimento. O frontend em modo dev
+# Sobe o backend em modo desenvolvimento. O frontend em modo dev
 # deve ser executado localmente com `cd frontend && pnpm dev`.
 #
 # Para forçar rebuild:
@@ -18,7 +18,7 @@ services:
   backend:
     build:
       context: .
-      dockerfile: back-roco/Dockerfile
+      dockerfile: backend/Dockerfile
       target: runtime
     restart: unless-stopped
     # O socket do Docker é montado como root:root 660 no host; sem acesso ao
@@ -38,7 +38,7 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-debug}
       TZ: ${TZ:-America/Sao_Paulo}
       BACKUP_STORAGE_PATH: /storage/backups
-      DATABASE_URL: sqlite:///storage/database/back-roco.sqlite?mode=rwc
+      DATABASE_URL: sqlite:///storage/database/backend.sqlite?mode=rwc
       DB_ENCRYPTION_KEY: ${DB_ENCRYPTION_KEY}
       AUTH_ACCESS_TOKEN_EXPIRES_IN: ${AUTH_ACCESS_TOKEN_EXPIRES_IN:-7d}
       INITIAL_ADMIN_BOOTSTRAP_TOKEN: ${INITIAL_ADMIN_BOOTSTRAP_TOKEN:-}
@@ -47,9 +47,9 @@ services:
       AUDIT_RETENTION_DAYS: ${AUDIT_RETENTION_DAYS:-30}
       BACKEND_CONTAINER_ID: ${BACKEND_CONTAINER_ID:-}
     volumes:
-      - ./back-roco/storage/backups:/storage/backups
-      - ./back-roco/storage/database:/storage/database
-      - ./back-roco/storage/diagnostics:/storage/diagnostics
+      - ./backend/storage/backups:/storage/backups
+      - ./backend/storage/database:/storage/database
+      - ./backend/storage/diagnostics:/storage/diagnostics
       - /var/run/docker.sock:/var/run/docker.sock
       - /var/lib/docker/containers:/var/lib/docker/containers:rw
     healthcheck:

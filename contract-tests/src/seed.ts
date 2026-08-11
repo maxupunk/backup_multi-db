@@ -1,13 +1,13 @@
 /**
- * Seeds compartilhados (tarefa 1.5 do roadmap).
+ * Seeds compartilhados.
  *
  * Tudo e' semeado **pela propria API HTTP**, nunca por acesso direto ao banco.
  * Isso e' o que mantem a suite executavel contra as duas implementacoes sem
- * uma linha de diferenca: o back-roco nao tem o mesmo schema (decisao D4,
+ * uma linha de diferenca: o backend nao tem o mesmo schema (decisao D4,
  * "schema novo"), entao qualquer seed via SQL seria escrito duas vezes e as
  * duas versoes divergiriam com o tempo.
  *
- * O preco e' que o seed depende de endpoints funcionando. Contra o back-roco
+ * O preco e' que o seed depende de endpoints funcionando. Contra o backend
  * em construcao, ele vai falhar cedo e com a mensagem do endpoint que faltou —
  * o que e' a informacao certa na hora certa.
  */

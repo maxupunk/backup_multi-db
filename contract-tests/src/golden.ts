@@ -1,8 +1,8 @@
 /**
- * Golden files (tarefa 1.6 do roadmap).
+ * Golden files.
  *
  * O golden e' gravado a partir do **Adonis** e vira a especificacao
- * executavel do back-roco. Um golden so' presta se satisfizer duas coisas ao
+ * executavel do backend. Um golden so' presta se satisfizer duas coisas ao
  * mesmo tempo, que puxam em direcoes opostas:
  *
  * 1. ser estavel — gravar duas vezes tem que dar bytes identicos, senao o

@@ -48,7 +48,7 @@
 
 ### 1.2 Criar `DockerManagerService`
 
-> Arquivo: `back-roco/src/services/docker_manager_service.rs`
+> Arquivo: `backend/src/services/docker_manager_service.rs`
 
 **Containers:**
 
@@ -98,7 +98,7 @@
 
 ### 3.1 Criar `DockerManagerController`
 
-> Arquivo: `back-roco/src/controllers/docker_manager.rs`
+> Arquivo: `backend/src/controllers/docker_manager.rs`
 
 **Containers:**
 
@@ -274,14 +274,14 @@
 
 ## 🏗️ FASE 8 — Qualidade e Testes
 
-### 8.1 Backend — TypeScript e Lint
+### 8.1 Backend — Formatação e Lint
 
-- [x] `pnpm typecheck` sem erros após todas as implementações do backend
-- [x] `pnpm lint` sem erros no backend
+- [x] `cargo fmt --check` sem diferenças após todas as implementações do backend
+- [x] `cargo clippy --all-targets -- -D warnings` limpo no backend
 
-### 8.2 Backend — Testes funcionais (Japa)
+### 8.2 Backend — Testes funcionais (`cargo test`)
 
-> Criar: `back-roco/tests/models/docker_manager.rs`
+> Criar: `backend/tests/models/docker_manager.rs`
 
 - [x] Teste: `GET /api/docker/containers` retorna 200 (mock socket disponível)
 - [x] Teste: `GET /api/docker/containers` retorna lista vazia/indisponível (sem socket)

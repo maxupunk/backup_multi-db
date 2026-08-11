@@ -185,7 +185,7 @@
 
 ```
 backup_multi-db/
-├── back-roco/                   # Backend Rust + Loco
+├── backend/                   # Backend Rust + Loco
 │   ├── src/
 │   │   ├── app/
 │   │   ├── controllers/
@@ -225,7 +225,7 @@ backup_multi-db/
 │   ├── vite.config.mts          ✅ Proxy + build configurado
 │   └── package.json
 ├── contract-tests/              # Suíte de contrato black-box
-├── docs/                        # OpenAPI, schema e baselines
+├── docs/                        # Spec OpenAPI e baseline de rotas
 ├── CHECKLIST.md                 ✅ Este arquivo
 ├── README.md                    ✅ Documentação
 ├── docker-compose.yml           # Produção
@@ -237,7 +237,7 @@ backup_multi-db/
 
 ```bash
 # Backend
-cd back-roco
+cd backend
 cargo loco start              # Iniciar em modo desenvolvimento (porta 3333)
 cargo build --release         # Build para produção
 cargo test                    # Rodar testes
@@ -249,16 +249,16 @@ cargo loco db rollback        # Reverter última migration
 # Frontend
 cd frontend
 npm run dev          # Iniciar em modo desenvolvimento (porta 3000)
-npm run build        # Build para produção (output: ../back-roco/public)
+npm run build        # Build para produção (output: ../backend/public)
 npm run type-check   # Verificar tipos TypeScript
 npm run lint         # Verificar lint
 
 # Desenvolvimento Simultâneo
-# Terminal 1: cd back-roco && cargo loco start     (porta 3333)
+# Terminal 1: cd backend && cargo loco start     (porta 3333)
 # Terminal 2: cd frontend && npm run dev           (porta 3000 - com proxy para API)
 
 # Produção (após build do frontend)
-cd back-roco
+cd backend
 cargo loco start     # Acesse: http://localhost:3333
 ```
 

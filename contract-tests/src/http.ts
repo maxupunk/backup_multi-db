@@ -1,5 +1,5 @@
 /**
- * Cliente HTTP da suite de contrato (tarefa 1.3 do roadmap).
+ * Cliente HTTP da suite de contrato.
  *
  * Deliberadamente burro: monta a requisicao, mede, devolve a resposta crua e
  * anota a cobertura. Nao interpreta erro, nao lanca por status — um 500

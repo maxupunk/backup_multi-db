@@ -5,7 +5,7 @@
  * exercitou `GET /api/connections/:id`. Sem esse casamento a cobertura seria
  * apenas uma lista de URLs visitadas, que nunca cruzaria com o baseline.
  *
- * Fonte: `docs/routes-baseline.txt`, gravado na Fase 0 a partir do back-roco.
+ * Fonte: `docs/routes-baseline.txt`, gravado na Fase 0 a partir do backend.
  * E' o inventario de referencia — se o arquivo sumir, a suite nao tem contra
  * o que medir cobertura e falha alto.
  */
@@ -67,7 +67,7 @@ export function baselineRoutes(): BaselineRoute[] {
   } catch (cause) {
     throw new Error(
       `Nao consegui ler ${BASELINE_PATH}. Ele e' o inventario de rotas de referencia ` +
-        `(Fase 0); sem ele nao ha' como medir cobertura. Regere a partir do back-roco.`,
+        `(Fase 0); sem ele nao ha' como medir cobertura. Regere a partir do backend.`,
       { cause }
     )
   }

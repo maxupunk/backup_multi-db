@@ -34,7 +34,7 @@ describe('GET /api/health', () => {
 
   it('anuncia o limite global de requisicoes', async () => {
     // 600/min e' o `global` de `app/middleware/rate_limit_middleware.ts`. O
-    // back-roco tem que expor o mesmo cabecalho com o mesmo numero — o
+    // backend tem que expor o mesmo cabecalho com o mesmo numero — o
     // frontend nao usa, mas quem opera a API usa.
     const response = await unauth().get('/api/health')
     expect(response.headers['x-ratelimit-limit']).toBe('600')

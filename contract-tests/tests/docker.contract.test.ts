@@ -123,7 +123,7 @@ describe('containers', () => {
       // a excecao do socket — 500.
       //
       // E' uma inconsistencia real do backend atual, e este teste existe para
-      // que ela seja uma escolha no porte e nao uma surpresa. Se o back-roco
+      // que ela seja uma escolha no porte e nao uma surpresa. Se o backend
       // devolver 503 estruturado nas duas familias, sera' *melhor* — mas e'
       // mudanca de contrato, e a decisao precisa ser explicita.
       const listagem = await as('admin').get('/api/docker/containers')

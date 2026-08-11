@@ -93,8 +93,8 @@ cp .env.example .env
 
 ```bash
 # Backend Rust
-cd back-roco
-cargo build --release --bin back_roco-cli
+cd backend
+cargo build --release --bin backend-cli
 
 # Frontend
 cd ../frontend
@@ -104,15 +104,15 @@ npm install
 ### 4. Execute as migrations
 
 ```bash
-cd back-roco
-cargo run --bin back_roco-cli -- db migrate
+cd backend
+cargo run --bin backend-cli -- db migrate
 ```
 
 ### 5. Inicie o desenvolvimento
 
 ```bash
 # Terminal 1 - Backend (porta 3333)
-cd back-roco
+cd backend
 cargo loco start
 
 # Terminal 2 - Frontend (porta 3000)
@@ -126,7 +126,7 @@ Acesse: **http://localhost:3000**
 
 ```
 db-backup-manager/
-├── back-roco/            # Backend Rust/Loco
+├── backend/            # Backend Rust/Loco
 │   ├── src/
 │   ├── config/
 │   ├── storage/
@@ -140,7 +140,7 @@ db-backup-manager/
 │       ├── services/
 │       └── stores/
 ├── contract-tests/       # Suíte de contrato black-box
-├── docs/                 # OpenAPI, schema e baselines
+├── docs/                 # Spec OpenAPI e baseline de rotas
 ├── docker-compose.yml    # Produção
 ├── docker-compose.dev.yml# Desenvolvimento
 └── README.md
@@ -176,7 +176,7 @@ cargo clippy         # Lint
 
 ```bash
 npm run dev          # Desenvolvimento com Vite
-npm run build        # Build para produção (output: ../back-roco/public)
+npm run build        # Build para produção (output: ../backend/public)
 npm run lint         # ESLint
 ```
 
