@@ -19,6 +19,11 @@ services:
       dockerfile: back-roco/Dockerfile
       target: runtime
     restart: unless-stopped
+    # O socket do Docker é montado como root:root 660 no host; sem acesso ao
+    # grupo root o usuário não-privilegiado `roco` não consegue falar com a
+    # Engine (bollard/Docker::connect_with_local_defaults falha).
+    group_add:
+      - '0'
     env_file:
       - path: ./.env
         required: false
