@@ -33,6 +33,10 @@ impl BackgroundWorker<RestoreRequest> for RestoreWorker {
         Self { ctx: ctx.clone() }
     }
 
+    fn tags() -> Vec<String> {
+        vec!["backup".to_string()]
+    }
+
     async fn perform(&self, args: RestoreRequest) -> Result<()> {
         // Um `Err` aqui e' falha de **infraestrutura** — registro sumido,
         // configuracao invalida. O desfecho da restauracao em si sai pelo canal

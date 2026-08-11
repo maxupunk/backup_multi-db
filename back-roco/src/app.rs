@@ -18,16 +18,15 @@ use tower_http::services::ServeDir;
 
 #[allow(unused_imports)]
 use crate::{
-    controllers, initializers,
+    controllers,
+    initializers::{self, resource_metrics},
     models::_entities::{
         audit_logs, auth_access_tokens, backups, connection_databases, connections,
         resource_metric_history, storage_destinations, system_settings, users,
     },
     tasks,
     workers::{
-        downloader::DownloadWorker,
-        resource_metrics::ResourceMetricsWorker,
-        restore::RestoreWorker,
+        downloader::DownloadWorker, restore::RestoreWorker,
         storage_jobs::{ArchiveWorker, CopyWorker},
     },
 };
@@ -64,12 +63,11 @@ impl Hooks for App {
         Ok(vec![
             Box::new(initializers::settings::SettingsInitializer),
             Box::new(initializers::default_storage::DefaultStorageInitializer),
+            Box::new(initializers::resource_metrics::ResourceMetricsInitializer),
         ])
     }
 
     async fn after_routes(router: axum::Router, ctx: &AppContext) -> Result<axum::Router> {
-        crate::workers::resource_metrics::start(ctx).await?;
-
         // Fallback da SPA (Fase 12.4): arquivos estáticos do build Vue são
         // servidos pelo `ServeDir` a partir de `public/`; quando o caminho não
         // casa com um arquivo real (rotas de frontend como `/backups`), o
@@ -151,10 +149,13 @@ impl Hooks for App {
     async fn connect_workers(ctx: &AppContext, queue: &Queue) -> Result<()> {
         queue.register(DownloadWorker::build(ctx)).await?;
         queue.register(RestoreWorker::build(ctx)).await?;
-        queue.register(ResourceMetricsWorker::build(ctx)).await?;
         queue.register(CopyWorker::build(ctx)).await?;
         queue.register(ArchiveWorker::build(ctx)).await?;
         Ok(())
+    }
+
+    async fn on_shutdown(ctx: &AppContext) {
+        resource_metrics::stop(ctx);
     }
 
     fn register_tasks(tasks: &mut Tasks) {

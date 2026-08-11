@@ -11,7 +11,7 @@ pub async fn emit_if_subscribed(ctx: &AppContext) -> Result<bool> {
         return Ok(false);
     }
 
-    let overview = crate::models::system_monitor::SystemOverview::collect().await;
+    let overview = crate::models::system_monitor::SystemOverview::collect(ctx).await;
     let payload = serde_json::json!({
         "cpu": {
             "usagePercent": overview.cpu.usage_percent,

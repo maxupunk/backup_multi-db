@@ -15,6 +15,11 @@ impl BackgroundWorker<DownloadWorkerArgs> for DownloadWorker {
     fn build(ctx: &AppContext) -> Self {
         Self { ctx: ctx.clone() }
     }
+
+    fn tags() -> Vec<String> {
+        vec!["download".to_string()]
+    }
+
     async fn perform(&self, _args: DownloadWorkerArgs) -> Result<()> {
         // TODO: Some actual work goes here...
 

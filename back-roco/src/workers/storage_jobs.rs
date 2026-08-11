@@ -14,6 +14,10 @@ impl BackgroundWorker<copy::CopyWorkerArgs> for CopyWorker {
         Self { ctx: ctx.clone() }
     }
 
+    fn tags() -> Vec<String> {
+        vec!["storage".to_string()]
+    }
+
     async fn perform(&self, args: copy::CopyWorkerArgs) -> Result<()> {
         copy::perform(&self.ctx, args).await
     }
@@ -27,6 +31,10 @@ pub struct ArchiveWorker {
 impl BackgroundWorker<archive::ArchiveWorkerArgs> for ArchiveWorker {
     fn build(ctx: &AppContext) -> Self {
         Self { ctx: ctx.clone() }
+    }
+
+    fn tags() -> Vec<String> {
+        vec!["storage".to_string()]
     }
 
     async fn perform(&self, args: archive::ArchiveWorkerArgs) -> Result<()> {

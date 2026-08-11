@@ -20,6 +20,7 @@
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
+use loco_rs::app::AppContext;
 use sysinfo::System;
 
 /// Versao que o Adonis reporta. Fixa la', fixa aqui — trocar por
@@ -88,12 +89,12 @@ pub struct SystemOverview {
 
 impl SystemOverview {
     /// Coleta o panorama, reaproveitando a ultima medicao dentro do TTL.
-    pub async fn collect() -> Self {
+    pub async fn collect(ctx: &AppContext) -> Self {
         if let Some(cached) = cached() {
             return cached;
         }
 
-        let overview = measure().await;
+        let overview = measure(ctx).await;
         store(overview.clone());
         overview
     }
@@ -115,7 +116,7 @@ fn store(overview: SystemOverview) {
     *guard = Some((Instant::now(), overview));
 }
 
-async fn measure() -> SystemOverview {
+async fn measure(ctx: &AppContext) -> SystemOverview {
     let mut system = System::new();
 
     // Duas amostras: a primeira estabelece a linha de base, a segunda mede o
@@ -140,7 +141,7 @@ async fn measure() -> SystemOverview {
         uptime_seconds: System::uptime(),
         cpu: cpu_metrics(&system),
         memory: memory_metrics(&system),
-        jobs: jobs_status(),
+        jobs: jobs_status(ctx),
     }
 }
 
@@ -185,12 +186,24 @@ fn memory_metrics(system: &System) -> MemoryMetrics {
 
 /// Estado do agendador.
 ///
-/// O scheduler entra na Fase 10. Ate' la' a resposta diz `down` — que e' a
-/// verdade, e nao um `ok` otimista que esconderia a ausencia dele do painel.
-const fn jobs_status() -> JobsStatus {
+/// O Loco gerencia o scheduler nativamente quando `config.scheduler` existe e o
+/// processo inicia em modo que o inclui (por exemplo `--scheduler` ou `--all`).
+/// Como o `AppContext` não expõe o `StartMode` atual, usamos a presença da
+/// configuração como proxy: se ela existe, o sistema está preparado para
+/// executar jobs agendados; se não existe, o painel mostra `down` — a verdade,
+/// e não um `ok` otimista que esconderia a ausência do agendador.
+fn jobs_status(ctx: &AppContext) -> JobsStatus {
+    let is_running = ctx.config.scheduler.is_some();
+    let active_jobs = ctx
+        .config
+        .scheduler
+        .as_ref()
+        .map(|cfg| cfg.jobs.len() as u32)
+        .unwrap_or(0);
+
     JobsStatus {
-        is_running: false,
-        active_jobs: 0,
+        is_running,
+        active_jobs,
     }
 }
 
@@ -236,8 +249,13 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial_test::serial]
     async fn collects_a_plausible_overview() {
-        let overview = SystemOverview::collect().await;
+        let ctx = loco_rs::testing::prelude::boot_test::<crate::app::App>()
+            .await
+            .unwrap()
+            .app_context;
+        let overview = SystemOverview::collect(&ctx).await;
 
         assert!(overview.cpu.cores >= 1);
         assert!(overview.memory.total_bytes > 0);
@@ -247,12 +265,17 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial_test::serial]
     async fn the_second_call_comes_from_the_cache() {
         // Sem cache, cada atualizacao do painel custaria o intervalo de amostragem.
-        let _ = SystemOverview::collect().await;
+        let ctx = loco_rs::testing::prelude::boot_test::<crate::app::App>()
+            .await
+            .unwrap()
+            .app_context;
+        let _ = SystemOverview::collect(&ctx).await;
 
         let started = Instant::now();
-        let _ = SystemOverview::collect().await;
+        let _ = SystemOverview::collect(&ctx).await;
 
         assert!(
             started.elapsed() < CPU_SAMPLE_INTERVAL,
@@ -260,10 +283,18 @@ mod tests {
         );
     }
 
-    #[test]
-    fn the_scheduler_is_reported_as_down_until_phase_10() {
-        // Um `ok` otimista esconderia do painel que o agendador nao existe.
-        let jobs = jobs_status();
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn the_scheduler_status_reflects_configuration() {
+        let ctx = loco_rs::testing::prelude::boot_test::<crate::app::App>()
+            .await
+            .unwrap()
+            .app_context;
+
+        // A configuração de teste do projeto não define scheduler, então o
+        // status deve refletir isso honestamente (`down`) em vez de inventar um
+        // `ok` otimista.
+        let jobs = jobs_status(&ctx);
         assert!(!jobs.is_running);
         assert_eq!(jobs.active_jobs, 0);
     }

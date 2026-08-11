@@ -45,7 +45,7 @@ pub async fn stats(State(ctx): State<AppContext>, _session: Authenticated) -> Re
     let backups_total = backups::Model::count_all(&ctx.db).await?;
     let backups_today = backups::Model::count_since(&ctx.db, today).await?;
     let recent = backups::Model::recent_with_connection(&ctx.db, RECENT_BACKUPS).await?;
-    let overview = system_monitor::SystemOverview::collect().await;
+    let overview = system_monitor::SystemOverview::collect(&ctx).await;
 
     let settings = Settings::from_json(ctx.config.settings.as_ref())?;
     let encryption = backup_runner::encryption_service(&settings)?;
@@ -76,8 +76,8 @@ pub async fn stats(State(ctx): State<AppContext>, _session: Authenticated) -> Re
 
 /// `GET /api/system/status` — CPU, memoria, uptime e estado do agendador.
 #[debug_handler]
-pub async fn status(State(_ctx): State<AppContext>, _session: Authenticated) -> Reply {
-    let overview = system_monitor::SystemOverview::collect().await;
+pub async fn status(State(ctx): State<AppContext>, _session: Authenticated) -> Reply {
+    let overview = system_monitor::SystemOverview::collect(&ctx).await;
 
     Ok(axum::Json(Data::new(view::SystemOverview::from(overview))).into_response())
 }
