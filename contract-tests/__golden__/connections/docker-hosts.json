@@ -1,6 +1,6 @@
 {
   "name": "connections/docker-hosts",
-  "recordedFrom": "adonis",
+  "recordedFrom": "roco",
   "request": {
     "method": "GET",
     "route": "GET /api/connections/docker-hosts",

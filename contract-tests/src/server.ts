@@ -1,29 +1,8 @@
 /**
- * Ciclo de vida do servidor sob teste (parte da tarefa 1.4 do roadmap).
- *
- * ## Por que o harness sobe o proprio servidor
- *
- * A alternativa registrada no roadmap era um `POST /api/__test__/reset`
- * habilitado so' em ambiente de teste. Foi descartada por dois motivos:
- *
- * - a decisao D8 (big-bang) exige o `backend/` congelado; abrir rota nova nele
- *   so' para testar contraria isso;
- * - o rate limiter do Adonis usa store **em memoria** (`config/limiter.ts`).
- *   Um endpoint de reset limparia o banco mas nao os contadores do limiter,
- *   e o limiter de `auth` e' de 5 req/min. Reiniciar o processo zera as duas
- *   coisas de uma vez.
+ * Ciclo de vida do servidor sob teste.
  *
  * Cada execucao ganha um diretorio proprio com um SQLite descartavel, entao
  * duas execucoes nunca se enxergam.
- *
- * ## Salvaguarda
- *
- * O backend le' o `.env` da raiz do repositorio, onde vive o caminho do banco
- * de **producao**. As variaveis passadas aqui tem precedencia sobre o `.env`
- * (verificado em `@adonisjs/env`: `process.env` vence), mas depender disso em
- * silencio seria imprudente — `assertDisposableDatabase` confirma, apos as
- * migrations, que o arquivo nasceu dentro do diretorio da execucao. Se nao
- * nasceu, a suite aborta antes de escrever qualquer coisa.
  */
 
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process'
@@ -40,7 +19,6 @@ import { REPO_ROOT, loadConfig, type ContractConfig } from './config.ts'
  * escuta so' em 127.0.0.1. Fixa-las mantem os golden reproduziveis e permite
  * que o teste de bootstrap saiba qual token mandar.
  */
-export const TEST_APP_KEY = 'contract_tests_app_key_32_chars!!'
 export const TEST_DB_ENCRYPTION_KEY =
   '000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f'
 export const TEST_BOOTSTRAP_TOKEN = 'contract-tests-bootstrap-token'
@@ -71,26 +49,6 @@ function prepareWorkDir(config: ContractConfig): void {
   mkdirSync(config.workDir, { recursive: true })
   mkdirSync(join(config.workDir, 'backups'), { recursive: true })
   mkdirSync(join(config.workDir, 'diagnostics'), { recursive: true })
-}
-
-function adonisEnv(config: ContractConfig, port: number): NodeJS.ProcessEnv {
-  return {
-    ...process.env,
-    NODE_ENV: 'development',
-    HOST: '127.0.0.1',
-    PORT: String(port),
-    LOG_LEVEL: config.logLevel,
-    APP_KEY: TEST_APP_KEY,
-    DB_ENCRYPTION_KEY: TEST_DB_ENCRYPTION_KEY,
-    INITIAL_ADMIN_BOOTSTRAP_TOKEN: TEST_BOOTSTRAP_TOKEN,
-    AUTH_ACCESS_TOKEN_EXPIRES_IN: '7d',
-    // Tudo que escreve em disco apontado para o diretorio da execucao.
-    SQLITE_DATABASE_PATH: sqlitePath(config),
-    BACKUP_STORAGE_PATH: join(config.workDir, 'backups'),
-    DIAGNOSTICS_PATH: join(config.workDir, 'diagnostics'),
-    // Poda de auditoria desligada: apagaria registros no meio da suite.
-    AUDIT_RETENTION_DAYS: '0',
-  }
 }
 
 function sqlitePath(config: ContractConfig): string {
@@ -126,8 +84,6 @@ function spawnLogged(
   const child = spawn(command, args, {
     cwd,
     env,
-    // No POSIX, `detached` poe o filho num grupo proprio para que o `serve` do
-    // Adonis — que por sua vez abre um processo filho — morra junto.
     detached: process.platform !== 'win32',
     stdio: ['ignore', 'pipe', 'pipe'],
   })
@@ -152,8 +108,6 @@ function killTree(child: ChildProcess): void {
   if (child.pid === undefined || child.exitCode !== null) return
 
   if (process.platform === 'win32') {
-    // `taskkill /T` derruba a arvore inteira. Sem isso o processo interno do
-    // `ace serve` sobrevive e continua segurando a porta.
     spawnSync('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore' })
     return
   }
@@ -218,53 +172,6 @@ async function waitForHealth(baseUrl: string, timeoutMs: number, tail: () => str
   )
 }
 
-async function startAdonis(config: ContractConfig): Promise<RunningServer> {
-  const cwd = join(REPO_ROOT, 'backend')
-  const port = await findFreePort(config.port)
-  const env = adonisEnv(config, port)
-  const logFile = join(config.workDir, 'server.log')
-
-  // `node ace migration:run` antes de subir: o Adonis nao migra no boot, e um
-  // banco recem-criado nao tem tabela nenhuma.
-  await runOnce(process.execPath, ['ace', 'migration:run', '--force'], cwd, env, logFile)
-  assertDisposableDatabase(config)
-
-  // `--no-hmr`: o watcher do assembler reinicia o processo a cada toque em
-  // arquivo e reiniciar no meio da suite zeraria o rate limiter em memoria,
-  // tornando os testes de 429 nao-deterministas.
-  const { child, tail } = spawnLogged(
-    process.execPath,
-    ['ace', 'serve', '--no-hmr'],
-    cwd,
-    env,
-    logFile
-  )
-
-  const baseUrl = `http://127.0.0.1:${port}`
-
-  let exitedEarly: string | null = null
-  child.on('exit', (code) => {
-    exitedEarly = `o processo do servidor saiu com codigo ${code} antes de ficar pronto`
-  })
-
-  try {
-    await waitForHealth(baseUrl, config.bootTimeoutMs, tail)
-  } catch (error) {
-    killTree(child)
-    if (exitedEarly) throw new Error(`${exitedEarly}\n\n${(error as Error).message}`)
-    throw error
-  }
-
-  return {
-    baseUrl,
-    port,
-    stop: async () => {
-      killTree(child)
-      await new Promise((resolve) => setTimeout(resolve, 200))
-    },
-  }
-}
-
 async function startRoco(config: ContractConfig): Promise<RunningServer> {
   const cwd = join(REPO_ROOT, 'back-roco')
   const port = await findFreePort(config.port)
@@ -275,15 +182,21 @@ async function startRoco(config: ContractConfig): Promise<RunningServer> {
     LOCO_ENV: 'test',
     PORT: String(port),
     BINDING: '127.0.0.1',
+    LOG_LEVEL: config.logLevel,
     DB_ENCRYPTION_KEY: TEST_DB_ENCRYPTION_KEY,
     INITIAL_ADMIN_BOOTSTRAP_TOKEN: TEST_BOOTSTRAP_TOKEN,
+    AUTH_ACCESS_TOKEN_EXPIRES_IN: '7d',
     DATABASE_URL: `sqlite://${join(config.workDir, 'app.sqlite3').replace(/\\/g, '/')}?mode=rwc`,
+    BACKUP_STORAGE_PATH: join(config.workDir, 'backups'),
+    DIAGNOSTICS_PATH: join(config.workDir, 'diagnostics'),
+    AUDIT_RETENTION_DAYS: '0',
   }
 
   // Compila antes de medir o boot: `cargo run` a frio leva minutos e estouraria
   // qualquer timeout razoavel de health check.
   await runOnce('cargo', ['build', '--bin', 'back_roco-cli'], cwd, env, logFile)
   await runOnce('cargo', ['run', '--bin', 'back_roco-cli', '--', 'db', 'migrate'], cwd, env, logFile)
+  assertDisposableDatabase(config)
 
   const { child, tail } = spawnLogged(
     'cargo',
@@ -321,5 +234,5 @@ export async function startServer(config = loadConfig()): Promise<RunningServer>
 
   prepareWorkDir(config)
 
-  return config.target === 'adonis' ? startAdonis(config) : startRoco(config)
+  return startRoco(config)
 }

@@ -1,6 +1,6 @@
 {
   "name": "system/backup-retention-run",
-  "recordedFrom": "adonis",
+  "recordedFrom": "roco",
   "request": {
     "method": "POST",
     "route": "POST /api/system/backup-retention/run",

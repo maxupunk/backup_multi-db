@@ -12,6 +12,10 @@ yarn-error.log
 .DS_Store
 
 # Cache e artefatos gerados
-**/.adonisjs/
 **/.pnpm-store/
 .lockfile-repro/
+
+# Dados locais do back-roco (backups, banco SQLite, diagnósticos)
+back-roco/storage/backups/
+back-roco/storage/database/
+back-roco/storage/diagnostics/

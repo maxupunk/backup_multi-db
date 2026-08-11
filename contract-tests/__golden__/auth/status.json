@@ -1,6 +1,6 @@
 {
   "name": "auth/status",
-  "recordedFrom": "adonis",
+  "recordedFrom": "roco",
   "request": {
     "method": "GET",
     "route": "GET /api/auth/status",

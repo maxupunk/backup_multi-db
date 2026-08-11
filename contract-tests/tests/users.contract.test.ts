@@ -176,8 +176,7 @@ describe('PATCH /api/users/:id/status', () => {
  * ser favorável.
  *
  * A correção é um desempate estável (`orderBy('createdAt','desc').orderBy('id','desc')`).
- * Não a apliquei porque o `backend/` está congelado pela decisão D8 — mas o
- * back-roco não deveria copiar o defeito sem que a escolha seja consciente.
+ * O back-roco não deveria copiar o defeito sem que a escolha seja consciente.
  *
  * O mesmo padrão aparece em outras listagens paginadas do projeto; vale
  * revisar todas quando esta for decidida.

@@ -1,5 +1,5 @@
 /**
- * Configuracao da suite de contrato (tarefa 1.2 do roadmap).
+ * Configuracao da suite de contrato.
  *
  * Tudo vem de variaveis de ambiente porque a suite precisa ser lancavel do
  * mesmo jeito por `scripts/run.mjs`, pelo CI e por um `vitest` cru rodado a
@@ -15,11 +15,11 @@ const here = dirname(fileURLToPath(import.meta.url))
 /** Raiz de `contract-tests/`. */
 export const CONTRACT_ROOT = resolve(here, '..')
 
-/** Raiz do repositorio — onde vivem `backend/`, `back-roco/` e `docs/`. */
+/** Raiz do repositorio — onde vivem `back-roco/`, `frontend/` e `docs/`. */
 export const REPO_ROOT = resolve(CONTRACT_ROOT, '..')
 
-/** Qual implementacao esta sob teste. A suite e' identica para as duas. */
-export type Target = 'adonis' | 'roco'
+/** Qual implementacao esta sob teste. */
+export type Target = 'roco'
 
 /**
  * O que fazer com os golden files.
@@ -98,7 +98,7 @@ let cached: ContractConfig | null = null
 export function loadConfig(): ContractConfig {
   if (cached) return cached
 
-  const target = envEnum<Target>('CONTRACT_TARGET', ['adonis', 'roco'], 'adonis')
+  const target = envEnum<Target>('CONTRACT_TARGET', ['roco'], 'roco')
   const runId = envString('CONTRACT_RUN_ID', 'local')
   const workDir = resolve(envString('CONTRACT_WORK_DIR', join(CONTRACT_ROOT, '.contract', runId)))
 

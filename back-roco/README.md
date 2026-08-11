@@ -1,16 +1,16 @@
 # back-roco — Backend Rust/Loco do DB Backup Manager
 
-Este diretório contém o backend reescrito em **Rust** com o framework [Loco](https://loco.rs), mantendo paridade de contrato HTTP com o backend legado AdonisJS em `backend/`.
+Este diretório contém o backend em **Rust** com o framework [Loco](https://loco.rs).
 
 ## Objetivo
 
-Substituir o backend Node.js/AdonisJS pelo backend Rust/Loco sem alterar o frontend nem quebrar sessões existentes. As decisões de arquitetura estão documentadas em `ROADMAP_BACK_ROCO.md` na raiz do repositório.
+Backend principal do DB Backup Manager, servindo a API REST e os assets do frontend Vue.
 
 ## Requisitos
 
 - Rust **1.96** ou superior
 - Node.js **26** (apenas para build do frontend dentro do Dockerfile)
-- SQLite 3 (o Loco usa SQLite por padrão)
+- SQLite 3
 - (Opcional) Docker e Docker Compose para deploy
 
 ## Configuração
@@ -23,7 +23,7 @@ Variáveis obrigatórias em qualquer ambiente:
 DB_ENCRYPTION_KEY=000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f
 ```
 
-A chave deve ter **64 caracteres hex** (32 bytes) e ser **idêntica** à `DB_ENCRYPTION_KEY` do backend Adonis, senão os ciphertexts já gravados ficam ilegíveis.
+A chave deve ter **64 caracteres hex** (32 bytes).
 
 Outras variáveis comuns:
 
@@ -63,19 +63,12 @@ cargo clippy --all-targets -- -D warnings
 
 ## Suíte de contrato
 
-A suíte em `contract-tests/` roda os mesmos testes black-box contra o Adonis e contra o back-roco. Para rodar contra o back-roco:
+A suíte em `contract-tests/` roda os testes black-box contra o back-roco:
 
 ```sh
 cd contract-tests
 pnpm install
 pnpm contract:roco
-```
-
-Para rodar o diff automatizado entre as duas implementações e gerar o relatório:
-
-```sh
-pnpm contract:adonis   # Adonis vs golden files
-pnpm contract:diff     # back-roco + reports/contract-diff.md
 ```
 
 ## Frontend
@@ -84,8 +77,8 @@ O frontend Vue em `frontend/` builda sem alterações e pode ser servido pelo ba
 
 ```sh
 cd frontend
-pnpm build                        # gera ../backend/public
-cp -r ../backend/public/* ../back-roco/public/
+pnpm build                        # gera dist/
+cp -r dist/* ../back-roco/public/
 cd ../back-roco
 cargo loco start                  # / serve o SPA; /api/* permanecem inalterados
 ```
@@ -105,18 +98,3 @@ O `docker-compose.yml` na raiz sobe o back-roco em produção com volume para SQ
 ```sh
 docker compose up -d backend
 ```
-
-## Cutover e rollback
-
-O cutover é **big-bang** (decisão D8). O passo a passo detalhado está em `back-roco/AGENTS.md` na seção "Runbook de cutover e rollback".
-
-Resumo:
-
-1. **Feature freeze** no `backend/`.
-2. **Snapshot** do SQLite de produção e do diretório de backups.
-3. **Migrar dados** do schema Adonis para o schema back-roco usando `cargo run --bin migrate_data`.
-4. **Subir o back-roco** apontando para o banco migrado.
-5. **Verificar** `/api/health`, login de um usuário existente e primeiro backup.
-6. **Rollback**: derrubar o back-roco, restaurar o SQLite do snapshot e subir o Adonis novamente.
-
-Mantenha o snapshot pré-cutover até o período de estabilidade definido (N dias).

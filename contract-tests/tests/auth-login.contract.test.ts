@@ -33,10 +33,8 @@ describe('POST /api/auth/login — caminho feliz', () => {
     expect(body.data.user.email).toBe(user.email)
     expect(body.data.user.isAdmin).toBe(true)
 
-    // Formato do token opaco do AdonisJS, que a decisao D1 manda preservar:
-    // `oat_<base64url(id)>.<base64url(secret)>`. E' o que faz as sessoes
-    // sobreviverem ao cutover — se o back-roco emitir outro formato, todo
-    // mundo e' deslogado no dia da virada.
+    // Formato do token opaco (`oat_<base64url(id)>.<base64url(secret)>`).
+    // A decisao D1 preservou esse formato para compatibilidade de sessoes.
     expect(body.data.token).toMatch(/^oat_[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/)
 
     expectGolden('auth/login-ok', response)

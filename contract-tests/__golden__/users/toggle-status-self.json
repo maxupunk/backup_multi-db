@@ -1,6 +1,6 @@
 {
   "name": "users/toggle-status-self",
-  "recordedFrom": "adonis",
+  "recordedFrom": "roco",
   "request": {
     "method": "PATCH",
     "route": "PATCH /api/users/:id/status",

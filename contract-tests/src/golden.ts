@@ -256,13 +256,6 @@ export function checkGolden(
   }
 
   if (config.goldenMode === 'record') {
-    if (config.target !== 'adonis') {
-      throw new Error(
-        `Recusando gravar golden a partir de \`${config.target}\`. O golden e' a ` +
-          `especificacao vinda do Adonis; grava-lo do back-roco faria a suite ` +
-          `validar a implementacao contra ela mesma.`
-      )
-    }
     writeGolden(actual)
     return { mode: 'record', issues: [], record: actual }
   }

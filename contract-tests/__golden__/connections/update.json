@@ -1,6 +1,6 @@
 {
   "name": "connections/update",
-  "recordedFrom": "adonis",
+  "recordedFrom": "roco",
   "request": {
     "method": "PUT",
     "route": "PUT /api/connections/:id",

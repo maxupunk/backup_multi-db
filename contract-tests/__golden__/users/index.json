@@ -1,6 +1,6 @@
 {
   "name": "users/index",
-  "recordedFrom": "adonis",
+  "recordedFrom": "roco",
   "request": {
     "method": "GET",
     "route": "GET /api/users",

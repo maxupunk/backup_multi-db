@@ -1,6 +1,6 @@
 {
   "name": "connections/backups",
-  "recordedFrom": "adonis",
+  "recordedFrom": "roco",
   "request": {
     "method": "GET",
     "route": "GET /api/connections/:connectionId/backups",

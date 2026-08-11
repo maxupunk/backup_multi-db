@@ -1,6 +1,6 @@
 # Sistema de Notificações Frontend
 
-O frontend utiliza `@adonisjs/transmit-client` para receber notificações em tempo real do backend.
+O frontend utiliza `@adonisjs/transmit-client` para receber notificações em tempo real do backend (API Transmit-compatible).
 
 ## Componentes
 

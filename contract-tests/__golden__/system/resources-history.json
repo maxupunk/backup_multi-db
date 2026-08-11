@@ -1,6 +1,6 @@
 {
   "name": "system/resources-history",
-  "recordedFrom": "adonis",
+  "recordedFrom": "roco",
   "request": {
     "method": "GET",
     "route": "GET /api/system/resources/history",

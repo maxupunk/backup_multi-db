@@ -1,6 +1,6 @@
 {
   "name": "connections/destroy",
-  "recordedFrom": "adonis",
+  "recordedFrom": "roco",
   "request": {
     "method": "DELETE",
     "route": "DELETE /api/connections/:id",

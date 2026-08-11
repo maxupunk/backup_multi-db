@@ -30,7 +30,10 @@ services:
       TZ: ${TZ:-America/Sao_Paulo}
       BACKUP_STORAGE_PATH: /storage/backups
       # O Loco usa `database.url` no YAML; em producao apontamos para o volume.
-      DATABASE_URL: sqlite:///storage/database/app.sqlite3
+      # `mode=rwc` e obrigatorio: sem ele o sqlx abre com `create_if_missing`
+      # desligado e o primeiro boot em um volume vazio morre com
+      # `SqliteError { code: 14, "unable to open database file" }`.
+      DATABASE_URL: sqlite:///storage/database/app.sqlite3?mode=rwc
       DB_ENCRYPTION_KEY: ${DB_ENCRYPTION_KEY}
       AUTH_ACCESS_TOKEN_EXPIRES_IN: ${AUTH_ACCESS_TOKEN_EXPIRES_IN:-7d}
       INITIAL_ADMIN_BOOTSTRAP_TOKEN: ${INITIAL_ADMIN_BOOTSTRAP_TOKEN:-}

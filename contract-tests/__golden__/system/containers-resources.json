@@ -1,6 +1,6 @@
 {
   "name": "system/containers-resources",
-  "recordedFrom": "adonis",
+  "recordedFrom": "roco",
   "request": {
     "method": "GET",
     "route": "GET /api/system/containers/resources",

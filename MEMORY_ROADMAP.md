@@ -1,6 +1,10 @@
+> **Nota:** este documento é histórico e descreve o trabalho de redução de
+> memória realizado no backend AdonisJS (`backend/`), removido do repositório.
+> O `back-roco` (Rust/Loco) é agora o único backend.
+
 # Roadmap de Redução de Memória e Estabilidade
 
-**Escopo:** backend AdonisJS (`backend/`), frontend Vue/Vuetify (`frontend/`), runtime Node/V8 e container.
+**Escopo:** backend AdonisJS (`backend/`) removido, frontend Vue/Vuetify (`frontend/`), runtime Node/V8 e container.
 **Data da avaliação:** 2026-08-04
 **Documento anterior:** [MEMORY_ANALYSIS.md](MEMORY_ANALYSIS.md) — todos os 15 itens do plano original estão implementados. Este roadmap parte **daquele ponto** e ataca a segunda camada de problemas, que é qualitativamente diferente: a primeira rodada eliminou *churn de estado ocioso*; esta ataca **picos sob carga (backup/restore/archive) e retenção sem limite**.
 

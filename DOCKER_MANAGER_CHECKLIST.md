@@ -48,7 +48,7 @@
 
 ### 1.2 Criar `DockerManagerService`
 
-> Arquivo: `backend/app/services/docker_manager_service.ts`
+> Arquivo: `back-roco/src/services/docker_manager_service.rs`
 
 **Containers:**
 
@@ -98,7 +98,7 @@
 
 ### 3.1 Criar `DockerManagerController`
 
-> Arquivo: `backend/app/controllers/docker_manager_controller.ts`
+> Arquivo: `back-roco/src/controllers/docker_manager.rs`
 
 **Containers:**
 
@@ -281,7 +281,7 @@
 
 ### 8.2 Backend — Testes funcionais (Japa)
 
-> Criar: `backend/tests/functional/docker_manager.spec.ts`
+> Criar: `back-roco/tests/models/docker_manager.rs`
 
 - [x] Teste: `GET /api/docker/containers` retorna 200 (mock socket disponível)
 - [x] Teste: `GET /api/docker/containers` retorna lista vazia/indisponível (sem socket)

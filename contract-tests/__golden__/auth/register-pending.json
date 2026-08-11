@@ -1,6 +1,6 @@
 {
   "name": "auth/register-pending",
-  "recordedFrom": "adonis",
+  "recordedFrom": "roco",
   "request": {
     "method": "POST",
     "route": "POST /api/auth/register",

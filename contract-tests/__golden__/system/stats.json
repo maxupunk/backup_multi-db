@@ -1,6 +1,6 @@
 {
   "name": "system/stats",
-  "recordedFrom": "adonis",
+  "recordedFrom": "roco",
   "request": {
     "method": "GET",
     "route": "GET /api/stats",

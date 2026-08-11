@@ -1,6 +1,6 @@
 {
   "name": "storages/browse",
-  "recordedFrom": "adonis",
+  "recordedFrom": "roco",
   "request": {
     "method": "GET",
     "route": "GET /api/storages/:id/browse",

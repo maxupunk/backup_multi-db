@@ -1,6 +1,6 @@
 {
   "name": "connections/show",
-  "recordedFrom": "adonis",
+  "recordedFrom": "roco",
   "request": {
     "method": "GET",
     "route": "GET /api/connections/:id",

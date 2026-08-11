@@ -1,6 +1,6 @@
 {
   "name": "storage-destinations/store",
-  "recordedFrom": "adonis",
+  "recordedFrom": "roco",
   "request": {
     "method": "POST",
     "route": "POST /api/storage-destinations",

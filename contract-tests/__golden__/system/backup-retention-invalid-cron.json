@@ -1,6 +1,6 @@
 {
   "name": "system/backup-retention-invalid-cron",
-  "recordedFrom": "adonis",
+  "recordedFrom": "roco",
   "request": {
     "method": "PUT",
     "route": "PUT /api/system/backup-retention",

@@ -1,6 +1,6 @@
 {
   "name": "backups/index",
-  "recordedFrom": "adonis",
+  "recordedFrom": "roco",
   "request": {
     "method": "GET",
     "route": "GET /api/backups",

@@ -1,6 +1,6 @@
 {
   "name": "connections/discover-databases",
-  "recordedFrom": "adonis",
+  "recordedFrom": "roco",
   "request": {
     "method": "POST",
     "route": "POST /api/connections/discover-databases",

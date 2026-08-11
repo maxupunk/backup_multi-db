@@ -22,9 +22,9 @@ Projetado com foco em **experiência do usuário (UX)** inovadora e **instalaç�
 
 | Camada             | Tecnologia                     |
 | ------------------ | ------------------------------ |
-| **Backend**        | AdonisJS v6 (TypeScript)       |
+| **Backend**        | Rust + Loco                    |
 | **Frontend**       | Vue 3 + Vuetify 3 (TypeScript) |
-| **Banco de Dados** | SQLite (via Lucid ORM)         |
+| **Banco de Dados** | SQLite                         |
 | **Build Tool**     | Vite                           |
 
 ## 🗃️ Bancos de Dados Suportados
@@ -52,7 +52,11 @@ Tenha o sistema rodando em menos de 2 minutos usando Docker:
 git clone https://github.com/seu-usuario/db-backup-manager.git
 cd db-backup-manager
 
-# 2. Inicie com Docker Compose
+# 2. Configure o ambiente
+cp .env.example .env
+# Edite .env e preencha DB_ENCRYPTION_KEY e INITIAL_ADMIN_BOOTSTRAP_TOKEN
+
+# 3. Inicie com Docker Compose
 docker compose up -d
 ```
 
@@ -64,12 +68,12 @@ Acesse imediatamente: **http://localhost:3000**
 
 ## 📋 Pré-requisitos (Para Instalação Manual)
 
-- **Node.js** >= 20.x
-- **npm** >= 10.x
+- **Rust** >= 1.96
+- **Node.js** >= 26
 - **mysqldump** (para MySQL/MariaDB) - incluído no MySQL Client
 - **pg_dump** (para PostgreSQL) - incluído no PostgreSQL Client
 
-## �️ Instalação Manual (Desenvolvimento)
+## 🛠️ Instalação Manual (Desenvolvimento)
 
 ### 1. Clone o repositório
 
@@ -78,45 +82,38 @@ git clone https://github.com/seu-usuario/db-backup-manager.git
 cd db-backup-manager
 ```
 
-### 2. Instale as dependências
+### 2. Configure o ambiente
 
 ```bash
-# Backend
-cd backend
-npm install
+cp .env.example .env
+# Edite .env e preencha DB_ENCRYPTION_KEY e INITIAL_ADMIN_BOOTSTRAP_TOKEN
+```
+
+### 3. Instale as dependências
+
+```bash
+# Backend Rust
+cd back-roco
+cargo build --release --bin back_roco-cli
 
 # Frontend
 cd ../frontend
 npm install
 ```
 
-### 3. Configure o ambiente
-
-```bash
-cd backend
-cp .env.example .env
-
-# Gerar chave da aplicação
-node ace generate:key
-
-# Gerar chave de criptografia para senhas dos bancos
-# Copie o resultado para DB_ENCRYPTION_KEY no .env
-node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-```
-
 ### 4. Execute as migrations
 
 ```bash
-cd backend
-node ace migration:run
+cd back-roco
+cargo run --bin back_roco-cli -- db migrate
 ```
 
 ### 5. Inicie o desenvolvimento
 
 ```bash
 # Terminal 1 - Backend (porta 3333)
-cd backend
-npm run dev
+cd back-roco
+cargo loco start
 
 # Terminal 2 - Frontend (porta 3000)
 cd frontend
@@ -129,26 +126,24 @@ Acesse: **http://localhost:3000**
 
 ```
 db-backup-manager/
-├── backend/              # AdonisJS v6 API
-│   ├── app/
-│   │   ├── controllers/
-│   │   ├── models/
-│   │   ├── services/
-│   │   └── validators/
+├── back-roco/            # Backend Rust/Loco
+│   ├── src/
 │   ├── config/
-│   ├── database/
-│   │   └── migrations/
-│   ├── public/           # Build do frontend (produção)
-│   └── storage/
-│       ├── backups/      # Arquivos de backup
-│       └── database/     # SQLite
+│   ├── storage/
+│   │   ├── backups/      # Arquivos de backup
+│   │   └── database/     # SQLite
+│   └── public/           # Build do frontend (produção)
 ├── frontend/             # Vue 3 + Vuetify SPA
 │   └── src/
 │       ├── components/
 │       ├── pages/
 │       ├── services/
 │       └── stores/
-└── CHECKLIST.md
+├── contract-tests/       # Suíte de contrato black-box
+├── docs/                 # OpenAPI, schema e baselines
+├── docker-compose.yml    # Produção
+├── docker-compose.dev.yml# Desenvolvimento
+└── README.md
 ```
 
 ## 🔐 Política de Retenção (GFS Modificado)
@@ -170,19 +165,19 @@ A política de retenção é gerenciada em runtime pela interface de configuraç
 ### Backend
 
 ```bash
-npm run dev        # Desenvolvimento com HMR
-npm run build      # Build para produção
-npm run typecheck  # Verificação de tipos
-npm run lint       # ESLint
-npm run test       # Testes
+cargo loco start     # Desenvolvimento
+cargo build          # Build para produção
+cargo test           # Testes
+cargo fmt            # Formatação
+cargo clippy         # Lint
 ```
 
 ### Frontend
 
 ```bash
-npm run dev        # Desenvolvimento com Vite
-npm run build      # Build para produção (output: ../backend/public)
-npm run lint       # ESLint
+npm run dev          # Desenvolvimento com Vite
+npm run build        # Build para produção (output: ../back-roco/public)
+npm run lint         # ESLint
 ```
 
 ## 🐳 Docker Manager
@@ -195,7 +190,7 @@ O **Docker Manager** permite gerenciar toda a infraestrutura de containers diret
 |---|---|
 | **Containers** | Listar, start, stop, restart, ver logs, inspecionar |
 | **Volumes** | Listar, inspecionar, remover |
-| **Redes** | Listar, inspecionar |
+| **Networks** | Listar, inspecionar |
 | **Imagens** | Listar, inspecionar, remover, prune |
 
 ### Endpoints da API
@@ -241,15 +236,12 @@ Quando o socket não está disponível, as rotas de listagem retornam `{ availab
 ### Desenvolvimento
 
 ```bash
-cd backend
 docker compose -f docker-compose.dev.yml up --build
 ```
 
-### Produção (somente Docker)
+### Produção
 
 ```bash
-cd backend
-
 # Build e iniciar
 docker compose up --build -d
 
@@ -265,14 +257,10 @@ docker compose down
 
 ### Variáveis de Ambiente (Produção)
 
-Use o mesmo template do backend:
+Use o template da raiz:
 
 ```bash
-cd backend
 cp .env.example .env
-
-# Gere a APP_KEY
-node ace generate:key
 
 # Gere a chave de criptografia e copie para DB_ENCRYPTION_KEY no .env
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"

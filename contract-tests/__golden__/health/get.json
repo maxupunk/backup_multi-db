@@ -1,6 +1,6 @@
 {
   "name": "health/get",
-  "recordedFrom": "adonis",
+  "recordedFrom": "roco",
   "request": {
     "method": "GET",
     "route": "GET /api/health",

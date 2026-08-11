@@ -1,18 +1,12 @@
 # =============================================================================
-# DOCKER COMPOSE - DESENVOLVIMENTO
-# DB Backup Manager
+# Docker Compose - Desenvolvimento
+# DB Backup Manager (back-roco / Rust / Loco)
 # =============================================================================
 #
-# Estratégia de volumes:
-#   ./backend:/app                         — bind mount do código para hot-reload
-#   backend_node_modules:/app/node_modules — named volume inicializado a partir
-#     da imagem Docker (binários Linux, compilados no stage "dependencies").
-#     Completamente isolado do host — nunca usa node_modules do Windows/Mac.
-#   frontend_dist:/app/public:ro           — build do frontend injetado no backend.
-#     O serviço frontend-builder compila o Vue/Vite antes do backend subir e
-#     grava o resultado neste volume, que sobrepõe ./backend/public do bind mount.
+# Sobe o backend back-roco em modo desenvolvimento. O frontend em modo dev
+# deve ser executado localmente com `cd frontend && pnpm dev`.
 #
-# Para forçar rebuild dos node_modules (ex: após instalar novo pacote):
+# Para forçar rebuild:
 #   docker compose -f docker-compose.dev.yml down -v
 #   docker compose -f docker-compose.dev.yml up --build
 #
@@ -21,78 +15,7 @@
 # =============================================================================
 
 services:
-  frontend-builder:
-    image: node:26.0.0-trixie-slim
-    working_dir: /app
-    volumes:
-      - ./frontend:/app
-      - frontend_node_modules:/app/node_modules
-      - frontend_dist:/dist
-    command: sh -c "npm ci && npm run build-only -- --outDir /dist"
-
   backend:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: development
-    restart: unless-stopped
-    depends_on:
-      frontend-builder:
-        condition: service_completed_successfully
-    env_file:
-      - path: ./.env
-        required: false
-    ports:
-      - '${DOCKER_EXTERNAL_PORT:-3344}:3333'
-    environment:
-      NODE_ENV: development
-      HOST: 0.0.0.0
-      PORT: 3333
-      LOG_LEVEL: debug
-      TZ: ${TZ:-America/Sao_Paulo}
-      BACKUP_STORAGE_PATH: /storage/backups
-      SQLITE_DATABASE_PATH: /storage/database/app.sqlite3
-      RETENTION_DAILY: ${RETENTION_DAILY:-7}
-      RETENTION_WEEKLY: ${RETENTION_WEEKLY:-4}
-      RETENTION_MONTHLY: ${RETENTION_MONTHLY:-12}
-      RETENTION_YEARLY: ${RETENTION_YEARLY:-5}
-    volumes:
-      - ./backend:/app
-      - backend_node_modules:/app/node_modules
-      - frontend_dist:/app/public:ro
-      - ./backend/storage/backups:/storage/backups
-      - ./backend/storage/database:/storage/database
-      - /var/run/docker.sock:/var/run/docker.sock
-      - /var/lib/docker/containers:/var/lib/docker/containers:rw
-    healthcheck:
-      test:
-        [
-          'CMD',
-          'node',
-          '-e',
-          "fetch('http://localhost:3333/api/health').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))",
-        ]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
-
-  # ---------------------------------------------------------------------------
-  # back-roco — o porte em Rust, rodando LADO A LADO com o AdonisJS.
-  #
-  # Sobe numa porta própria e num banco próprio. Isso é o que permite a janela
-  # de tráfego-sombra da tarefa 12.13: a suíte de contrato aponta para um ou
-  # para outro trocando só a variável `CONTRACT_BASE_URL`, sem tocar em nada
-  # mais.
-  #
-  # NÃO usa o mesmo SQLite do backend: a decisão D4 é schema novo, e apontar os
-  # dois para o mesmo arquivo corromperia o banco em produção.
-  #
-  # Fica sob o profile `roco` para não subir por engano em `docker compose up`.
-  # Para usar:  docker compose -f docker-compose.dev.yml --profile roco up
-  # ---------------------------------------------------------------------------
-  back-roco:
-    profiles: ['roco']
     build:
       context: .
       dockerfile: back-roco/Dockerfile
@@ -112,28 +35,36 @@ services:
       LOCO_ENV: development
       BINDING: 0.0.0.0
       PORT: 3333
+      LOG_LEVEL: ${LOG_LEVEL:-debug}
       TZ: ${TZ:-America/Sao_Paulo}
-      # A MESMA chave do backend: é ela que mantém legíveis os ciphertexts já
-      # gravados (decisão D3). Uma chave diferente aqui torna toda senha de
-      # conexão indecifrável após o cutover.
+      BACKUP_STORAGE_PATH: /storage/backups
+      DATABASE_URL: sqlite:///storage/database/back-roco.sqlite?mode=rwc
       DB_ENCRYPTION_KEY: ${DB_ENCRYPTION_KEY}
       AUTH_ACCESS_TOKEN_EXPIRES_IN: ${AUTH_ACCESS_TOKEN_EXPIRES_IN:-7d}
       INITIAL_ADMIN_BOOTSTRAP_TOKEN: ${INITIAL_ADMIN_BOOTSTRAP_TOKEN:-}
-      DATABASE_URL: sqlite:///storage/database/back-roco.sqlite?mode=rwc
-      BACKUP_STORAGE_PATH: /storage/backups
+      BACKUP_DELETE_LOCAL_AFTER_REMOTE_UPLOAD: ${BACKUP_DELETE_LOCAL_AFTER_REMOTE_UPLOAD:-false}
       DIAGNOSTICS_PATH: /storage/diagnostics
+      AUDIT_RETENTION_DAYS: ${AUDIT_RETENTION_DAYS:-30}
+      BACKEND_CONTAINER_ID: ${BACKEND_CONTAINER_ID:-}
     volumes:
       - ./back-roco/storage/backups:/storage/backups
       - ./back-roco/storage/database:/storage/database
+      - ./back-roco/storage/diagnostics:/storage/diagnostics
       - /var/run/docker.sock:/var/run/docker.sock
+      - /var/lib/docker/containers:/var/lib/docker/containers:rw
     healthcheck:
-      test: ['CMD', 'curl', '-fsS', 'http://localhost:3333/api/health']
+      test:
+        [
+          'CMD',
+          'curl',
+          '-fsS',
+          'http://localhost:3333/api/health',
+        ]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 10s
 
-volumes:
-  backend_node_modules:
-  frontend_node_modules:
-  frontend_dist:
+networks:
+  system-network:
+    external: true

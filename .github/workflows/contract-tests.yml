@@ -1,16 +1,16 @@
-# Suite de contrato contra o AdonisJS (tarefa 1.10 do roadmap).
+# Suite de contrato contra o back-roco (Rust/Loco).
 #
 # Roda a cada PR pelo motivo mais importante e menos obvio: os golden files sao
-# a especificacao do back-roco. Se o backend mudar uma resposta e ninguem
-# regravar o golden, a Fase 2 passa a portar um contrato que nao existe mais.
-# Este job e' o que garante que os golden nao apodrecam sem aviso.
+# a especificacao do back-roco. Se o back-roco mudar uma resposta e ninguem
+# regravar o golden, a suite passa a testar um contrato que nao existe mais.
+# Este job e' o que garante que os golden files nao apodrecam sem aviso.
 
 name: contract-tests
 
 on:
   pull_request:
     paths:
-      - 'backend/**'
+      - 'back-roco/**'
       - 'contract-tests/**'
       - 'docs/routes-baseline.txt'
       - '.github/workflows/contract-tests.yml'
@@ -31,29 +31,28 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 26
           cache: pnpm
           cache-dependency-path: |
-            backend/pnpm-lock.yaml
             contract-tests/pnpm-lock.yaml
 
-      - name: Instalar dependencias do backend
-        working-directory: backend
-        run: pnpm install --frozen-lockfile
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
 
       - name: Instalar dependencias da suite
         working-directory: contract-tests
         run: pnpm install --frozen-lockfile
 
       # Os matchers primeiro: se o instrumento de medida esta' quebrado, o
-      # resultado da suite nao significa nada e falhar aqui economiza 20min.
+      # resultado da suite nao significa nada e falhar aqui economiza tempo.
       - name: Testes do harness
         working-directory: contract-tests
         run: pnpm contract:selftest
 
-      - name: Suite de contrato contra o Adonis
+      - name: Suite de contrato contra o back-roco
         working-directory: contract-tests
-        run: pnpm contract:adonis
+        run: pnpm contract:roco
 
       # Golden regravado e nao commitado e' a falha silenciosa que este job
       # existe para pegar. `--record` reescreve os arquivos; se o diff nao for

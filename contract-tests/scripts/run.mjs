@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Lancador da suite de contrato (tarefa 1.9 do roadmap).
+ * Lancador da suite de contrato.
  *
  * Existe para que os scripts do `package.json` nao precisem de `VAR=valor`
  * antes do comando: isso quebra no `cmd.exe`, e o repositorio e' desenvolvido
@@ -32,27 +32,13 @@ function hasFlag(name) {
   return args.includes(name)
 }
 
-const target = flagValue('--target', 'adonis')
-if (target !== 'adonis' && target !== 'roco') {
-  console.error(`--target precisa ser \`adonis\` ou \`roco\`, recebi \`${target}\`.`)
-  process.exit(2)
-}
-
 const record = hasFlag('--record')
 const diff = hasFlag('--diff')
 
-if (record && target !== 'adonis') {
-  // O golden e' a especificacao extraida do Adonis. Grava-lo do back-roco
-  // faria a suite comparar a implementacao com ela mesma e aprovar qualquer
-  // desvio — o erro mais caro que esta suite poderia cometer.
-  console.error('--record so' + ' e permitido com --target adonis: o golden vem do Adonis.')
-  process.exit(2)
-}
-
 const env = {
   ...process.env,
-  CONTRACT_TARGET: target,
-  CONTRACT_RUN_ID: flagValue('--run-id', target),
+  CONTRACT_TARGET: 'roco',
+  CONTRACT_RUN_ID: flagValue('--run-id', 'roco'),
   CONTRACT_GOLDEN: record ? 'record' : (process.env.CONTRACT_GOLDEN ?? 'compare'),
   CONTRACT_DIFF_REPORT: diff ? '1' : (process.env.CONTRACT_DIFF_REPORT ?? '0'),
   CONTRACT_ENFORCE_COVERAGE: hasFlag('--enforce-coverage')
@@ -64,8 +50,8 @@ const baseUrl = flagValue('--base-url')
 if (baseUrl) env.CONTRACT_BASE_URL = baseUrl
 
 // Repassa ao vitest tudo que nao for flag nossa, para permitir
-// `pnpm contract:adonis -- -t "nome do teste"`.
-const OWN_FLAGS = new Set(['--target', '--run-id', '--base-url'])
+// `pnpm contract:roco -- -t "nome do teste"`.
+const OWN_FLAGS = new Set(['--run-id', '--base-url'])
 const passthrough = []
 for (let index = 0; index < args.length; index++) {
   const arg = args[index]

@@ -1,6 +1,6 @@
 {
   "name": "auth/login-inactive",
-  "recordedFrom": "adonis",
+  "recordedFrom": "roco",
   "request": {
     "method": "POST",
     "route": "POST /api/auth/login",

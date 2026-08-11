@@ -1,6 +1,6 @@
 {
   "name": "docker/diagnostics-invalid",
-  "recordedFrom": "adonis",
+  "recordedFrom": "roco",
   "request": {
     "method": "POST",
     "route": "POST /api/docker/diagnostics",

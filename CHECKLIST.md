@@ -4,7 +4,7 @@
 
 - **Nome:** DB Backup Manager
 - **Tipo:** Self-Hosted, Open Source
-- **Stack:** AdonisJS v6 (Backend) + Vue 3 + Vuetify (Frontend)
+- **Stack:** Rust + Loco (Backend) + Vue 3 + Vuetify (Frontend)
 - **Licença:** MIT (a definir)
 
 ---
@@ -14,22 +14,22 @@
 ### 1. Inicialização e Estrutura do Projeto
 
 - [x] Criar checklist do projeto
-- [x] Inicializar projeto AdonisJS v6 (backend)
+- [x] Inicializar projeto Rust + Loco (backend)
 - [x] Inicializar projeto Vue 3 + Vite + Vuetify (frontend)
-- [x] Configurar TypeScript em ambos os projetos
-- [x] Configurar AdonisJS para servir arquivos estáticos do Vue (após build)
+- [x] Configurar TypeScript no frontend
+- [x] Configurar Loco para servir arquivos estáticos do Vue (após build)
 - [x] Configurar variáveis de ambiente (.env)
-- [x] Configurar proxy de desenvolvimento (Vite → AdonisJS API)
+- [x] Configurar proxy de desenvolvimento (Vite → Loco API)
 
 ### 2. Banco de Dados e Migrations
 
-- [x] Configurar SQLite via Lucid ORM
+- [x] Configurar SQLite via SeaORM
 - [x] Criar migration `connections` (credenciais dos bancos)
   - [x] Campos: id, name, type, host, port, username, password (encrypted), database, created_at, updated_at
   - [x] Implementar criptografia AES-256-GCM para senhas
 - [x] Criar migration `backups` (logs e metadados)
   - [x] Campos: id, connection_id, status, file_path, file_size, retention_type, started_at, finished_at, error_message, created_at, updated_at
-- [x] Criar Models Lucid (Connection, Backup)
+- [x] Criar Models SeaORM (Connection, Backup)
 - [x] Implementar serviço de criptografia/descriptografia
 
 ### 3. API REST - Conexões (CRUD)
@@ -60,7 +60,7 @@
 
 ### 6. Scheduler (Agendamento)
 
-- [x] Configurar AdonisJS Scheduler
+- [x] Configurar scheduler do Loco
 - [x] Implementar agendamento dinâmico por conexão (1h, 6h, 12h, 24h)
 - [x] Criar jobs de backup agendados
 - [x] Implementar logs de execução
@@ -112,7 +112,7 @@
 
 ### 12. Segurança e Validação
 
-- [x] Implementar validação de inputs (VineJS)
+- [x] Implementar validação de inputs
 - [x] Configurar CORS
 - [x] Implementar rate limiting
 - [x] Sanitizar dados de entrada
@@ -185,48 +185,21 @@
 
 ```
 backup_multi-db/
-├── backend/                     # AdonisJS v6
-│   ├── app/
+├── back-roco/                   # Backend Rust + Loco
+│   ├── src/
+│   │   ├── app/
 │   │   ├── controllers/
-│   │   │   ├── backups_controller.ts    ✅ Criado
-│   │   │   └── connections_controller.ts ✅ Criado
-│   │   ├── exceptions/
-│   │   ├── middleware/
 │   │   ├── models/
-│   │   │   ├── backup.ts        ✅ Criado
-│   │   │   ├── connection.ts    ✅ Criado
-│   │   │   └── user.ts          (padrão AdonisJS)
-│   │   ├── services/
-│   │   │   ├── backup_service.ts       ✅ Criado
-│   │   │   └── encryption_service.ts   ✅ Criado
-│   │   └── validators/
-│   │       └── connection_validator.ts ✅ Criado
+│   │   ├── workers/
+│   │   └── tasks/
 │   ├── config/
-│   │   ├── app.ts
-│   │   ├── auth.ts
-│   │   ├── bodyparser.ts
-│   │   ├── cors.ts
-│   │   ├── database.ts          ✅ SQLite configurado
-│   │   ├── hash.ts
-│   │   ├── logger.ts
-│   │   └── static.ts            ✅ Configurado
-│   ├── database/
-│   │   └── migrations/
-│   │       ├── 1_create_connections_table.ts  ✅ Criado
-│   │       └── 2_create_backups_table.ts      ✅ Criado
-│   ├── public/                  # Vue build output ✅
-│   │   ├── assets/
-│   │   ├── favicon.ico
-│   │   └── index.html
-│   ├── start/
-│   │   ├── env.ts               ✅ Configurado
-│   │   ├── kernel.ts
-│   │   └── routes.ts            ✅ API routes + SPA fallback
+│   ├── migration/
 │   ├── storage/
 │   │   ├── backups/             ✅ Criado
 │   │   └── database/            ✅ Criado
-│   ├── .env.example             ✅ Atualizado
-│   └── package.json
+│   ├── public/                  # Vue build output ✅
+│   ├── Cargo.toml
+│   └── README.md
 ├── frontend/                    # Vue 3 + Vuetify
 │   ├── src/
 │   │   ├── components/
@@ -251,8 +224,12 @@ backup_multi-db/
 │   ├── public/
 │   ├── vite.config.mts          ✅ Proxy + build configurado
 │   └── package.json
+├── contract-tests/              # Suíte de contrato black-box
+├── docs/                        # OpenAPI, schema e baselines
 ├── CHECKLIST.md                 ✅ Este arquivo
 ├── README.md                    ✅ Documentação
+├── docker-compose.yml           # Produção
+├── docker-compose.dev.yml       # Desenvolvimento
 └── LICENSE                      # (a criar)
 ```
 
@@ -260,36 +237,34 @@ backup_multi-db/
 
 ```bash
 # Backend
-cd backend
-npm run dev          # Iniciar em modo desenvolvimento (porta 3333)
-npm run build        # Build para produção
-npm run typecheck    # Verificar tipos TypeScript
-node ace migration:run        # Executar migrations
-node ace migration:rollback   # Reverter última migration
+cd back-roco
+cargo loco start              # Iniciar em modo desenvolvimento (porta 3333)
+cargo build --release         # Build para produção
+cargo test                    # Rodar testes
+cargo fmt                     # Formatação
+cargo clippy --all-targets    # Lint
+cargo loco db migrate         # Executar migrations
+cargo loco db rollback        # Reverter última migration
 
 # Frontend
 cd frontend
 npm run dev          # Iniciar em modo desenvolvimento (porta 3000)
-npm run build        # Build para produção (output: ../backend/public)
+npm run build        # Build para produção (output: ../back-roco/public)
 npm run type-check   # Verificar tipos TypeScript
 npm run lint         # Verificar lint
 
 # Desenvolvimento Simultâneo
-# Terminal 1: cd backend && npm run dev     (porta 3333)
-# Terminal 2: cd frontend && npm run dev    (porta 3000 - com proxy para API)
+# Terminal 1: cd back-roco && cargo loco start     (porta 3333)
+# Terminal 2: cd frontend && npm run dev           (porta 3000 - com proxy para API)
 
 # Produção (após build do frontend)
-cd backend
-npm run dev          # ou: node bin/server.js
-# Acesse: http://localhost:3333
+cd back-roco
+cargo loco start     # Acesse: http://localhost:3333
 ```
 
 ### Variáveis de Ambiente (.env)
 
 ```env
-# Gerar APP_KEY:
-node ace generate:key
-
 # Gerar DB_ENCRYPTION_KEY (64 caracteres hex = 32 bytes):
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```

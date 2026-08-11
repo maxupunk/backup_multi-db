@@ -1,6 +1,6 @@
 {
   "name": "storage-destinations/show",
-  "recordedFrom": "adonis",
+  "recordedFrom": "roco",
   "request": {
     "method": "GET",
     "route": "GET /api/storage-destinations/:id",

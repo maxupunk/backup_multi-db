@@ -1,6 +1,6 @@
 {
   "name": "audit-logs/show",
-  "recordedFrom": "adonis",
+  "recordedFrom": "roco",
   "request": {
     "method": "GET",
     "route": "GET /api/audit-logs/:id",

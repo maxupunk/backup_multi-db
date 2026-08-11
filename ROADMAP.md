@@ -1,3 +1,7 @@
+> **Nota:** este documento descreve o porte do backend legado AdonisJS para o
+> `back-roco` (Rust/Loco). O backend AdonisJS foi removido do repositório;
+> o `back-roco` é agora o único backend.
+
 # Roadmap — Paridade `backend` (AdonisJS) → `back-roco` (Rust/Loco)
 
 > **Objetivo duplo**

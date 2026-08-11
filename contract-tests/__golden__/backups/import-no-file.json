@@ -1,6 +1,6 @@
 {
   "name": "backups/import-no-file",
-  "recordedFrom": "adonis",
+  "recordedFrom": "roco",
   "request": {
     "method": "POST",
     "route": "POST /api/backups/import",

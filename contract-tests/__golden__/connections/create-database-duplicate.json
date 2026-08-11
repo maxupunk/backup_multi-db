@@ -1,6 +1,6 @@
 {
   "name": "connections/create-database-duplicate",
-  "recordedFrom": "adonis",
+  "recordedFrom": "roco",
   "request": {
     "method": "POST",
     "route": "POST /api/connections/:id/create-database",

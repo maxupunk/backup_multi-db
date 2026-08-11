@@ -1,6 +1,6 @@
 {
   "name": "system/diagnostics-download-not-found",
-  "recordedFrom": "adonis",
+  "recordedFrom": "roco",
   "request": {
     "method": "GET",
     "route": "GET /api/system/diagnostics/:name/download",

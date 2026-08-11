@@ -1,5 +1,5 @@
 /**
- * Plugin de integração com AdonisJS Transmit (SSE)
+ * Plugin de integração SSE (Transmit-compatible)
  */
 import { Transmit } from '@adonisjs/transmit-client'
 import { useNotificationStore } from '@/stores/notification'

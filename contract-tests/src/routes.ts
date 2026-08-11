@@ -5,9 +5,9 @@
  * exercitou `GET /api/connections/:id`. Sem esse casamento a cobertura seria
  * apenas uma lista de URLs visitadas, que nunca cruzaria com o baseline.
  *
- * Fonte: `docs/routes-baseline.txt`, gravado na Fase 0 a partir do proprio
- * `node ace list:routes` do Adonis. E' o inventario de referencia — se o
- * arquivo sumir, a suite nao tem contra o que medir cobertura e falha alto.
+ * Fonte: `docs/routes-baseline.txt`, gravado na Fase 0 a partir do back-roco.
+ * E' o inventario de referencia — se o arquivo sumir, a suite nao tem contra
+ * o que medir cobertura e falha alto.
  */
 
 import { readFileSync } from 'node:fs'
@@ -67,8 +67,7 @@ export function baselineRoutes(): BaselineRoute[] {
   } catch (cause) {
     throw new Error(
       `Nao consegui ler ${BASELINE_PATH}. Ele e' o inventario de rotas de referencia ` +
-        `(Fase 0); sem ele nao ha' como medir cobertura. Regere com ` +
-        `\`node ace list:routes\` no backend.`,
+        `(Fase 0); sem ele nao ha' como medir cobertura. Regere a partir do back-roco.`,
       { cause }
     )
   }
@@ -113,8 +112,7 @@ function patternMatches(patternSegments: string[], pathSegments: string[]): bool
  *
  * Quando mais de um template casa — `/api/storages/copy-jobs/:jobId` e
  * `/api/storages/:id/browse` tem o mesmo formato — vence o de mais segmentos
- * literais, que e' a mesma regra de precedencia que o router do Adonis usa.
- * Sem esse desempate a cobertura creditaria a rota errada.
+ * literais. Sem esse desempate a cobertura creditaria a rota errada.
  */
 export function matchRoute(method: string, pathname: string): BaselineRoute | null {
   const upperMethod = method.toUpperCase()

@@ -1,6 +1,6 @@
 {
   "name": "docker/images",
-  "recordedFrom": "adonis",
+  "recordedFrom": "roco",
   "request": {
     "method": "GET",
     "route": "GET /api/docker/images",

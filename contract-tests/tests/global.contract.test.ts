@@ -2,9 +2,8 @@
  * Lote 2.8 — SSE, fallback da SPA e comportamento global.
  *
  * São as rotas que não pertencem a nenhum controller e por isso costumam ser
- * esquecidas num porte: o canal SSE do `@adonisjs/transmit`, o catch-all que
- * serve o `index.html` da SPA, e os middlewares que atuam em **toda**
- * requisição.
+ * esquecidas num porte: o canal SSE, o catch-all que serve o `index.html` da
+ * SPA, e os middlewares que atuam em **toda** requisição.
  *
  * O SSE é testado com cuidado deliberado: `GET /__transmit/events` é um
  * stream que **nunca fecha**. Ler o corpo inteiro travaria a suíte até o
@@ -27,10 +26,8 @@ describe('GET /__transmit/events (SSE)', () => {
     const timer = setTimeout(() => controller.abort(), 2_000)
 
     try {
-      // `uid` e' **obrigatorio**: sem ele o `EventStreamController` lanca
-      // `RuntimeException: Missing required field "uid"` e a rota devolve 500.
-      // E' um detalhe do `@adonisjs/transmit` que o porte precisa reproduzir —
-      // o cliente SSE do frontend gera esse uid e o reusa no subscribe.
+      // `uid` e' **obrigatorio**: sem ele o controller de eventos devolve 500.
+      // O cliente SSE do frontend gera esse uid e o reusa no subscribe.
       const response = await undiciRequest(
         `${baseUrl()}/__transmit/events?uid=contract-tests-uid`,
         {
