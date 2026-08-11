@@ -1266,14 +1266,14 @@ recuperável —, enquanto abortar o `DELETE` deixaria um backup inacessível li
 - [x] 9.2 — ✅ Detecção de ambiente (dentro/fora de container e disponibilidade do socket), sem depender do CLI Docker.
 - [x] 9.3 — ✅ `GET /api/docker/status`, com ping limitado a 3 s e degradação para `available: false`.
 - [x] 9.4 — ✅ **Containers**: list, inspect, logs com filtros, clear logs, start, stop, restart e remove.
-- [ ] 9.5 — **Volumes** (5): list, inspect, export (streaming tar), backup para storage, remove.
+- [x] 9.5 — **Volumes** (5): list, inspect, export (streaming tar.gz via arquivo temporário), backup para storage, remove. Implementado em `src/models/docker_volume.rs` e `src/controllers/docker.rs`.
 - [x] 9.6 — ✅ **Networks**: list, inspect, create, connect e disconnect.
 - [x] 9.7 — ✅ **Images**: list, inspect, remove e prune.
 - [x] 9.8 — ✅ **Diagnostics**: job assíncrono + runners ping, curl e port-scan.
 - [x] 9.9 — ✅ Descoberta de containers de banco alimenta `GET /api/connections/docker-hosts` (fecha a pendência 6.7).
-- [ ] 9.10 — `docker_container_monitoring_service` (757 LOC) — coleta de stats, alimenta a Fase 11.
+- [x] 9.10 — `docker_container_monitoring_service` — coleta de stats via `bollard`, endpoint `GET /api/system/containers/resources` e worker SSE `notifications/docker-container-resources`. Implementado em `src/models/docker_container_monitoring.rs`.
 - [x] 9.11 — ✅ `container_memory_probe` — leitura de cgroup v1/v2 com fallback seguro para o host.
-- [ ] 9.12 — Testes Rust + contrato (usar containers descartáveis criados pelo próprio teste).
+- [x] 9.12 — Testes Rust + contrato para Docker Manager, incluindo criação de volumes/containers descartáveis quando a Engine está disponível.
 
 **Pronto quando:** lote 2.7 passa com Docker disponível **e** com Docker indisponível (degradação idêntica).
 

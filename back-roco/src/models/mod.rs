@@ -18,6 +18,7 @@ pub mod diagnostics;
 pub mod docker;
 pub mod docker_container_monitoring;
 pub mod docker_diagnostics;
+pub mod docker_volume;
 pub mod dump;
 pub mod email;
 pub mod encryption;

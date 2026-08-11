@@ -1,10 +1,11 @@
-//! Emissão de métricas atuais para o canal SSE do painel.
+//! Emissão de métricas atuais para os canais SSE do painel.
 
 use loco_rs::prelude::*;
 
 pub const SYSTEM_RESOURCES: &str = "notifications/system-resources";
+pub const DOCKER_CONTAINER_RESOURCES: &str = "notifications/docker-container-resources";
 
-/// Coleta e emite uma amostra apenas quando há alguém acompanhando o painel.
+/// Coleta e emite métricas do host apenas quando há assinantes no canal de sistema.
 pub async fn emit_if_subscribed(ctx: &AppContext) -> Result<bool> {
     if !crate::models::sse::has_subscribers(ctx, SYSTEM_RESOURCES).await? {
         return Ok(false);
@@ -28,5 +29,24 @@ pub async fn emit_if_subscribed(ctx: &AppContext) -> Result<bool> {
         "timestamp": chrono::Utc::now().to_rfc3339(),
     });
     crate::models::sse::broadcast(ctx, SYSTEM_RESOURCES, payload)?;
+    Ok(true)
+}
+
+/// Coleta e emite métricas de containers Docker no canal próprio.
+pub async fn emit_containers_if_subscribed(
+    ctx: &AppContext,
+    overview: &crate::models::docker_container_monitoring::ContainerMetricsOverview,
+) -> Result<bool> {
+    if !crate::models::sse::has_subscribers(ctx, DOCKER_CONTAINER_RESOURCES).await? {
+        return Ok(false);
+    }
+
+    let payload = serde_json::json!({
+        "dockerAvailable": overview.docker_available,
+        "unavailableReason": overview.unavailable_reason,
+        "collectedAt": overview.collected_at,
+        "containers": overview.containers,
+    });
+    crate::models::sse::broadcast(ctx, DOCKER_CONTAINER_RESOURCES, payload)?;
     Ok(true)
 }

@@ -1,7 +1,7 @@
 //! `/api/docker` — Docker Manager e diagnósticos (Fase 9).
 
-use axum::body::Bytes;
-use axum::http::StatusCode;
+use axum::body::{Body, Bytes};
+use axum::http::{header, StatusCode};
 use axum::response::{IntoResponse, Response};
 use loco_rs::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -12,6 +12,7 @@ use crate::controllers::middlewares::auth::Authenticated;
 use crate::controllers::middlewares::limiters::{enforce, Limiters};
 use crate::models::docker::{self, ContainerAction, DockerError, LogFilters};
 use crate::models::docker_diagnostics;
+use crate::models::storage_destinations::Model as StorageDestination;
 use crate::views::errors::ApiError;
 
 type Reply = std::result::Result<Response, ApiError>;
@@ -77,6 +78,11 @@ struct DiagnosticParams {
 fn engine_error(error: DockerError) -> ApiError {
     match error {
         DockerError::Validation(message) => ApiError::bad_request(message),
+        DockerError::VolumeInUse { message, .. } => ApiError::Controller {
+            status: StatusCode::CONFLICT,
+            message,
+            error: None,
+        },
         DockerError::Unavailable | DockerError::Engine => {
             ApiError::from(loco_rs::Error::Message(error.to_string()))
         }
@@ -299,32 +305,103 @@ pub async fn remove_volume(
     })
     .into_response())
 }
+/// Arquivo temporario que se auto-remove quando o stream termina ou e' dropado.
+struct DeletingFile {
+    path: std::path::PathBuf,
+    file: tokio::fs::File,
+}
+
+impl DeletingFile {
+    fn new(path: std::path::PathBuf, file: tokio::fs::File) -> Self {
+        Self { path, file }
+    }
+}
+
+impl tokio::io::AsyncRead for DeletingFile {
+    fn poll_read(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &mut tokio::io::ReadBuf<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        std::pin::Pin::new(&mut self.file).poll_read(cx, buf)
+    }
+}
+
+impl Drop for DeletingFile {
+    fn drop(&mut self) {
+        let path = self.path.clone();
+        tokio::spawn(async move {
+            let _ = tokio::fs::remove_file(&path).await;
+        });
+    }
+}
+
 #[debug_handler]
 pub async fn export_volume(
     State(_ctx): State<AppContext>,
     _session: Authenticated,
     Path(name): Path<String>,
 ) -> Reply {
-    let _ = docker::inspect_volume(&name).await.map_err(engine_error)?;
-    Err(ApiError::unprocessable(
-        "A exportação de volumes requer o worker de streaming configurado.",
-    ))
+    let (temp_path, file_name) = crate::models::docker_volume::export_to_temp_file(&name)
+        .await
+        .map_err(engine_error)?;
+
+    let file = tokio::fs::File::open(&temp_path)
+        .await
+        .map_err(|_| engine_error(DockerError::Engine))?;
+
+    let deleting_file = DeletingFile::new(temp_path, file);
+    let stream = tokio_util::io::ReaderStream::new(deleting_file);
+    let body = Body::from_stream(stream);
+    let response = (
+        StatusCode::OK,
+        [
+            (header::CONTENT_TYPE, "application/gzip".to_string()),
+            (
+                header::CONTENT_DISPOSITION,
+                format!(r#"attachment; filename="{}""#, file_name),
+            ),
+        ],
+        body,
+    )
+        .into_response();
+    Ok(response)
 }
+
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct BackupVolumeBody {
+    storage_id: Option<i64>,
+}
+
 #[debug_handler]
 pub async fn backup_volume(
-    State(_ctx): State<AppContext>,
+    State(ctx): State<AppContext>,
     _session: Authenticated,
     Path(name): Path<String>,
     body: Bytes,
 ) -> Reply {
-    let data: Value = json_body(&body)?;
-    if data.get("storageId").and_then(Value::as_i64).is_none() {
+    let params: BackupVolumeBody = json_body(&body)?;
+    let Some(storage_id) = params.storage_id else {
         return Err(ApiError::bad_request("storageId é obrigatório"));
-    }
-    let _ = docker::inspect_volume(&name).await.map_err(engine_error)?;
-    Err(ApiError::unprocessable(
-        "O backup de volumes ainda requer o worker de streaming configurado.",
-    ))
+    };
+
+    let destination = StorageDestination::find_one(&ctx.db, storage_id)
+        .await?
+        .ok_or_else(|| ApiError::not_found("Destino de armazenamento não encontrado"))?;
+
+    let outcome = crate::models::docker_volume::backup_to_storage(&ctx, &name, &destination)
+        .await
+        .map_err(engine_error)?;
+
+    Ok(axum::Json(DataEnvelope {
+        success: true,
+        data: serde_json::json!({
+            "fileName": outcome.file_name,
+            "relativePath": outcome.relative_path,
+        }),
+    })
+    .into_response())
 }
 
 #[debug_handler]

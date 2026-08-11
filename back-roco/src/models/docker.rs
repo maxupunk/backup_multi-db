@@ -36,6 +36,11 @@ pub enum DockerError {
     Engine,
     #[error("{0}")]
     Validation(String),
+    #[error("Volume em uso")]
+    VolumeInUse {
+        message: String,
+        container_names: Vec<String>,
+    },
 }
 
 /// Filtros aceitos pela rota de logs.
@@ -47,7 +52,7 @@ pub struct LogFilters {
     pub timestamps: bool,
 }
 
-fn client() -> Result<Docker, DockerError> {
+pub fn client() -> Result<Docker, DockerError> {
     Docker::connect_with_local_defaults().map_err(|_| DockerError::Unavailable)
 }
 
@@ -324,8 +329,93 @@ pub async fn inspect_volume(name: &str) -> Result<Value, DockerError> {
     value(call(client()?.inspect_volume(name)).await?)
 }
 pub async fn remove_volume(name: &str, force: bool) -> Result<Value, DockerError> {
-    call(client()?.remove_volume(name, Some(RemoveVolumeOptions { force }))).await?;
-    Ok(json!({ "success": true, "message": "Volume removido com sucesso." }))
+    let client = client()?;
+    match client
+        .remove_volume(name, Some(RemoveVolumeOptions { force }))
+        .await
+    {
+        Ok(()) => Ok(json!({ "success": true, "message": "Volume removido com sucesso." })),
+        Err(err) => {
+            if let Some(container_names) = volume_in_use_containers(&err).await {
+                return Err(DockerError::VolumeInUse {
+                    message: format!(
+                        "O volume está em uso pelos containers: {}. Pare-os antes de remover o volume.",
+                        container_names.join(", ")
+                    ),
+                    container_names,
+                });
+            }
+            Err(DockerError::Engine)
+        }
+    }
+}
+
+async fn volume_in_use_containers(err: &bollard::errors::Error) -> Option<Vec<String>> {
+    let text = err.to_string();
+    let ids = extract_container_ids(&text)?;
+    Some(resolve_container_names(&ids).await)
+}
+
+fn extract_container_ids(message: &str) -> Option<Vec<&str>> {
+    let bracket = message.split_once('[')?.1;
+    let ids = bracket.split_once(']')?.0;
+    Some(
+        ids.split(',')
+            .map(str::trim)
+            .filter(|id| !id.is_empty())
+            .collect(),
+    )
+}
+
+async fn resolve_container_names(ids: &[&str]) -> Vec<String> {
+    let Ok(client) = client() else {
+        return ids.iter().copied().map(short_id).collect();
+    };
+    let list = tokio::time::timeout(
+        Duration::from_secs(3),
+        client.list_containers(Some(ListContainersOptions::<String> {
+            all: true,
+            ..Default::default()
+        })),
+    )
+    .await;
+    let Ok(Ok(containers)) = list else {
+        return ids.iter().copied().map(short_id).collect();
+    };
+
+    ids.iter()
+        .map(|id| {
+            let found = containers.iter().find(|c| {
+                let cid = c.id.as_deref().unwrap_or_default();
+                cid == *id || cid.starts_with(id) || id.starts_with(cid)
+            });
+            match found {
+                Some(c) => {
+                    let name = c
+                        .names
+                        .as_ref()
+                        .and_then(|names| names.first())
+                        .map(|name| name.trim_start_matches('/').to_string())
+                        .unwrap_or_else(|| short_id(id));
+                    let project = c
+                        .labels
+                        .as_ref()
+                        .and_then(|labels| labels.get("com.docker.compose.project"))
+                        .map(String::as_str)
+                        .filter(|value| !value.is_empty());
+                    match project {
+                        Some(project) => format!("{name} ({project})"),
+                        None => name,
+                    }
+                }
+                None => short_id(id),
+            }
+        })
+        .collect()
+}
+
+fn short_id(id: &str) -> String {
+    id.chars().take(12).collect()
 }
 
 pub async fn list_networks() -> Result<Value, DockerError> {

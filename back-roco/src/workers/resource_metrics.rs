@@ -84,24 +84,9 @@ async fn tick(ctx: &AppContext) -> Result<bool> {
     }
 
     let container_overview = crate::models::docker_container_monitoring::overview(ctx).await;
-    if container_overview.docker_available
-        && crate::models::sse::has_subscribers(
-            ctx,
-            crate::models::resource_metrics::SYSTEM_RESOURCES,
-        )
+    if crate::models::resource_metrics::emit_containers_if_subscribed(ctx, &container_overview)
         .await?
     {
-        // O painel consome `system-resources` para ambos; enviamos o overview
-        // completo de containers pelo mesmo canal por simplicidade.
-        let payload = serde_json::json!({
-            "containers": container_overview.containers,
-            "collectedAt": container_overview.collected_at,
-        });
-        crate::models::sse::broadcast(
-            ctx,
-            crate::models::resource_metrics::SYSTEM_RESOURCES,
-            payload,
-        )?;
         emitted = true;
     }
 

@@ -176,7 +176,7 @@ describe('volumes', () => {
 
   it('backup para storage exige destino valido', async () => {
     const response = await as('admin').post('/api/docker/volumes/volume-que-nao-existe/backup', {
-      json: { storageDestinationId: 99999999 },
+      json: { storageId: 99999999 },
     })
     expect(response.route).toBe('POST /api/docker/volumes/:name/backup')
     expect(response.status).not.toBe(200)
