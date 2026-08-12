@@ -120,7 +120,7 @@
 
 ### 13. Documentação
 
-- [x] Documentar API (OpenAPI/Swagger)
+- [x] Documentar o contrato da API por DTOs TypeScript gerados no backend
 - [ ] Guia de instalação
 - [ ] Guia de contribuição (CONTRIBUTING.md)
 

@@ -28,7 +28,7 @@ use crate::models::validation;
 
 impl ActiveModelBehavior for ActiveModel {}
 
-/// Marcador que substitui um segredo mascarado, igual ao do Adonis.
+/// Marcador que substitui um segredo mascarado, igual ao da implementacao anterior.
 pub const MASK: &str = "***";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -108,7 +108,7 @@ impl StorageProvider {
         }
     }
 
-    /// Rotulo exibido na interface. Vem do `PROVIDER_LABELS` do Adonis.
+    /// Rotulo exibido na interface. Vem do `PROVIDER_LABELS` da implementacao anterior.
     pub const fn label(self) -> &'static str {
         match self {
             Self::AwsS3 => "Amazon S3",
@@ -168,7 +168,7 @@ pub struct UnknownValue(pub String);
 
 /// Mascara os segredos de uma config ja' decifrada, conforme o `type`.
 ///
-/// Campos ausentes continuam ausentes: o Adonis emite `undefined` (que some do
+/// Campos ausentes continuam ausentes: a implementacao anterior emite `undefined` (que some do
 /// JSON) quando o segredo opcional nao existe, e criar a chave com `"***"`
 /// faria a resposta anunciar uma credencial que nao esta' configurada.
 pub fn safe_config(config: &Value) -> Value {
@@ -269,7 +269,7 @@ impl Model {
     /// Provider efetivo, caindo no `type` quando a coluna esta' vazia **ou**
     /// traz um valor que nao esta' na lista.
     ///
-    /// O segundo caso e' o do `getEffectiveProvider` do Adonis: ele so' confia
+    /// O segundo caso e' o do `getEffectiveProvider` da implementacao anterior: ele so' confia
     /// na coluna quando o valor existe no mapa de rotulos. Uma linha com
     /// `provider = 'dropbox'` continua sendo exibida pelo `type`, em vez de
     /// derrubar a listagem inteira.
@@ -287,9 +287,9 @@ impl Model {
         Ok(self.provider_enum()?.label())
     }
 
-    /// `providerLabel` para a resposta, com o ultimo fallback do Adonis.
+    /// `providerLabel` para a resposta, com o ultimo fallback da implementacao anterior.
     ///
-    /// Quando nem o `provider` nem o `type` sao reconheciveis, o Adonis emite o
+    /// Quando nem o `provider` nem o `type` sao reconheciveis, a implementacao anterior emite o
     /// `type` cru (`PROVIDER_LABELS[undefined] ?? this.type`). Um campo ausente
     /// no lugar quebraria a coluna "Tipo" da listagem.
     pub fn display_label(&self) -> String {
@@ -570,7 +570,7 @@ impl Model {
 
     /// Deixa este destino como o unico default.
     ///
-    /// Chamado **depois** do `save`, como no Adonis: e' o `id` ja' gravado que
+    /// Chamado **depois** do `save`, como na implementacao anterior: e' o `id` ja' gravado que
     /// diz qual linha preservar.
     pub async fn clear_other_defaults(
         db: &impl ConnectionTrait,
@@ -1157,7 +1157,7 @@ mod tests {
     }
 
     #[test]
-    fn provider_labels_match_the_adonis_table() {
+    fn provider_labels_match_the_supported_provider_table() {
         assert_eq!(StorageProvider::Minio.label(), "MinIO");
         assert_eq!(StorageProvider::GoogleGcs.label(), "Google Cloud Storage");
     }
@@ -1257,7 +1257,7 @@ mod tests {
     #[test]
     fn reads_the_sftp_port_as_number_or_text() {
         // O formulario da interface envia a porta como texto; o `vine.number()`
-        // do Adonis converte, e recusar aqui quebraria o cadastro.
+        // da implementacao anterior converte, e recusar aqui quebraria o cadastro.
         for raw in [json!(2222), json!("2222")] {
             let config = build_config(
                 StorageType::Sftp,

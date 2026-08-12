@@ -61,9 +61,6 @@ COPY --from=planner /app/recipe.json recipe.json
 RUN cargo chef cook --release --recipe-path recipe.json
 
 COPY backend/ .
-# A spec OpenAPI compartilhada fica na raiz do repo; o controller a embute no
-# binario via `include_str!("../../../docs/openapi-baseline.yml")`.
-COPY docs /docs
 # O build do Vue embutido na imagem; o fallback `GET /*` o servira'.
 COPY --from=frontend-builder /app-frontend/dist ./public
 RUN cargo build --release --bin backend-cli

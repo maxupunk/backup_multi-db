@@ -1,6 +1,6 @@
 //! Sugestao de conexoes a partir de containers Docker (tarefa 6.8).
 //!
-//! Porte dos resolvers do Adonis (`connection_suggestion_mapper`,
+//! Porte dos resolvers da implementacao anterior (`connection_suggestion_mapper`,
 //! `network_reachability_resolver`, `container_port_resolver` e
 //! `connection_port_selection_resolver`). A logica e' a mesma: dado o contexto
 //! de rede do backend, sugerir o host e a porta corretos para conectar em um

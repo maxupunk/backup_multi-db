@@ -61,7 +61,7 @@ pub struct BucketObject {
     /// Último segmento do `key`, que é o que a interface exibe.
     pub name: String,
     /// `None` em diretório — pasta não tem tamanho próprio, e emitir `0`
-    /// faria a interface exibir "0 B" onde o Adonis não exibe nada.
+    /// faria a interface exibir "0 B" onde a implementacao anterior não exibe nada.
     pub size: Option<i64>,
     pub last_modified: Option<String>,
     pub is_directory: bool,
@@ -229,7 +229,7 @@ pub trait StorageExplorer: Send + Sync {
 /// Constrói o adapter de uma config.
 ///
 /// É o `getAdapter` do `bucket_explorer_service`, sem o cache: os adapters do
-/// Adonis são *stateless* e a config viaja por parâmetro, então cachear a
+/// implementacao anterior são *stateless* e a config viaja por parâmetro, então cachear a
 /// instância fazia sentido lá. Aqui o adapter **carrega** a config — cachear
 /// por provider entregaria a credencial de um destino a outro.
 pub fn explorer_for(
@@ -279,7 +279,7 @@ mod tests {
 
     #[test]
     fn a_directory_has_no_size() {
-        // `0` faria a interface exibir "0 B" onde o Adonis nao exibe nada.
+        // `0` faria a interface exibir "0 B" onde a implementacao anterior nao exibe nada.
         let directory = BucketObject::directory("12/");
         assert_eq!(directory.size, None);
         assert!(directory.is_directory);

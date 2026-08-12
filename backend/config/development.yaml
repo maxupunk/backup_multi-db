@@ -146,7 +146,7 @@ auth:
 # descriptografar uma senha.
 settings:
   # Chave AES-256-GCM em hex (64 caracteres). Deve ser IDENTICA a
-  # `DB_ENCRYPTION_KEY` do Adonis — e' com ela que os ciphertexts ja' gravados
+  # `DB_ENCRYPTION_KEY` da implementacao anterior — e' com ela que os ciphertexts ja' gravados
   # continuam legiveis apos o cutover (decisao D3).
   db_encryption_key: "{{ get_env(name="DB_ENCRYPTION_KEY", default="000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f") }}"
   # Token exigido para criar o primeiro administrador.

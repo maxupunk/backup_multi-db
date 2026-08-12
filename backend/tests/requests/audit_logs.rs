@@ -1,6 +1,6 @@
 //! Lote 2.6 (parte) — `/api/audit-logs`, mais a persistencia da tarefa 3.8.
 //!
-//! Nenhuma rota da Fase 5 grava auditoria — no Adonis, `auth` e `users` nao
+//! Nenhuma rota da Fase 5 grava auditoria — na implementacao anterior, `auth` e `users` nao
 //! chamam o `AuditService`. As entradas aqui sao criadas pelo proprio
 //! `AuditLog::record`, que e' o metodo que os controllers da Fase 6 em diante
 //! vao usar; assim o lado da escrita e o da leitura sao testados juntos.

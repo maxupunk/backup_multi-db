@@ -150,6 +150,64 @@ async fn container_resources_has_the_expected_contract() {
 
 #[tokio::test]
 #[serial]
+async fn every_docker_operation_requires_a_session() {
+    request::<App, _, _>(|request, _ctx| async move {
+        for path in [
+            "/api/docker/containers/example",
+            "/api/docker/containers/example/logs",
+            "/api/docker/diagnostics/example",
+            "/api/docker/environment",
+            "/api/docker/images/example",
+            "/api/docker/networks/example",
+            "/api/docker/volumes/example",
+        ] {
+            let response = request.get(path).await;
+            assert_eq!(
+                response.status_code(),
+                401,
+                "GET {path}: {}",
+                response.text()
+            );
+        }
+
+        for path in [
+            "/api/docker/containers/example",
+            "/api/docker/containers/example/logs",
+            "/api/docker/images/example",
+            "/api/docker/volumes/example",
+        ] {
+            let response = request.delete(path).await;
+            assert_eq!(
+                response.status_code(),
+                401,
+                "DELETE {path}: {}",
+                response.text()
+            );
+        }
+
+        for path in [
+            "/api/docker/containers/example/restart",
+            "/api/docker/containers/example/start",
+            "/api/docker/containers/example/stop",
+            "/api/docker/images/prune",
+            "/api/docker/networks",
+            "/api/docker/networks/example/connect",
+            "/api/docker/networks/example/disconnect",
+        ] {
+            let response = request.post(path).await;
+            assert_eq!(
+                response.status_code(),
+                401,
+                "POST {path}: {}",
+                response.text()
+            );
+        }
+    })
+    .await;
+}
+
+#[tokio::test]
+#[serial]
 async fn volume_export_streams_a_gzip_when_docker_is_available() {
     if !docker_available().await {
         return;

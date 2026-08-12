@@ -2,7 +2,7 @@
 //!
 //! ## Remover um database **desabilita**, nao apaga
 //!
-//! O `PUT /api/connections/:id` do Adonis marca `enabled = false` nos nomes que
+//! O `PUT /api/connections/:id` da implementacao anterior marca `enabled = false` nos nomes que
 //! sairam da lista, em vez de deletar a linha. O motivo esta' na FK de
 //! `backups.connection_database_id`: apagar a linha levaria junto o historico
 //! de backups daquele banco, e e' justamente o historico que alguem consulta
@@ -79,7 +79,7 @@ impl Model {
             return Ok(());
         }
 
-        // Uma insercao so': o `for` com `await` do Adonis faz uma ida ao banco
+        // Uma insercao so': o `for` com `await` da implementacao anterior faz uma ida ao banco
         // por database, e uma conexao com trinta bancos paga trinta.
         Entity::insert_many(rows).exec(db).await?;
         Ok(())

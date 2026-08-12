@@ -22,7 +22,7 @@ use crate::models::_entities::{connections, storage_destinations};
 use crate::models::encryption::EncryptionService;
 use crate::models::storage_destinations::StorageType;
 
-/// Destino que o Adonis usaria para uma conexao.
+/// Destino que a implementacao anterior usaria para uma conexao.
 ///
 /// Ordem: o destino vinculado a' conexao, se estiver **ativo**; senao o destino
 /// marcado como default, tambem ativo; senao nenhum — e o backup cai em
@@ -184,7 +184,7 @@ mod tests {
 
     #[test]
     fn accepts_backslashes_as_separators() {
-        // O migrador traz caminhos gravados no Windows pelo Adonis.
+        // O migrador traz caminhos gravados no Windows pela implementacao anterior.
         assert_eq!(
             local_full_path(&base(), "12\\vendas.sql.gz"),
             Some(base().join("12").join("vendas.sql.gz"))

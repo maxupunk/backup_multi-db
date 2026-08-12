@@ -1,6 +1,6 @@
 //! Artefatos de diagnostico gravados em `DIAGNOSTICS_PATH` (tarefa 11.7).
 //!
-//! O Adonis gera heap snapshots e profiles do V8; em Rust nao ha' V8, mas o
+//! a implementacao anterior gera heap snapshots e profiles do V8; em Rust nao ha' V8, mas o
 //! diretorio e a API continuam os mesmos para nao quebrar o painel. Apenas
 //! arquivos com as extensoes `.heapsnapshot`, `.cpuprofile` e `.heapprofile`
 //! sao listados, baixados ou removidos.

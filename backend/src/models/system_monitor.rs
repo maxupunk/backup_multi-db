@@ -1,6 +1,6 @@
 //! Panorama do sistema — CPU, memoria, uptime e estado dos jobs (tarefa 5.5).
 //!
-//! Espelha o `SystemMonitoringService` do Adonis. Fica em `models/` e nao no
+//! Espelha o `SystemMonitoringService` da implementacao anterior. Fica em `models/` e nao no
 //! controller porque e' logica de dominio reusada: alem de `GET
 //! /api/system/status` e do bloco `system` de `GET /api/stats`, e' daqui que o
 //! coletor de `resource_metric_history` da Fase 11 vai tirar as amostras.
@@ -13,7 +13,7 @@
 //!
 //! **2. Um cache em `static`.** Medir CPU exige **duas** amostras separadas por
 //! um intervalo; sem cache, cada atualizacao do painel custaria esse intervalo
-//! parado. O Adonis resolve igual, com TTL de 2 segundos. O Loco nao tem um
+//! parado. a implementacao anterior resolve igual, com TTL de 2 segundos. O Loco nao tem um
 //! slot de estado de aplicacao no `AppContext` (o mesmo motivo ja' registrado em
 //! `initializers/settings.rs`), e o dado aqui e' do processo, nao do usuario.
 
@@ -23,11 +23,11 @@ use std::time::{Duration, Instant};
 use loco_rs::app::AppContext;
 use sysinfo::System;
 
-/// Versao que o Adonis reporta. Fixa la', fixa aqui — trocar por
+/// Versao que a implementacao anterior reporta. Fixa la', fixa aqui — trocar por
 /// `CARGO_PKG_VERSION` mudaria o valor que o painel exibe hoje.
 const REPORTED_VERSION: &str = "1.0.0";
 
-/// Igual ao `CACHE_TTL_MS` do Adonis.
+/// Igual ao `CACHE_TTL_MS` da implementacao anterior.
 const CACHE_TTL: Duration = Duration::from_secs(2);
 
 /// Intervalo entre as duas amostras de CPU.
@@ -208,7 +208,7 @@ fn jobs_status(ctx: &AppContext) -> JobsStatus {
     }
 }
 
-/// Percentual com duas casas, como o `roundPercent` do Adonis.
+/// Percentual com duas casas, como o `roundPercent` da implementacao anterior.
 fn percentage(part: u64, whole: u64) -> f64 {
     if whole == 0 {
         // Divisao por zero viraria `NaN`, que nao existe em JSON e faria a

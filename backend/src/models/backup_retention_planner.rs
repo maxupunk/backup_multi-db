@@ -1,6 +1,6 @@
 //! Planejamento deterministico da retencao GFS de backups (tarefa 11.5).
 //!
-//! A logica e' a mesma do `backup_retention_planner.ts` do Adonis: a partir da
+//! A logica e' a mesma do `backup_retention_planner.ts` da implementacao anterior: a partir da
 //! idade do backup e da configuracao de janelas, decide quem e' mantido,
 //! promovido ou apagado. Nao depende do horario em que o job roda.
 

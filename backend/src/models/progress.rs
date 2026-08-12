@@ -13,7 +13,7 @@
 //!
 //! [`BackupProgressEmitter::progress`] e' chamado a cada bloco escrito — dezenas
 //! de milhares de vezes num dump grande. O corte por tempo (500 ms, o mesmo do
-//! Adonis) mora no emissor porque e' uma decisao de **apresentacao**: o pipeline
+//! implementacao anterior) mora no emissor porque e' uma decisao de **apresentacao**: o pipeline
 //! nao tem por que saber que existe uma tela do outro lado.
 //!
 //! ## Por que o instante vem de fora
@@ -270,7 +270,7 @@ impl BackupProgressEmitter {
             "timestamp": chrono::Utc::now().to_rfc3339(),
         });
 
-        // A chave so' aparece quando ha' valor: o Adonis a omite, e uma chave a
+        // A chave so' aparece quando ha' valor: a implementacao anterior a omite, e uma chave a
         // mais quebraria o matcher da suite de contrato na Fase 10.
         if let (Some(bytes), Some(object)) = (bytes_written, payload.as_object_mut()) {
             object.insert("bytesWritten".to_string(), bytes.into());
@@ -410,7 +410,7 @@ impl RestoreProgressEmitter {
     }
 }
 
-/// Identificador de operacao no formato do Adonis: `<prefixo>-<epoch ms>-<aleatorio>`.
+/// Identificador de operacao no formato da implementacao anterior: `<prefixo>-<epoch ms>-<aleatorio>`.
 ///
 /// O sufixo aleatorio existe porque dois backups da mesma conexao podem comecar
 /// no mesmo milissegundo — sem ele, a tela juntaria os dois numa barra so'.
@@ -422,7 +422,7 @@ pub fn operation_id(prefix: &str) -> String {
     format!("{prefix}-{millis}-{}", &suffix[..7])
 }
 
-/// Tamanho legivel no formato do emissor do Adonis.
+/// Tamanho legivel no formato do emissor da implementacao anterior.
 ///
 /// **Nao** e' o mesmo que `backups::format_size`: aquele sempre traz duas casas
 /// decimais (`1.00 KB`) e vai ate' TB; este corta os zeros a' direita (`1 KB`) e
@@ -482,7 +482,7 @@ mod tests {
 
     #[tokio::test]
     async fn only_the_progress_event_carries_the_byte_count() {
-        // O Adonis omite a chave nos demais estagios; emitir `null` seria uma
+        // a implementacao anterior omite a chave nos demais estagios; emitir `null` seria uma
         // chave a mais para o matcher da Fase 10.
         let hub = ProgressHub::new();
         let mut receiver = hub.subscribe();
@@ -573,7 +573,7 @@ mod tests {
     }
 
     #[test]
-    fn formats_bytes_like_the_adonis_emitter() {
+    fn formats_bytes_for_the_progress_event() {
         // Sem os zeros a' direita, diferente de `backups::format_size`.
         assert_eq!(format_bytes(0), "0 B");
         assert_eq!(format_bytes(512), "512 B");

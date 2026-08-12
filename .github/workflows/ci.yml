@@ -1,7 +1,7 @@
 # Verificação do backend Rust/Loco e do frontend Vue.
 #
 # Substitui a antiga `contract-tests.yml`, que comparava as respostas contra os
-# golden files gravados do backend AdonisJS. Aquele contrato deixou de existir
+# golden files gravados do backend backend anterior. Aquele contrato deixou de existir
 # na v2.0.0, e um job que o verificasse estaria testando uma API que já não é a
 # desta aplicação.
 #

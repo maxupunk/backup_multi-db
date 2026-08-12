@@ -866,7 +866,7 @@ function formatDestinationType(type: StorageDestinationType): string {
   return map[type] ?? type
 }
 
-function formatRetentionType(type: RetentionType): string {
+function formatRetentionType(type: string): string {
   const labels: Record<RetentionType, string> = {
     hourly: 'Horário',
     daily: 'Diário',
@@ -875,7 +875,7 @@ function formatRetentionType(type: RetentionType): string {
     yearly: 'Anual',
   }
 
-  return labels[type] ?? type
+  return labels[type as RetentionType] ?? type
 }
 
 async function loadRetentionPolicy() {

@@ -8,7 +8,7 @@
 //!    esta rota sai com `provider = null`, e é o `type` que decide o rótulo;
 //! 2. **não funde segredos** — um `PUT` com `secretAccessKey` vazio é reprovado
 //!    em vez de preservar o valor gravado. A fusão é do recurso novo;
-//! 3. **não registra auditoria** — o controller do Adonis não chama o
+//! 3. **não registra auditoria** — o controller da implementacao anterior não chama o
 //!    `AuditService`, e acrescentar entradas aqui faria a tela de auditoria
 //!    divergir entre os dois backends.
 //!
@@ -282,7 +282,7 @@ pub fn routes() -> Routes {
 
 /// `GET /api/storage-destinations-space`, que mora fora do prefixo do recurso.
 ///
-/// O hífen no lugar da barra não é engano de digitação do Adonis: a rota é
+/// O hífen no lugar da barra não é engano de digitação da implementacao anterior: a rota é
 /// irmã do recurso, e não filha dele. Registrá-la sob o prefixo mudaria a URL
 /// que a interface chama.
 pub fn space_routes() -> Routes {

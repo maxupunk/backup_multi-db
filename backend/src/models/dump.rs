@@ -17,7 +17,7 @@
 //!
 //! ## O checksum e' dos bytes **descomprimidos**
 //!
-//! [`HashingWriter`] fica **antes** do gzip. E' o que o Adonis faz, e nao e'
+//! [`HashingWriter`] fica **antes** do gzip. E' o que a implementacao anterior faz, e nao e'
 //! arbitrario: o gzip carrega timestamp no cabecalho, entao comprimir o mesmo
 //! dump duas vezes produz arquivos diferentes. Um checksum do arquivo `.gz`
 //! nunca bateria entre duas execucoes e seria inutil para verificar integridade.
@@ -25,7 +25,7 @@
 //! ## A senha nao entra na linha de comando do PostgreSQL
 //!
 //! `pg_dump` recebe a senha por `PGPASSWORD` no ambiente; `mysqldump` a recebe
-//! em `--password=`, que aparece no `ps` da maquina. E' o que o Adonis faz, e
+//! em `--password=`, que aparece no `ps` da maquina. E' o que a implementacao anterior faz, e
 //! trocar por `MYSQL_PWD` mudaria o comportamento observavel de um jeito que
 //! nenhum teste de contrato cobre — fica registrado como divergencia
 //! **deliberadamente nao feita**, para a revisao de seguranca da 12.8 decidir.
@@ -258,7 +258,7 @@ where
 /// Executa o dump, gravando o `.sql.gz` em `full_path`.
 ///
 /// `on_progress` recebe o total de bytes **comprimidos** ja' escritos, como no
-/// Adonis. E' chamado a cada bloco; o estrangulamento por tempo fica no
+/// implementacao anterior. E' chamado a cada bloco; o estrangulamento por tempo fica no
 /// emissor, nao aqui — misturar as duas coisas obrigaria o pipeline a conhecer
 /// o SSE.
 pub async fn run<F>(
@@ -488,7 +488,7 @@ mod tests {
         assert!(command.args.contains(&"--single-transaction".to_string()));
         assert!(command.args.contains(&"--routines".to_string()));
         assert!(command.args.contains(&"--triggers".to_string()));
-        // O nome do banco e' o ultimo argumento, como no Adonis.
+        // O nome do banco e' o ultimo argumento, como na implementacao anterior.
         assert_eq!(command.args.last().map(String::as_str), Some("vendas"));
     }
 
@@ -524,7 +524,7 @@ mod tests {
     #[test]
     fn postgres_passes_the_password_through_the_environment() {
         // Em `--password=` ela apareceria no `ps` de qualquer usuario da
-        // maquina; o `pg_dump` aceita a variavel, e o Adonis usa a variavel.
+        // maquina; o `pg_dump` aceita a variavel, e a implementacao anterior usa a variavel.
         let command = build_command(&target(DatabaseType::Postgresql), "vendas");
 
         assert_eq!(command.program, "pg_dump");

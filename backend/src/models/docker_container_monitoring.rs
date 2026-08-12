@@ -1,6 +1,6 @@
 //! Metricas de containers Docker para o painel (tarefa 11.1).
 //!
-//! Espelha `DockerContainerMonitoringService` do Adonis, mas usa `bollard`
+//! Espelha `DockerContainerMonitoringService` da implementacao anterior, mas usa `bollard`
 //! diretamente em vez do binario `docker`. Os valores do contrato sao os
 //! mesmos: CPU, memoria, rede, block IO e PIDs por container.
 
@@ -268,7 +268,7 @@ fn infer_project_name(container_name: &str) -> Option<String> {
         return None;
     }
 
-    // Heuristica do Adonis: nome do projeto e' o prefixo antes do ultimo
+    // Heuristica da implementacao anterior: nome do projeto e' o prefixo antes do ultimo
     // ou penultimo segmento separado por '-' ou '_'.
     let re = regex::Regex::new(r"^(.*?)(?:[-_][^-_]+){1,2}$").ok()?;
     re.captures(normalized)

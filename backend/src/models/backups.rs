@@ -150,7 +150,7 @@ pub struct UnknownValue(pub String);
 
 /// Tamanho legivel, no formato que a API devolve em `fileSize`.
 ///
-/// Reproduz o `getFormattedSize` do Adonis, inclusive as duas casas decimais e
+/// Reproduz o `getFormattedSize` da implementacao anterior, inclusive as duas casas decimais e
 /// o `N/A` para tamanho ausente — sao strings que o frontend exibe direto.
 pub fn format_size(bytes: Option<i64>) -> String {
     let Some(bytes) = bytes else {
@@ -169,7 +169,7 @@ pub fn format_size(bytes: Option<i64>) -> String {
     format!("{size:.2} {}", UNITS[unit])
 }
 
-/// Duracao legivel, no formato do `getFormattedDuration` do Adonis.
+/// Duracao legivel, no formato do `getFormattedDuration` da implementacao anterior.
 ///
 /// As unidades zeradas a' esquerda somem: `90` vira `1m 30s`, e nao
 /// `0h 1m 30s`.
@@ -615,7 +615,7 @@ mod tests {
     }
 
     #[test]
-    fn formats_size_like_the_adonis_helper() {
+    fn formats_size_with_the_display_helper() {
         assert_eq!(format_size(None), "N/A");
         assert_eq!(format_size(Some(0)), "0.00 B");
         assert_eq!(format_size(Some(1023)), "1023.00 B");
@@ -626,7 +626,7 @@ mod tests {
 
     #[test]
     fn stops_at_terabytes_instead_of_inventing_a_unit() {
-        // A tabela do Adonis termina em TB. Um valor maior tem que continuar
+        // A tabela da implementacao anterior termina em TB. Um valor maior tem que continuar
         // em TB, e nao virar "PB" — que o frontend nao conhece.
         assert!(format_size(Some(i64::MAX)).ends_with(" TB"));
     }

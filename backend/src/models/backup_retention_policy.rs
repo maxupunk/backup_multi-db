@@ -1,7 +1,7 @@
 //! Politica de retencao de backups (tarefa 11.4).
 //!
 //! A politica GFS e' armazenada em `system_settings` como JSON; este modulo
-//! le, normaliza, valida o cron e salva, mantendo os defaults do Adonis.
+//! le, normaliza, valida o cron e salva, mantendo os defaults da implementacao anterior.
 
 use std::str::FromStr;
 
@@ -139,7 +139,7 @@ pub async fn update_policy(
 
 /// Valida uma expressao cron.
 ///
-/// O Adonis expoe cron de 5 campos (`min hora dom mes dow`); o crate `cron`
+/// a implementacao anterior expoe cron de 5 campos (`min hora dom mes dow`); o crate `cron`
 /// espera 6 (`seg min hora dom mes dow`). Normalizamos adicionando `0` no
 /// inicio quando a entrada tem exatamente 5 campos.
 pub fn is_valid_cron(expression: &str) -> bool {

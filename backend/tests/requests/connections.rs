@@ -72,6 +72,16 @@ async fn creates_a_connection_with_its_databases() {
 
 #[tokio::test]
 #[serial]
+async fn updating_a_connection_requires_a_session() {
+    request::<App, _, _>(|request, _ctx| async move {
+        let response = request.patch("/api/connections/1").await;
+        assert_eq!(response.status_code(), 401, "{}", response.text());
+    })
+    .await;
+}
+
+#[tokio::test]
+#[serial]
 async fn never_returns_the_encrypted_password() {
     request::<App, _, _>(|request, _ctx| async move {
         let token = admin_token(&request).await;
@@ -153,7 +163,7 @@ async fn filters_by_type_and_search() {
             .authorization_bearer(&token)
             .await
             .json();
-        // A busca do Adonis e' insensivel a caixa, e cobre nome **ou** host.
+        // A busca da implementacao anterior e' insensivel a caixa, e cobre nome **ou** host.
         assert_eq!(by_search["pagination"]["total_items"], 1);
         assert_eq!(by_search["results"][0]["name"], "Producao MySQL");
 
@@ -723,7 +733,7 @@ async fn discovers_databases_on_a_real_server() {
 
         let names: Vec<&str> = databases.iter().filter_map(Value::as_str).collect();
         assert!(names.contains(&"app_fixture"), "faltou o banco de fixture");
-        // Os bancos de sistema ficam de fora, como no Adonis.
+        // Os bancos de sistema ficam de fora, como na implementacao anterior.
         for system in ["information_schema", "mysql", "performance_schema", "sys"] {
             assert!(
                 !names.contains(&system),

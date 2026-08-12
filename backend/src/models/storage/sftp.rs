@@ -87,7 +87,7 @@ impl SftpExplorer {
             .map_err(|err| StorageError::Backend(format!("Falha ao iniciar o SFTP: {err}")))
     }
 
-    /// Autentica na ordem que o Adonis usa: chave privada primeiro, senha depois.
+    /// Autentica na ordem que a implementacao anterior usa: chave privada primeiro, senha depois.
     ///
     /// A ordem importa quando a config tem as duas: a chave é o método mais
     /// forte, e tentá-la primeiro evita gastar uma tentativa de senha em
@@ -175,7 +175,7 @@ impl SftpExplorer {
 ///
 /// ## A chave do host não é verificada, e isso é uma decisão registrada
 ///
-/// O `ssh2` do Adonis também não a verifica: o `sftp_explorer_adapter.ts` não
+/// O `ssh2` da implementacao anterior também não a verifica: o `sftp_explorer_adapter.ts` não
 /// guarda `known_hosts` em lugar nenhum, e o schema de `storage_destinations`
 /// não tem coluna para a impressão digital do servidor. Reproduzir o
 /// comportamento é o contrato desta fase; **passar a verificar** exigiria uma

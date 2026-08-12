@@ -95,7 +95,9 @@ pub struct StorageDestination {
     #[ts(type = "number")]
     pub id: i64,
     pub name: String,
+    #[ts(type = "\"local\" | \"s3\" | \"gcs\" | \"azure_blob\" | \"sftp\"")]
     pub r#type: String,
+    #[ts(type = "\"active\" | \"inactive\"")]
     pub status: String,
     pub is_default: bool,
     pub created_at: chrono::DateTime<chrono::FixedOffset>,

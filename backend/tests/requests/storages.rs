@@ -17,6 +17,16 @@ use serial_test::serial;
 
 use super::session;
 
+#[tokio::test]
+#[serial]
+async fn updating_a_storage_destination_requires_a_session() {
+    request::<App, _, _>(|request, _ctx| async move {
+        let response = request.patch("/api/storage-destinations/1").await;
+        assert_eq!(response.status_code(), 401, "{}", response.text());
+    })
+    .await;
+}
+
 /// Config completa de um MinIO — o payload que o golden `storages/store` usa.
 fn minio_config() -> Value {
     serde_json::json!({
@@ -486,7 +496,7 @@ async fn refuses_to_remove_a_storage_with_a_connection_attached() {
             .authorization_bearer(&token)
             .await;
 
-        // 422, e nao 409: e' o `unprocessableEntity` do controller do Adonis.
+        // 422, e nao 409: e' o `unprocessableEntity` do controller da implementacao anterior.
         assert_eq!(response.status_code(), 422);
 
         let body: Value = response.json();

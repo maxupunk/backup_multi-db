@@ -1,6 +1,22 @@
 /** Tipos locais de payload e reexports do contrato gerado no backend. */
 
 import type { Connection as ConnectionDto } from '@/bindings/Connection'
+import type { AuditLog as AuditLogDto } from '@/bindings/AuditLog'
+import type { AuditStats as AuditStatsDto } from '@/bindings/AuditStats'
+import type { Backup as BackupDto } from '@/bindings/Backup'
+import type { BackupConnection as BackupConnectionDto } from '@/bindings/BackupConnection'
+import type { BackupRetentionPolicy as BackupRetentionPolicyDto } from '@/bindings/BackupRetentionPolicy'
+import type { ConnectionTestResult as ConnectionTestResultDto } from '@/bindings/ConnectionTestResult'
+import type { Cpu as CpuDto } from '@/bindings/Cpu'
+import type { ImportedBackup as ImportedBackupDto } from '@/bindings/ImportedBackup'
+import type { Jobs as JobsDto } from '@/bindings/Jobs'
+import type { MemorySource as MemorySourceDto } from '@/bindings/MemorySource'
+import type { StorageDestination as StorageDestinationDto } from '@/bindings/StorageDestination'
+import type { StorageDestinationDetail as StorageDestinationDetailDto } from '@/bindings/StorageDestinationDetail'
+import type { Storage as StorageDto } from '@/bindings/Storage'
+import type { StorageDetail as StorageDetailDto } from '@/bindings/StorageDetail'
+import type { StorageSpace as StorageSpaceDto } from '@/bindings/StorageSpace'
+import type { SystemOverview as SystemOverviewDto } from '@/bindings/SystemOverview'
 
 // Status de uma conexão
 export type ConnectionStatus = 'active' | 'inactive' | 'error'
@@ -111,16 +127,12 @@ export type StorageDestinationConfigPayload =
       basePath?: string
     }
 
-export interface StorageDestination {
-  id: number
-  name: string
+export type StorageDestination = Omit<StorageDestinationDto, 'type' | 'status'> & {
   type: StorageDestinationType
   status: StorageDestinationStatus
-  isDefault: boolean
-  createdAt: string
-  updatedAt: string
   config?: Record<string, unknown> | null
 }
+export type StorageDestinationDetail = StorageDestinationDetailDto
 
 export interface CreateStorageDestinationPayload {
   name: string
@@ -159,30 +171,7 @@ export interface RegisterPayload {
 /**
  * Interface de um backup
  */
-export interface Backup {
-  id: number
-  connectionId: number
-  connectionDatabaseId: number | null
-  databaseName: string
-  status: BackupStatus
-  filePath: string | null
-  fileName: string | null
-  fileSize: number | null
-  checksum: string | null
-  compressed: boolean
-  retentionType: RetentionType
-  protected: boolean
-  startedAt: string | null
-  finishedAt: string | null
-  durationSeconds: number | null
-  errorMessage: string | null
-  exitCode: number | null
-  trigger: BackupTrigger
-  metadata: { isRestoreSafetyBackup?: boolean; [key: string]: unknown } | null
-  createdAt: string
-  updatedAt: string
-  connection?: ConnectionSummary
-}
+export type Backup = BackupDto
 
 /**
  * Modo de restauração
@@ -230,12 +219,7 @@ export type { ConnectionBackupSummary as BackupSummary } from '@/bindings/Connec
 /**
  * Resumo de uma conexão (para listagens)
  */
-export interface ConnectionSummary {
-  id: number
-  name: string
-  type: DatabaseType
-  host: string
-}
+export type ConnectionSummary = BackupConnectionDto
 
 /**
  * As formas comuns a toda resposta vêm do backend, geradas por `ts-rs`.
@@ -253,33 +237,13 @@ export type { Paginated } from '@/bindings/Paginated'
 /**
  * Informações de espaço de armazenamento
  */
-export interface StorageSpaceInfo {
-  destinationId: number | null
-  destinationName: string
-  type: string
-  spaceAvailable: boolean
-  totalBytes: number
-  usedBytes: number
-  freeBytes: number
-  usedPercent: number
-  freePercent: number
-  isLowSpace: boolean
-  lowSpaceThreshold: number
-}
+export type StorageSpaceInfo = StorageSpaceDto
 
-export interface JobsSystemStatus {
-  isRunning: boolean
-  activeJobs: number
-  status: 'ok' | 'down'
-}
+export type JobsSystemStatus = JobsDto
 
-export interface CpuResourceMetrics {
-  usagePercent: number
-  cores: number
-  model: string
-}
+export type CpuResourceMetrics = CpuDto
 
-export type MemoryMetricsSource = 'cgroup-v2' | 'cgroup-v1' | 'os'
+export type MemoryMetricsSource = MemorySourceDto
 
 export interface MemoryResourceMetrics {
   totalBytes: number
@@ -292,21 +256,9 @@ export interface MemoryResourceMetrics {
   containerLimited: boolean
 }
 
-export interface SystemResourceMetrics {
-  cpu: CpuResourceMetrics
-  memory: MemoryResourceMetrics
-}
+export type { Resources as SystemResourceMetrics } from '@/bindings/Resources'
 
-export interface SystemStatus {
-  version: string
-  hostname: string
-  platform: string
-  architecture: string
-  runtimeVersion: string
-  uptimeSeconds: number
-  resources: SystemResourceMetrics
-  jobs: JobsSystemStatus
-}
+export type SystemStatus = SystemOverviewDto
 
 export interface UpdateBackupRetentionPolicyPayload {
   daily: number
@@ -316,9 +268,7 @@ export interface UpdateBackupRetentionPolicyPayload {
   pruneCron: string
 }
 
-export interface BackupRetentionPolicySettings extends UpdateBackupRetentionPolicyPayload {
-  defaultPruneCron: string
-}
+export type BackupRetentionPolicySettings = BackupRetentionPolicyDto
 
 export interface DeletedBackupSummary {
   id: number
@@ -426,10 +376,7 @@ export interface DashboardStats {
 /**
  * Resultado de teste de conexão
  */
-export interface ConnectionTestResult {
-  latencyMs: number
-  version: string
-}
+export type ConnectionTestResult = ConnectionTestResultDto
 
 /**
  * Resultado de backup manual
@@ -459,13 +406,7 @@ export interface IntegrityCheckResult {
 /**
  * Resultado da importação de um arquivo de backup
  */
-export interface ImportBackupResult {
-  backup: Backup
-  format: ImportedFileFormat
-  checksum: string
-  fileSize: number
-  integrity: IntegrityCheckResult | null
-}
+export type ImportBackupResult = ImportedBackupDto
 
 // ==================== Audit Logs ====================
 
@@ -500,41 +441,8 @@ export type AuditStatus = 'success' | 'failure' | 'warning'
 /**
  * Interface de um log de auditoria
  */
-export interface AuditLog {
-  id: number
-  action: AuditAction
-  actionDescription: string
-  actionIcon: string
-  entityType: AuditEntityType
-  entityId: number | null
-  entityName: string | null
-  description: string
-  details: Record<string, unknown> | null
-  status: AuditStatus
-  statusColor: string
-  errorMessage: string | null
-  ipAddress: string | null
-  userAgent?: string | null
-  createdAt: string
-}
-
-/**
- * Estatísticas de auditoria
- */
-export interface AuditStats {
-  total: number
-  today: number
-  lastWeek: number
-  byStatus: {
-    success: number
-    failure: number
-  }
-  byAction: {
-    action: AuditAction
-    description: string
-    count: number
-  }[]
-}
+export type AuditLog = AuditLogDto
+export type AuditStats = AuditStatsDto
 
 // ==================== Storages ====================
 
@@ -547,9 +455,13 @@ export type StorageProvider =
   | 'sftp'
   | 'local'
 
-export interface Storage extends StorageDestination {
+export type Storage = Omit<StorageDto, 'provider' | 'type' | 'status'> & {
   provider: StorageProvider
+  type: StorageDestinationType
+  status: StorageDestinationStatus
+  config?: Record<string, unknown> | null
 }
+export type StorageDetail = StorageDetailDto
 
 export interface BucketObjectReplica {
   locationType: 'local' | 'remote'

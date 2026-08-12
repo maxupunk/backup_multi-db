@@ -119,7 +119,7 @@ pub async fn remove_backup(
 
     match adapter.delete_object(relative_path, false).await {
         // Objeto já ausente não é falha: o `DELETE` quer o arquivo fora, e ele
-        // está. É o `ignoreNotFound` / `deleteIfExists` dos SDKs do Adonis.
+        // está. É o `ignoreNotFound` / `deleteIfExists` dos SDKs da implementacao anterior.
         Err(StorageError::NotFound(_)) | Ok(()) => Ok(()),
         Err(other) => Err(other),
     }
@@ -140,7 +140,7 @@ pub struct Replica {
 
 /// Réplicas de cada objeto listado, indexadas pela chave do objeto.
 ///
-/// Só entram as chaves que **têm** réplica: o Adonis omite o campo quando a
+/// Só entram as chaves que **têm** réplica: a implementacao anterior omite o campo quando a
 /// lista sairia vazia, e emitir `[]` faria a interface desenhar um marcador de
 /// "existe em outro lugar" para arquivo que só existe aqui.
 pub async fn replicas_for(

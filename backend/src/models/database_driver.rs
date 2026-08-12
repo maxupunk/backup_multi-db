@@ -30,12 +30,12 @@ use crate::models::connections::DatabaseType;
 
 /// Teto de espera para abrir a conexao.
 ///
-/// Os 10 s vem do `connectionTimeoutMillis`/`connectTimeout` do Adonis. Sem
+/// Os 10 s vem do `connectionTimeoutMillis`/`connectTimeout` da implementacao anterior. Sem
 /// teto, um host que engole pacotes em vez de recusar deixaria a requisicao
 /// pendurada ate' o cliente desistir — e o worker do servidor preso junto.
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 
-/// Bancos de sistema que o MySQL nao deve listar, iguais aos do Adonis.
+/// Bancos de sistema que o MySQL nao deve listar, iguais aos da implementacao anterior.
 const MYSQL_SYSTEM_DATABASES: [&str; 4] =
     ["information_schema", "mysql", "performance_schema", "sys"];
 
@@ -57,7 +57,7 @@ pub struct DatabaseTarget {
 impl DatabaseTarget {
     /// Banco a usar quando nenhum foi informado.
     ///
-    /// Todo servidor precisa de um banco para autenticar; o Adonis cai em
+    /// Todo servidor precisa de um banco para autenticar; a implementacao anterior cai em
     /// `postgres` ou `mysql`, que existem em qualquer instalacao padrao.
     fn effective_database(&self) -> &str {
         self.database.as_deref().unwrap_or(match self.kind {
@@ -110,7 +110,7 @@ pub enum DriverError {
 impl DriverError {
     /// Texto que vai para o campo `error` da resposta.
     ///
-    /// E' a mensagem do SGBD, como no Adonis — e' ela que diz "senha errada" ou
+    /// E' a mensagem do SGBD, como na implementacao anterior — e' ela que diz "senha errada" ou
     /// "host recusou a conexao", e escondê-la atras de um texto generico
     /// transformaria o botao "Testar" num oraculo inutil.
     pub fn message(&self) -> String {
@@ -163,7 +163,7 @@ pub async fn probe(target: &DatabaseTarget) -> Result<Probe, DriverError> {
 pub async fn list_databases(target: &DatabaseTarget) -> Result<Vec<String>, DriverError> {
     if target.is_postgres() {
         let mut connection = connect_postgres(target).await?;
-        // Os mesmos filtros do Adonis: sem templates, sem bancos que nao
+        // Os mesmos filtros da implementacao anterior: sem templates, sem bancos que nao
         // aceitam conexao, e sem o proprio `postgres`.
         let rows = sqlx::query(
             "SELECT datname FROM pg_database \
@@ -240,7 +240,7 @@ pub async fn create_database(target: &DatabaseTarget, name: &str) -> Result<(), 
         let _ = connection.close().await;
     } else {
         let mut connection = connect_mysql(target).await?;
-        // `utf8mb4` e' o mesmo charset que o `CREATE DATABASE` do Adonis usa.
+        // `utf8mb4` e' o mesmo charset que o `CREATE DATABASE` da implementacao anterior usa.
         sqlx::query(AssertSqlSafe(format!(
             "CREATE DATABASE {quoted} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
         )))
@@ -256,7 +256,7 @@ pub async fn create_database(target: &DatabaseTarget, name: &str) -> Result<(), 
 /// Esvazia o banco de destino antes de uma restauracao (`clearBeforeRestore`).
 ///
 /// PostgreSQL descarta e recria o schema `public`; MySQL/MariaDB derrubam e
-/// recriam o **database**. A assimetria e' a do Adonis e vem dos motores:
+/// recriam o **database**. A assimetria e' a da implementacao anterior e vem dos motores:
 /// dropar o database no PostgreSQL exigiria estar conectado a outro banco e
 /// derrubaria todas as sessoes abertas nele.
 ///
@@ -357,7 +357,7 @@ async fn connect_postgres(target: &DatabaseTarget) -> Result<PgConnection, Drive
         .password(&target.password)
         .database(target.effective_database())
         // `Prefer` negocia TLS quando o servidor oferece e cai para texto claro
-        // quando nao — o mesmo conjunto de servidores que o `pg` do Adonis
+        // quando nao — o mesmo conjunto de servidores que o `pg` da implementacao anterior
         // aceita, com criptografia onde da'.
         .ssl_mode(if target.ssl {
             PgSslMode::Require
@@ -467,7 +467,7 @@ mod tests {
     }
 
     #[test]
-    fn the_system_database_list_matches_the_adonis_one() {
+    fn the_system_database_list_has_the_expected_entries() {
         assert_eq!(
             MYSQL_SYSTEM_DATABASES,
             ["information_schema", "mysql", "performance_schema", "sys"]

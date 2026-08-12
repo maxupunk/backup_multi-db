@@ -567,7 +567,7 @@ function openImportDialog() {
 
 // Helpers
 
-function getRetentionColor(type: RetentionType): string {
+function getRetentionColor(type: string): string {
   const colors: Record<RetentionType, string> = {
     hourly: 'grey',
     daily: 'blue',
@@ -575,10 +575,10 @@ function getRetentionColor(type: RetentionType): string {
     monthly: 'orange',
     yearly: 'red',
   }
-  return colors[type] ?? 'grey'
+  return colors[type as RetentionType] ?? 'grey'
 }
 
-function getRetentionLabel(type: RetentionType): string {
+function getRetentionLabel(type: string): string {
   const labels: Record<RetentionType, string> = {
     hourly: 'Horário',
     daily: 'Diário',
@@ -586,7 +586,7 @@ function getRetentionLabel(type: RetentionType): string {
     monthly: 'Mensal',
     yearly: 'Anual',
   }
-  return labels[type] ?? type
+  return labels[type as RetentionType] ?? type
 }
 
 /**

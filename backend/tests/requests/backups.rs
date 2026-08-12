@@ -769,7 +769,7 @@ async fn importing_requires_authentication() {
 async fn refuses_to_back_up_a_connection_in_error() {
     // O golden `connections/backup-connection-in-error` fixa este 422.
     //
-    // O `status` nao e' um campo atualizavel — nem aqui, nem no Adonis. A unica
+    // O `status` nao e' um campo atualizavel — nem aqui, nem na implementacao anterior. A unica
     // forma de uma conexao chegar a `error` e' falhando um teste, que e' o
     // caminho percorrido abaixo com uma porta comprovadamente fechada.
     request::<App, _, _>(|request, _ctx| async move {
@@ -817,7 +817,7 @@ async fn refuses_to_back_up_a_connection_in_error() {
 #[tokio::test]
 #[serial]
 async fn refuses_to_back_up_a_connection_with_no_enabled_database() {
-    // Sem esta guarda o Adonis criaria um backup de `N/A` marcado como falho,
+    // Sem esta guarda a implementacao anterior criaria um backup de `N/A` marcado como falho,
     // poluindo a listagem sem informar nada.
     //
     // Os databases sao desabilitados direto na entidade porque a API nao aceita

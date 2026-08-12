@@ -8,7 +8,7 @@
 //!
 //! [`Model::record`] devolve `Result`, mas os chamadores da Fase 6 em diante
 //! devem usar [`Model::record_or_warn`]. O motivo esta' na propria historia do
-//! schema: a migration `10_relax_audit_logs_enums` do Adonis afrouxou os enums
+//! schema: a migration `10_relax_audit_logs_enums` da implementacao anterior afrouxou os enums
 //! de `action` e `entity_type` porque um valor fora da lista fazia o `INSERT`
 //! da auditoria abortar a transacao da operacao que ela deveria apenas
 //! registrar. Perder uma linha de log e' ruim; perder o backup que o log
@@ -31,7 +31,7 @@ pub use super::_entities::audit_logs::{ActiveModel, Column, Entity, Model};
 
 impl ActiveModelBehavior for ActiveModel {}
 
-/// `user_agent` e' truncado em 500 caracteres, como no `AuditService` do Adonis.
+/// `user_agent` e' truncado em 500 caracteres, como no `AuditService` da implementacao anterior.
 ///
 /// O cabecalho e' texto arbitrario vindo do cliente: sem o corte, uma
 /// requisicao com um `User-Agent` de megabytes viraria uma linha de megabytes.
@@ -139,7 +139,7 @@ pub struct AuditFilters {
     /// O SQLite guarda `2026-08-06 16:49:25`, e nesse formato a ordem
     /// lexicografica e a cronologica coincidem. Converter para `DateTime` aqui
     /// exigiria adivinhar o formato que o cliente mandou e recusaria valores
-    /// que o Adonis aceita hoje, como um `2026-08-06` sem hora.
+    /// que a implementacao anterior aceita hoje, como um `2026-08-06` sem hora.
     pub start_date: Option<String>,
     pub end_date: Option<String>,
 }

@@ -1,6 +1,6 @@
 //! Normalizacao de e-mail equivalente ao `normalizeEmail()` do VineJS.
 //!
-//! Os validators de `register` e `login` do Adonis aplicam `normalizeEmail()`
+//! Os validators de `register` e `login` da implementacao anterior aplicam `normalizeEmail()`
 //! antes de tocar no banco. Por baixo e' o `normalizeEmail` do `validator.js`
 //! com as opcoes default, e ele faz **mais** que baixar a caixa: para os
 //! provedores conhecidos ele remove o subendereco (`+tag`), e para o Gmail
@@ -14,7 +14,7 @@
 //! sem nenhuma pista do motivo — e o suporte procuraria o problema na senha.
 //!
 //! O algoritmo e as listas de dominio vem do `validator.js`. Divergir dele em
-//! um dominio significa divergir do Adonis naquele dominio.
+//! um dominio significa divergir da implementacao anterior naquele dominio.
 
 /// Dominios tratados como Gmail. `googlemail.com` e' um alias historico.
 const GMAIL_DOMAINS: [&str; 2] = ["gmail.com", "googlemail.com"];

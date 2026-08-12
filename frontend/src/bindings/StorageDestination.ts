@@ -3,4 +3,4 @@
 /**
  * Item de `GET /api/storage-destinations` — sem `provider`.
  */
-export type StorageDestination = { id: number, name: string, type: string, status: string, isDefault: boolean, createdAt: string, updatedAt: string, };
+export type StorageDestination = { id: number, name: string, type: "local" | "s3" | "gcs" | "azure_blob" | "sftp", status: "active" | "inactive", isDefault: boolean, createdAt: string, updatedAt: string, };

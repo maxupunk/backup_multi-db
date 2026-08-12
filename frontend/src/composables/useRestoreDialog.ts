@@ -94,7 +94,9 @@ export function useRestoreDialog(onSuccess?: () => void) {
     confirmationInput.value = ''
     step.value = 1
 
-    _loadDatabasesForConnection(item.connectionId)
+    if (item.connectionId !== null) {
+      _loadDatabasesForConnection(item.connectionId)
+    }
     isOpen.value = true
   }
 

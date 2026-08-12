@@ -117,7 +117,7 @@ impl StorageExplorer for LocalExplorer {
 
         let Ok(mut entries) = tokio::fs::read_dir(&target).await else {
             // Diretório ausente devolve página vazia, e não erro: é o que o
-            // Adonis faz, e a interface trata "pasta vazia" e "pasta que não
+            // implementacao anterior faz, e a interface trata "pasta vazia" e "pasta que não
             // existe" da mesma forma.
             return Ok(ListPage::default());
         };
@@ -196,7 +196,7 @@ impl StorageExplorer for LocalExplorer {
                 .modified()
                 .ok()
                 .map(|time| chrono::DateTime::<chrono::Utc>::from(time).to_rfc3339()),
-            // O Adonis não deduz o mime pela extensão aqui, e inventar um valor
+            // a implementacao anterior não deduz o mime pela extensão aqui, e inventar um valor
             // mudaria o corpo da resposta.
             content_type: None,
             etag: None,

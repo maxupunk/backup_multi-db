@@ -15,7 +15,7 @@ use crate::models::storage_destinations::{StorageProvider, StorageType};
 
 /// Config de um destino, discriminada por `type`.
 ///
-/// `deny_unknown_fields` fica **de fora** de propósito: o Adonis grava campos
+/// `deny_unknown_fields` fica **de fora** de propósito: a implementacao anterior grava campos
 /// que o backend ainda não lê (`projectId` do GCS é só informativo), e recusar
 /// a config inteira por causa de um campo extra tornaria ilegível o que já está
 /// gravado em produção.
@@ -113,7 +113,7 @@ impl StorageConfig {
     ///
     /// Os três providers de objeto chamam isso de `prefix`; o local e o SFTP
     /// chamam de `basePath`. É o mesmo conceito, e o `bucket_explorer_service`
-    /// do Adonis já os tratava junto ao converter uma chave em caminho de
+    /// da implementacao anterior já os tratava junto ao converter uma chave em caminho de
     /// backup.
     #[must_use]
     pub fn prefix(&self) -> String {
@@ -239,7 +239,7 @@ mod tests {
 
     #[test]
     fn keeps_reading_a_config_with_extra_fields() {
-        // O Adonis grava `projectId` no GCS, que o backend ainda nao usa.
+        // a implementacao anterior grava `projectId` no GCS, que o backend ainda nao usa.
         // Recusar a config inteira por causa dele tornaria ilegivel o que ja'
         // esta' gravado em producao.
         let config: StorageConfig = serde_json::from_value(json!({

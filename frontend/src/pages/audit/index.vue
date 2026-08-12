@@ -211,7 +211,7 @@
         <!-- Action -->
         <template #item.action="{ item }">
           <div class="d-flex align-center">
-            <v-icon class="mr-2" :color="getActionColor(item.action)" :icon="item.actionIcon" size="20" />
+            <v-icon class="mr-2" :color="getActionColor(item.action)" :icon="item.actionIcon ?? 'mdi-help'" size="20" />
             <span class="text-body-2">{{ item.actionDescription }}</span>
           </div>
           <div v-if="!mdAndUp" class="text-caption text-medium-emphasis mt-1">
@@ -234,7 +234,7 @@
 
         <!-- Status -->
         <template #item.status="{ item }">
-          <v-chip :color="item.statusColor" label size="small">
+          <v-chip :color="item.statusColor ?? 'grey'" label size="small">
             <v-icon class="mr-1" :icon="getStatusIcon(item.status)" size="14" />
             {{ getStatusLabel(item.status) }}
           </v-chip>
@@ -301,7 +301,7 @@
     <v-dialog v-model="detailsDialog" max-width="600">
       <v-card v-if="selectedLog">
         <v-card-title class="d-flex align-center py-4">
-          <v-icon class="mr-2" :color="getActionColor(selectedLog.action)" :icon="selectedLog.actionIcon" />
+          <v-icon class="mr-2" :color="getActionColor(selectedLog.action)" :icon="selectedLog.actionIcon ?? 'mdi-help'" />
           {{ selectedLog.actionDescription }}
         </v-card-title>
 
@@ -316,7 +316,7 @@
 
             <v-col cols="12" sm="6">
               <div class="text-caption text-medium-emphasis">Status</div>
-              <v-chip class="mt-1" :color="selectedLog.statusColor" label size="small">
+              <v-chip class="mt-1" :color="selectedLog.statusColor ?? 'grey'" label size="small">
                 {{ getStatusLabel(selectedLog.status) }}
               </v-chip>
             </v-col>
@@ -503,7 +503,7 @@
   const debouncedLoadLogs = useDebouncedFn(loadLogs, 500)
 
   // Helpers
-  function getActionColor (action: AuditAction): string {
+  function getActionColor (action: string): string {
     if (action.includes('created')) return 'success'
     if (action.includes('updated')) return 'info'
     if (action.includes('deleted')) return 'error'
@@ -515,42 +515,42 @@
     return 'grey'
   }
 
-  function getEntityColor (entityType: AuditEntityType): string {
+  function getEntityColor (entityType: string): string {
     const colors: Record<AuditEntityType, string> = {
       connection: 'purple',
       backup: 'blue',
       settings: 'orange',
       diagnostics: 'red',
     }
-    return colors[entityType] ?? 'grey'
+    return colors[entityType as AuditEntityType] ?? 'grey'
   }
 
-  function getEntityLabel (entityType: AuditEntityType): string {
+  function getEntityLabel (entityType: string): string {
     const labels: Record<AuditEntityType, string> = {
       connection: 'Conexão',
       backup: 'Backup',
       settings: 'Config',
       diagnostics: 'Diagnóstico',
     }
-    return labels[entityType] ?? entityType
+    return labels[entityType as AuditEntityType] ?? entityType
   }
 
-  function getStatusIcon (status: AuditStatus): string {
+  function getStatusIcon (status: string): string {
     const icons: Record<AuditStatus, string> = {
       success: 'mdi-check',
       failure: 'mdi-alert-circle',
       warning: 'mdi-alert',
     }
-    return icons[status] ?? 'mdi-help'
+    return icons[status as AuditStatus] ?? 'mdi-help'
   }
 
-  function getStatusLabel (status: AuditStatus): string {
+  function getStatusLabel (status: string): string {
     const labels: Record<AuditStatus, string> = {
       success: 'Sucesso',
       failure: 'Falha',
       warning: 'Aviso',
     }
-    return labels[status] ?? status
+    return labels[status as AuditStatus] ?? status
   }
 
   function formatTimeAgo (dateString: string): string {

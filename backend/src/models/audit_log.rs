@@ -2,7 +2,7 @@
 //!
 //! O que esta' aqui e' a parte que **nao** depende do banco: os enums e as
 //! tabelas de traducao. `actionDescription`, `actionIcon` e `statusColor` sao
-//! derivados no controller do Adonis a partir da `action`, e nunca gravados —
+//! derivados no controller da implementacao anterior a partir da `action`, e nunca gravados —
 //! entao o backend precisa das mesmas tabelas ou a interface fica sem
 //! rotulo e sem icone.
 //!
@@ -11,14 +11,14 @@
 //! teste, os textos exatos que a suite de contrato ja' fixou nos goldens.
 //!
 //! As strings estao em portugues com acento porque e' assim que estao no
-//! Adonis e e' assim que o frontend as exibe. Mudar acentuacao aqui quebraria
+//! implementacao anterior e e' assim que o frontend as exibe. Mudar acentuacao aqui quebraria
 //! o `actionDescription` gravado em `audit-logs/show.json`.
 
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::str::FromStr;
 
-/// Acoes auditaveis, com o mesmo valor de string do `AuditAction` do Adonis.
+/// Acoes auditaveis, com o mesmo valor de string do `AuditAction` da implementacao anterior.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum AuditAction {
     #[serde(rename = "connection.created")]
@@ -50,7 +50,7 @@ pub enum AuditAction {
 }
 
 impl AuditAction {
-    /// Todas as acoes, na ordem em que aparecem no model do Adonis.
+    /// Todas as acoes, na ordem em que aparecem no model da implementacao anterior.
     pub const ALL: [Self; 13] = [
         Self::ConnectionCreated,
         Self::ConnectionUpdated,

@@ -1,6 +1,6 @@
 //! Cria um destino de armazenamento local padrao no boot se nenhum existir.
 //!
-//! O Adonis garante um destino local no boot (tarefa 4.7), e a suite de
+//! a implementacao anterior garante um destino local no boot (tarefa 4.7), e a suite de
 //! contrato assume que `GET /api/storages` sempre devolve pelo menos o item
 //! `local`. Sem este inicializador, o seed da suite falharia ao procurar o id
 //! do storage local.

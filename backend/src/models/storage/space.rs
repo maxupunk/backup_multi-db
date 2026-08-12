@@ -6,7 +6,7 @@
 //! ## Só o destino local tem espaço a informar
 //!
 //! S3, GCS, Azure e SFTP não expõem "quanto cabe ainda" — a cota, quando
-//! existe, é da conta e não do bucket. O Adonis devolve `null` para eles, e a
+//! existe, é da conta e não do bucket. a implementacao anterior devolve `null` para eles, e a
 //! listagem agregada os inclui com `spaceAvailable: false` e zeros. Inventar um
 //! total faria a interface desenhar uma barra de uso que não corresponde a nada.
 //!
@@ -79,12 +79,12 @@ impl SpaceInfo {
 /// Espaço do sistema de arquivos que contém `path`.
 ///
 /// `None` quando o caminho não existe ou não casa com nenhum ponto de montagem
-/// — é o mesmo desfecho do `existsSync` que abre o serviço no Adonis.
+/// — é o mesmo desfecho do `existsSync` que abre o serviço na implementacao anterior.
 ///
 /// **Uma diferença registrada:** o `statfs` do Node usa `bfree`, que inclui os
 /// blocos reservados ao root; o `sysinfo` expõe o equivalente a `bavail`, que
 /// não os inclui. Num ext4 com os 5% de reserva padrão, o backend reporta
-/// *menos* espaço livre que o Adonis. A diferença empurra o alerta de espaço
+/// *menos* espaço livre que a implementacao anterior. A diferença empurra o alerta de espaço
 /// baixo para **antes**, e não para depois — é o lado seguro de errar.
 #[must_use]
 pub fn filesystem_space(path: &Path) -> Option<FilesystemSpace> {
@@ -260,7 +260,7 @@ pub fn check_before_backup(
         };
     };
 
-    // `hasEnoughSpace` continua `true` mesmo no aviso: o Adonis **não** bloqueia
+    // `hasEnoughSpace` continua `true` mesmo no aviso: a implementacao anterior **não** bloqueia
     // o backup por espaço baixo, só avisa. Bloquear aqui mudaria o contrato.
     SpaceCheck {
         has_enough_space: true,

@@ -648,7 +648,7 @@ async fn audit(ctx: &AppContext, origin: &RequestOrigin, entry: AuditEntry) {
 
 /// Rotas de `/api/storages`.
 ///
-/// `test` leva o limitador `strict` (60/min), como no Adonis: cada chamada abre
+/// `test` leva o limitador `strict` (60/min), como na implementacao anterior: cada chamada abre
 /// conexão com um serviço externo, e sem limite a rota vira um scanner com a
 /// nossa origem.
 pub fn routes(limiters: &Limiters) -> Routes {

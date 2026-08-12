@@ -3,4 +3,4 @@
 /**
  * Detalhe da rota legada.
  */
-export type StorageDestinationDetail = { config: Record<string, unknown>, id: number, name: string, type: string, status: string, isDefault: boolean, createdAt: string, updatedAt: string, };
+export type StorageDestinationDetail = { config: Record<string, unknown>, id: number, name: string, type: "local" | "s3" | "gcs" | "azure_blob" | "sftp", status: "active" | "inactive", isDefault: boolean, createdAt: string, updatedAt: string, };

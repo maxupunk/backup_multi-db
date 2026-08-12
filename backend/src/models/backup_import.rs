@@ -63,7 +63,7 @@ impl ImportedFormat {
 pub const ACCEPTED_EXTENSIONS: &str =
     ".sql, .sql.gz, .gz, .dump, .pgdump, .zip, .tar, .tar.gz, .tgz";
 
-/// Teto de tamanho do upload, igual ao `size: '500mb'` do Adonis.
+/// Teto de tamanho do upload, igual ao `size: '500mb'` da implementacao anterior.
 pub const MAX_UPLOAD_BYTES: u64 = 500 * 1024 * 1024;
 
 /// Magic bytes.
@@ -165,7 +165,7 @@ pub fn format_for_extension(extension: &str) -> Option<ImportedFormat> {
 /// Decide o formato pelo nome, confirmando com os magic bytes quando a extensao
 /// e' ambigua.
 ///
-/// `.gz` sozinho nao diz se e' SQL ou outra coisa; o Adonis confere o cabecalho
+/// `.gz` sozinho nao diz se e' SQL ou outra coisa; a implementacao anterior confere o cabecalho
 /// antes de aceitar, e uma extensao mentirosa aqui viraria um `gunzip` que falha
 /// so' na hora da restauracao.
 pub fn detect_format(
@@ -273,7 +273,7 @@ fn verify_tar(header: &[u8]) -> IntegrityResult {
 
 /// Quantos bytes bastam para todas as verificacoes.
 ///
-/// 8 KB e' o que o `verifySqlFile` do Adonis le'; o `ustar` do TAR fica no
+/// 8 KB e' o que o `verifySqlFile` da implementacao anterior le'; o `ustar` do TAR fica no
 /// offset 257, bem dentro dessa janela.
 pub const HEADER_BYTES: usize = 8192;
 

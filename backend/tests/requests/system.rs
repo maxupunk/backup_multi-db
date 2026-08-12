@@ -38,7 +38,7 @@ async fn stats_aggregates_the_empty_installation() {
 
 #[tokio::test]
 #[serial]
-async fn the_overview_keeps_the_adonis_shape() {
+async fn the_overview_has_the_expected_shape() {
     request::<App, _, _>(|request, _ctx| async move {
         let admin = session::create_admin(&request, "admin@contract.test").await;
         let token = admin.token.expect("token");
@@ -96,6 +96,65 @@ async fn both_routes_deny_without_a_session() {
                 "{path} nao respondeu JSON"
             );
         }
+    })
+    .await;
+}
+
+#[tokio::test]
+#[serial]
+async fn system_management_routes_require_a_session() {
+    request::<App, _, _>(|request, _ctx| async move {
+        for path in [
+            "/api/system/backup-retention",
+            "/api/system/diagnostics",
+            "/api/system/diagnostics/example/download",
+            "/api/system/resources/history",
+        ] {
+            let response = request.get(path).await;
+            assert_eq!(
+                response.status_code(),
+                401,
+                "GET {path}: {}",
+                response.text()
+            );
+        }
+
+        let response = request.put("/api/system/backup-retention").await;
+        assert_eq!(response.status_code(), 401, "PUT: {}", response.text());
+
+        let response = request.post("/api/system/backup-retention/run").await;
+        assert_eq!(response.status_code(), 401, "POST: {}", response.text());
+
+        let response = request.delete("/api/system/diagnostics/example").await;
+        assert_eq!(response.status_code(), 401, "DELETE: {}", response.text());
+    })
+    .await;
+}
+
+#[tokio::test]
+#[serial]
+async fn health_is_public_and_reports_the_running_build() {
+    request::<App, _, _>(|request, _ctx| async move {
+        let response = request.get("/api/health").await;
+        assert_eq!(response.status_code(), 200, "{}", response.text());
+        let body: Value = response.json();
+        assert_eq!(body["status"], "ok");
+        assert!(body["version"].is_string());
+    })
+    .await;
+}
+
+#[tokio::test]
+#[serial]
+async fn health_response_has_a_reviewed_snapshot() {
+    request::<App, _, _>(|request, _ctx| async move {
+        let response = request.get("/api/health").await;
+        assert_eq!(response.status_code(), 200, "{}", response.text());
+        let body: Value = response.json();
+        insta::assert_yaml_snapshot!(body, {
+            ".timestamp" => "[timestamp]",
+            ".version" => "[version]",
+        });
     })
     .await;
 }

@@ -20,7 +20,7 @@
 //! devolve `Err` imediatamente quando o binario nao existe, e `child.wait()`
 //! devolve o codigo de saida. A corrida que o helper resolvia nao existe aqui.
 
-/// Sufixo anexado quando algo foi descartado, igual ao do Adonis.
+/// Sufixo anexado quando algo foi descartado, igual ao da implementacao anterior.
 pub const TRUNCATION_SUFFIX: &str = "\n...[saida truncada pelo limite de captura]";
 
 /// Teto default de captura: 256 KB, o mesmo que `BackupService` e

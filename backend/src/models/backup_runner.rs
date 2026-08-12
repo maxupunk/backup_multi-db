@@ -120,7 +120,7 @@ pub async fn run_backup(ctx: &AppContext, request: BackupRequest<'_>) -> Result<
     .await;
 
     // Tarefa 7.2: o dump é gravado localmente e **depois** enviado ao destino.
-    // Uma falha no envio reprova o backup inteiro, como no Adonis — marcar
+    // Uma falha no envio reprova o backup inteiro, como na implementacao anterior — marcar
     // sucesso com o arquivo só em disco faria a interface prometer uma cópia
     // remota que não existe.
     let upload_error = match (&outcome, destination.as_ref()) {
@@ -168,7 +168,7 @@ pub async fn run_backup(ctx: &AppContext, request: BackupRequest<'_>) -> Result<
 ///
 /// A cópia local **fica**, salvo pedido explícito em
 /// `backup_delete_local_after_remote_upload` — é o
-/// `BACKUP_DELETE_LOCAL_AFTER_REMOTE_UPLOAD` do Adonis, desligado por padrão.
+/// `BACKUP_DELETE_LOCAL_AFTER_REMOTE_UPLOAD` da implementacao anterior, desligado por padrão.
 /// Manter as duas cópias é o que dá à listagem de objetos a marca de réplica, e
 /// o que permite restaurar sem rede.
 async fn upload_dump(
@@ -324,7 +324,7 @@ async fn finish_record(
 
 /// Marca a conexao como recem-backupeada.
 ///
-/// Fica separado do backup individual porque o Adonis grava `last_backup_at`
+/// Fica separado do backup individual porque a implementacao anterior grava `last_backup_at`
 /// **uma vez** por chamada de `executeAll`, e nao por database — a coluna
 /// responde "quando esta conexao foi backupeada", nao "quantas vezes".
 pub async fn touch_last_backup(ctx: &AppContext, connection: connections::Model) -> Result<()> {
@@ -544,7 +544,7 @@ async fn restore_pipeline(
 
 /// Cria o backup de seguranca quando o destino ja' existe.
 ///
-/// Falhar aqui **aborta** a restauracao. E' a decisao do Adonis, e a certa:
+/// Falhar aqui **aborta** a restauracao. E' a decisao da implementacao anterior, e a certa:
 /// seguir adiante sem rede sobrescreveria um banco em uso sem volta.
 async fn run_safety_backup(
     ctx: &AppContext,

@@ -1,0 +1,8 @@
+---
+source: tests/requests/system.rs
+assertion_line: 150
+expression: body
+---
+status: ok
+timestamp: "[timestamp]"
+version: "[version]"

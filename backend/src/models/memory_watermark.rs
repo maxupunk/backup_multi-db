@@ -1,6 +1,6 @@
 //! Guarda-rail de memoria do processo (tarefa 11.8).
 //!
-//! O Adonis usa `process.memoryUsage()` do Node, que expoe RSS e heap do V8.
+//! a implementacao anterior usa `process.memoryUsage()` do Node, que expoe RSS e heap do V8.
 //! Em Rust nao ha' heap do V8, mas o RSS ainda e' util: ele mede a pressao de
 //! memoria real do processo e ajuda a investigar OOMs. O pico observado desde o
 //! start e' guardado para distinguir "sempre foi assim" de "acabou de subir".

@@ -157,7 +157,7 @@ pub async fn export_to_temp_file(name: &str) -> Result<(std::path::PathBuf, Stri
 
 /// Faz backup de um volume para um destino de armazenamento.
 ///
-/// O fluxo segue o Adonis: gera um `.tar.gz` local e, se o destino for remoto,
+/// O fluxo segue a implementacao anterior: gera um `.tar.gz` local e, se o destino for remoto,
 /// envia a copia e remove o arquivo temporario. O caminho relativo comeca em
 /// `docker-volumes/` para nao misturar com dumps de banco.
 pub async fn backup_to_storage(

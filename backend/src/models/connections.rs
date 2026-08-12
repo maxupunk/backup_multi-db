@@ -202,7 +202,7 @@ impl Model {
     /// Exige o servico de criptografia como argumento de proposito: sem ele
     /// nao ha' como obter o valor, e uma chamada acidental fica visivel na
     /// revisao. Devolve string vazia quando a conexao nao tem senha — e' o que
-    /// o `getDecryptedPassword` do Adonis faz, e algumas conexoes locais de
+    /// o `getDecryptedPassword` da implementacao anterior faz, e algumas conexoes locais de
     /// fato nao tem.
     pub fn decrypted_password(
         &self,
@@ -250,7 +250,7 @@ impl Model {
     ///
     /// A coluna e' anulavel: uma conexao nunca testada tem `status` nulo e
     /// **nao** conta como ativa, que e' o que o `where('status','active')` do
-    /// Adonis faz.
+    /// implementacao anterior faz.
     pub async fn count_active(db: &impl ConnectionTrait) -> loco_rs::Result<u64> {
         Ok(Entity::find()
             .filter(Column::Status.eq(ConnectionStatus::Active.as_str()))
@@ -276,7 +276,7 @@ impl Model {
 
 /// Distingue "campo ausente" de "campo com `null`".
 ///
-/// O `update` do Adonis compara com `!== undefined`: mandar
+/// O `update` da implementacao anterior compara com `!== undefined`: mandar
 /// `"storageDestinationId": null` **desvincula** o destino, enquanto omitir a
 /// chave mantem o valor atual. Um `Option<T>` simples colapsaria os dois casos
 /// e toda atualizacao parcial apagaria os campos nao enviados.
@@ -641,7 +641,7 @@ impl Model {
             password_encrypted: Set(encrypt_password(params.password.as_deref(), encryption)?),
             schedule_frequency: Set(params.schedule_frequency.clone()),
             schedule_enabled: Set(Some(params.schedule_enabled.unwrap_or(false))),
-            // Nasce `active` mesmo sem teste — e' o que o Adonis faz, e e' o que
+            // Nasce `active` mesmo sem teste — e' o que a implementacao anterior faz, e e' o que
             // permite o primeiro backup manual antes de qualquer teste.
             status: Set(Some(ConnectionStatus::Active.as_str().to_string())),
             storage_destination_id: Set(params.storage_destination_id),
@@ -730,7 +730,7 @@ impl Model {
             }
         }
         if let Some(value) = params.options.as_ref() {
-            // `options` fica de fora do diff, como no Adonis: o objeto pode
+            // `options` fica de fora do diff, como na implementacao anterior: o objeto pode
             // carregar configuracao de TLS, e a auditoria e' exibida na tela.
             active.options = Set(serialize_options(value.as_ref()));
         }

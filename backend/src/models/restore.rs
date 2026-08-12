@@ -5,7 +5,7 @@
 //!
 //! ## Os filtros trabalham em **bytes**, nao em texto
 //!
-//! O Adonis converte cada pedaco em `string` com um `StringDecoder` justamente
+//! a implementacao anterior converte cada pedaco em `string` com um `StringDecoder` justamente
 //! para nao partir um caractere UTF-8 na fronteira entre chunks — o bug que os
 //! testes `restore_filters.spec.ts` fixaram, e que corrompia acentuacao no banco
 //! restaurado sem nenhum erro visivel.
@@ -20,13 +20,13 @@
 //! ## Por que existe `keep_trailing` separado de `keep_line`
 //!
 //! O resto sem quebra de linha final e' avaliado por outra regra. Nao e'
-//! elegante, e' compatibilidade: na implementacao encadeada do Adonis os
+//! elegante, e' compatibilidade: na implementacao encadeada da implementacao anterior os
 //! filtros `data-only` emitiam esse resto **sem** reavaliar a allowlist, e
 //! mudar isso alteraria a saida de um dump que nao termine em `\n`.
 //!
 //! ## `clear_database` usa o driver, nao o CLI
 //!
-//! O Adonis da' `spawn` em `psql`/`mysql` so' para rodar tres comandos de DDL.
+//! a implementacao anterior da' `spawn` em `psql`/`mysql` so' para rodar tres comandos de DDL.
 //! Pelo [`database_driver`](crate::models::database_driver) nao ha' processo
 //! filho nem dependencia de binario no PATH — mesma divergencia deliberada ja'
 //! registrada na Fase 6 para `create-database`. O restore em si continua pelo
@@ -302,7 +302,7 @@ impl LineFilter {
                 !self.inside_copy_block && !INSERT_INTO.is_match(line)
             }
             Some(ModeRules::MysqlSchemaOnly) => !MYSQL_SCHEMA_ONLY_TRAILING.is_match(line),
-            // Compatibilidade: os filtros `data-only` do Adonis emitiam o resto
+            // Compatibilidade: os filtros `data-only` da implementacao anterior emitiam o resto
             // sem reavaliar a allowlist.
             Some(ModeRules::PostgresDataOnly | ModeRules::MysqlDataOnly) => true,
         };
@@ -897,7 +897,7 @@ mod tests {
 
     #[tokio::test]
     async fn does_not_corrupt_a_multibyte_character_split_between_chunks() {
-        // O bug que o `StringDecoder` do Adonis resolve. Aqui os filtros
+        // O bug que o `StringDecoder` da implementacao anterior resolve. Aqui os filtros
         // trabalham em bytes, e `\n` nunca aparece dentro de uma sequencia
         // UTF-8 — a fronteira simplesmente nao existe.
         let sql = "CREATE TABLE informação (id int);\nGRANT ALL ON informação TO joão;\n";
