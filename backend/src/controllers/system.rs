@@ -1,8 +1,8 @@
 //! `/api/stats`, `/api/system/*` e diagnostico do host (tarefas 5.5 e 11).
 //!
 //! O grupo `/api/system` reune monitoramento, retencao de backups e artefatos de
-//! diagnostico. `/api/stats` fica fora do prefixo para manter o contrato do
-//! Adonis.
+//! diagnostico. `/api/stats` fica fora do prefixo porque e' o resumo do painel,
+//! nao um subrecurso de configuracao do sistema.
 
 use axum::body::Body;
 use axum::extract::{Json, Query, State};
@@ -23,7 +23,8 @@ use crate::models::backup_runner;
 use crate::models::storage::space;
 use crate::models::system_monitor;
 
-/// Quantos backups recentes o painel mostra. Igual ao `limit(5)` do Adonis.
+/// Quantos backups recentes o painel mostra; cinco linhas mantem o resumo
+/// legivel sem transformar o dashboard numa segunda pagina de listagem.
 const RECENT_BACKUPS: u64 = 5;
 
 /// `GET /api/stats` — o painel inicial.
@@ -269,8 +270,8 @@ pub async fn destroy_diagnostic(
 
 /// Rotas de system.
 ///
-/// `/api/stats` fica **fora** do prefixo `/api/system` — e' assim no Adonis, e
-/// mover para `/api/system/stats` quebraria o painel.
+/// `/api/stats` fica **fora** do prefixo `/api/system`: e' o resumo do painel,
+/// e mover a rota quebraria os clientes que a consomem.
 pub fn routes() -> Routes {
     Routes::new()
         .add("/api/stats", get(stats))

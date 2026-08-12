@@ -301,7 +301,7 @@ pub async fn import(
     let form = match multipart {
         Ok(multipart) => read_multipart(multipart).await?,
         // Corpo que nao e' multipart nao traz arquivo nenhum — que e' exatamente
-        // o caso que o Adonis reporta com a mensagem abaixo.
+        // a mensagem abaixo explica o conflito de forma acionavel.
         Err(_) => ImportForm {
             file: None,
             connection_id: None,
@@ -815,8 +815,8 @@ async fn audit(ctx: &AppContext, origin: &RequestOrigin, entry: AuditEntry) {
 /// Rotas de `/api/backups`.
 ///
 /// `restore` leva o limitador `strict` e `import` leva o `backup`, exatamente
-/// como no `start/routes.ts` do Adonis — os dois numeros aparecem no cabecalho
-/// `x-ratelimit-limit` que a suite de contrato compara.
+/// porque importacao transfere arquivos e restauracao inicia trabalho pesado;
+/// os dois limites aparecem no cabecalho `x-ratelimit-limit`.
 pub fn routes(limiters: &Limiters) -> Routes {
     let strict = limiters.strict();
     let backup = limiters.backup();
@@ -835,8 +835,7 @@ pub fn routes(limiters: &Limiters) -> Routes {
 /// `GET /api/connections/:connectionId/backups`.
 ///
 /// Mora aqui, e nao em `controllers::connections`, porque o handler e' deste
-/// recurso — e' a mesma escolha do Adonis, onde a rota aponta para o
-/// `BackupsController`.
+/// recurso: ele lista backups, nao conexoes.
 /// O parametro chama-se `id`, e nao `connection_id`, porque o roteador do Axum
 /// exige o **mesmo nome** para o parametro na mesma posicao de um prefixo. As
 /// outras rotas de `/api/connections` usam `/{id}/…`; um nome diferente aqui faz

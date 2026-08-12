@@ -25,7 +25,7 @@
 | 7 — Eventos SSE próprios | ✅ concluída — **nenhum `@adonisjs/*` no repositório** |
 | 8 — Contrato tipado em `dtos/` | ⚠️ backend concluído — **`views/` deixou de existir**, 53 bindings gerados; falta o frontend consumi-los |
 | 9 — Configuração e limpeza final | ⚠️ parcial — 136 → **119** menções ao Adonis, em 40 arquivos |
-| 10 — Suíte de testes | ⚠️ parcial — suíte **100% verde**, inclusive o teste de MinIO/SFTP; falta a auditoria de cobertura rota a rota |
+| 10 — Suíte de testes | ⚠️ parcial — suíte **100% verde**, inclusive o teste de MinIO/SFTP; auditoria feita: **62/89** rotas `/api` têm teste de request, faltam 27 |
 
 **Portões de qualidade agora:** `cargo fmt`, `cargo clippy --all-targets -- -D
 warnings` e `cargo test` verdes — **458 testes de unidade e 156 de request, 0
@@ -741,7 +741,9 @@ respostas, que era justamente o que o matcher tolerante da suíte verificava.
 - [ ] Snapshots com `insta` no lugar dos golden: é o mecanismo equivalente que o
       Loco já traz, e o [AGENTS.md §7](backend/AGENTS.md) já o exige
 - [ ] Cobrir os três caminhos de sempre: feliz, entrada inválida, não autorizado
-- [ ] Revisar cobertura endpoint a endpoint — os 73 paths precisam ter dono
+- [x] Revisar cobertura endpoint a endpoint — o router atual tem **89** paths
+      `/api`; a auditoria em `tests/requests/ROUTE_AUDIT.md` atribui 62 a um
+      teste de request e lista os 27 sem cobertura direta
 
 **Pronto quando:** `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`
 e `cargo test` verdes, sem nenhum teste comparando contra o Adonis, e nenhuma

@@ -62,8 +62,8 @@ impl DatabaseType {
     /// Binario de dump correspondente.
     ///
     /// MariaDB tambem usa `mysqldump`. O `mariadb-dump` existe nas versoes
-    /// novas, mas o Adonis chama `mysqldump` e trocar isso mudaria qual
-    /// binario precisa estar na imagem Docker.
+    /// novas, mas `mysqldump` e' o binario que a imagem entrega para os dois
+    /// motores; trocar exigiria mudar a imagem e o caminho de execucao.
     pub const fn dump_command(self) -> &'static str {
         match self {
             Self::Mysql | Self::Mariadb => "mysqldump",
@@ -108,7 +108,7 @@ impl ScheduleFrequency {
         }
     }
 
-    /// Intervalo em milissegundos, como o `getScheduleIntervalMs` do Adonis.
+    /// Intervalo em milissegundos usado pelo agendador.
     pub const fn interval_ms(self) -> i64 {
         match self {
             Self::Hourly => 60 * 60 * 1000,
@@ -849,7 +849,7 @@ mod tests {
     }
 
     #[test]
-    fn schedule_intervals_match_the_adonis_table() {
+    fn schedule_intervals_match_the_supported_values() {
         assert_eq!(ScheduleFrequency::Hourly.interval_ms(), 3_600_000);
         assert_eq!(ScheduleFrequency::SixHours.interval_ms(), 21_600_000);
         assert_eq!(ScheduleFrequency::TwelveHours.interval_ms(), 43_200_000);

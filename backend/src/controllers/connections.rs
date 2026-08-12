@@ -7,7 +7,7 @@
 //! parametro dinamico, tentaria le'-lo como `i64` e a rota responderia um 400
 //! sem relacao nenhuma com o problema.
 //!
-//! ## Onde o Adonis fala com o banco do cliente
+//! ## Onde a API fala com o banco do cliente
 //!
 //! Tres rotas abrem conexao contra um servidor de terceiro — `test`,
 //! `discover-databases` e `create-database`. Todas passam por
@@ -434,9 +434,9 @@ pub async fn create_database(
 /// `GET /api/connections/docker-hosts`.
 ///
 /// O cliente Docker entra na Fase 9. Ate' la' a rota responde **200** com
-/// `dockerAvailable: false` e a lista vazia — e' o mesmo corpo que o Adonis
-/// devolve numa maquina sem Docker, e o contrato exige 200 tambem nesse caso
-/// (a tela de nova conexao trata a ausencia, nao um erro).
+/// `dockerAvailable: false` e a lista vazia formam uma resposta bem-sucedida:
+/// a tela de nova conexao trata a ausencia do Docker como informacao, nao como
+/// uma falha de carregamento.
 #[debug_handler]
 pub async fn docker_hosts(State(_ctx): State<AppContext>, _session: Auth) -> Result<Response> {
     let environment = crate::models::docker::environment().await;
@@ -463,15 +463,15 @@ pub async fn docker_hosts(State(_ctx): State<AppContext>, _session: Auth) -> Res
 /// `POST /api/connections/:id/backup`.
 ///
 /// Dispara o backup de **todos** os databases habilitados e responde so' no
-/// fim — e' sincrono no Adonis, e o corpo traz o resultado de cada um. A
-/// restauracao, que e' assincrona, esta' em [`crate::controllers::backups`].
+/// fim — o corpo traz o resultado de cada um. A restauracao, que e'
+/// assincrona, esta' em [`crate::controllers::backups`].
 ///
 /// Duas guardas antes de comecar:
 ///
 /// - conexao com `status = 'error'` → **422**. Tentar o dump renderia a mesma
 ///   falha do ultimo teste, agora com um registro de backup falho a mais;
-/// - nenhum database habilitado → **422**. O Adonis criaria um backup de
-///   `N/A` marcado como falho, o que polui a listagem sem informar nada.
+/// - nenhum database habilitado → **422**. Criar um backup de `N/A` marcado
+///   como falho poluiria a listagem sem informar nada.
 #[debug_handler]
 pub async fn backup(
     State(ctx): State<AppContext>,
@@ -686,8 +686,7 @@ pub fn routes(limiters: &Limiters) -> Routes {
         .add("/{id}", delete(destroy))
         .add("/{id}/test", post(test).layer(strict.clone()))
         .add("/{id}/create-database", post(create_database).layer(strict))
-        // O limitador `backup` (60/min) e' o mesmo que o Adonis pendura aqui — e'
-        // o numero que o golden `connections/backup-connection-in-error` gravou
-        // em `x-ratelimit-limit`.
+        // Backups iniciam processos e transferem arquivos; 60/min impede que a
+        // rota seja usada para esgotar CPU, disco ou conexoes de origem.
         .add("/{id}/backup", post(backup).layer(limiters.backup()))
 }
