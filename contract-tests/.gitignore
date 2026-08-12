@@ -1,8 +1,0 @@
-# Working directory de cada execucao: banco SQLite descartavel, logs do
-# servidor sob teste, state.json e o rastro de cobertura de rotas.
-.contract/
-
-# Relatorios gerados (o golden e' versionado; o relatorio nao).
-reports/
-
-node_modules/
