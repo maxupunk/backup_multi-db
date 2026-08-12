@@ -57,6 +57,30 @@ impl Hooks for App {
         create_app::<Self, Migrator>(mode, environment, config).await
     }
 
+    /// Estado compartilhado do `AppContext`, criado antes de qualquer
+    /// inicializador.
+    ///
+    /// Estes registros já moraram em [`Hooks::routes`], mas o `run_app` do Loco
+    /// executa `before_run` → `initializers[].before_run` → `routes`. O
+    /// inicializador de métricas dispara o primeiro ciclo de coleta assim que
+    /// sobe, e esse ciclo publica em SSE: com os registros em `routes`, o
+    /// primeiro tick sempre falhava com "SSE registry was not initialized".
+    ///
+    /// Registrar estado também não é papel de uma função de roteamento — o
+    /// `cargo loco routes` chama `routes` só para listar caminhos e não deveria
+    /// instanciar nada.
+    async fn before_run(ctx: &AppContext) -> Result<()> {
+        crate::models::storage::copy::register(ctx);
+        crate::models::storage::archive::register(ctx);
+        crate::models::docker_diagnostics::register(ctx);
+        crate::models::docker_container_monitoring::register(ctx);
+        crate::models::resource_metric_history::register(ctx);
+        crate::models::memory_watermark::register(ctx);
+        crate::models::sse::register(ctx);
+        crate::models::progress::bridge_to_sse(ctx);
+        Ok(())
+    }
+
     async fn initializers(_ctx: &AppContext) -> Result<Vec<Box<dyn Initializer>>> {
         // Valida o bloco `settings:` antes da primeira requisicao. Sem isto,
         // uma `db_encryption_key` ausente so' apareceria na primeira tentativa
@@ -69,15 +93,12 @@ impl Hooks for App {
     }
 
     async fn after_routes(router: axum::Router, ctx: &AppContext) -> Result<axum::Router> {
-        // Fallback da SPA (Fase 12.4): arquivos estáticos do build Vue são
-        // servidos pelo `ServeDir` a partir de `public/`; quando o caminho não
-        // casa com um arquivo real (rotas de frontend como `/backups`), o
-        // próprio `ServeDir` cai no fallback e devolve `index.html`. Isso evita
-        // que o handler genérico sirva HTML com `text/html` para assets `.js`,
-        // `.css`, `manifest.webmanifest`, etc., quebrando o carregamento da SPA.
-        //
-        // Requisições que não são GET/HEAD continuam retornando 404, para que a
-        // API não transforme métodos estranhos em 405 do serviço de arquivos.
+        // Fallback da SPA: arquivos estáticos do build Vue são servidos pelo
+        // `ServeDir` a partir de `public/`; quando o caminho não casa com um
+        // arquivo real (rotas de frontend como `/backups`), o próprio `ServeDir`
+        // cai no fallback e devolve `index.html`. Isso evita que um handler
+        // genérico sirva HTML com `text/html` para assets `.js`, `.css`,
+        // `manifest.webmanifest`, etc., quebrando o carregamento da SPA.
         let settings =
             crate::initializers::settings::Settings::from_json(ctx.config.settings.as_ref())?;
         let spa_path = Path::new(&settings.frontend_spa_path).to_path_buf();
@@ -94,33 +115,20 @@ impl Hooks for App {
             }
         }));
 
+        // Quem chega aqui não casou com nenhuma rota — inclusive nenhuma rota
+        // de `/api`, que tem o próprio catch-all em `controllers::public` para
+        // não cair na SPA e responder HTML a quem pediu JSON.
         let router = router.fallback_service(serve_dir);
 
-        // Camadas globais: `force_json` e o limitador de 600 req/min por IP.
-        // Os limitadores por rota (`auth`, `strict`, `backup`) entram junto com
-        // as rotas que os usam, nas fases seguintes.
         controllers::middlewares::layers::apply(router, ctx)
     }
 
     fn routes(ctx: &AppContext) -> AppRoutes {
-        // Estado efemero dos jobs de copia (Fase 8). Fica no SharedStore do
-        // contexto, nao num singleton global, para cada instancia manter seu
-        // proprio ciclo de vida e a Fase 10 poder trocar a implementacao.
-        crate::models::storage::copy::register(ctx);
-        crate::models::storage::archive::register(ctx);
-        crate::models::docker_diagnostics::register(ctx);
-        crate::models::docker_container_monitoring::register(ctx);
-        crate::models::resource_metric_history::register(ctx);
-        crate::models::memory_watermark::register(ctx);
-        crate::models::sse::register(ctx);
-        crate::models::progress::bridge_to_sse(ctx);
-
-        // O limitador `auth` (5/min por IP+e-mail) e' pendurado nas rotas de
-        // `register` e `login`; os demais grupos so' levam o global, que entra
-        // em `after_routes`.
+        // Os limitadores `auth`, `strict` e `backup` sao pendurados nas rotas
+        // que os usam; o global entra em `after_routes`.
         //
         // Cair no default quando a configuracao esta' quebrada nao afrouxa
-        // nada — os defaults **sao** os numeros do Adonis —, e evita trocar a
+        // nada — os defaults sao os mesmos numeros do YAML —, e evita trocar a
         // mensagem clara do `SettingsInitializer` por um panico aqui.
         let limiters =
             controllers::middlewares::limiters::Limiters::shared(ctx).unwrap_or_else(|err| {
@@ -130,7 +138,7 @@ impl Hooks for App {
 
         AppRoutes::with_default_routes()
             .add_route(controllers::public::routes())
-            .add_route(controllers::transmit::routes())
+            .add_route(controllers::events::routes())
             .add_route(controllers::auth::routes(&limiters))
             .add_route(controllers::connections::routes(&limiters))
             // Antes das rotas de `connections`: `/{connection_id}/backups` e'

@@ -11,7 +11,7 @@ use serde_json::Value;
 
 /// Senha usada por todos os usuarios de teste.
 ///
-/// Dentro da faixa de 8..32 caracteres que o `registerValidator` exige.
+/// Dentro da faixa de 8..32 caracteres que `RegisterParams` exige.
 pub const PASSWORD: &str = "contract-secret";
 
 /// Uma conta criada pelo teste, com o token dela quando existe.
@@ -23,8 +23,8 @@ pub struct Account {
 
 /// Cria o **primeiro** usuario, que nasce administrador e ativo.
 ///
-/// Precisa ser o primeiro cadastro do banco; com a tabela ja' populada, o
-/// Adonis criaria uma conta pendente e este helper devolveria `token: None`.
+/// Precisa ser o primeiro cadastro do banco; com a tabela ja' populada a conta
+/// nasceria pendente e este helper devolveria `token: None`.
 pub async fn create_admin(request: &TestServer, email: &str) -> Account {
     let response = request
         .post("/api/auth/register")
@@ -44,14 +44,9 @@ pub async fn create_admin(request: &TestServer, email: &str) -> Account {
 
     let body: Value = response.json();
     Account {
-        id: body["data"]["user"]["id"].as_i64().expect("id do admin"),
+        id: body["user"]["id"].as_i64().expect("id do admin"),
         email: email.to_string(),
-        token: Some(
-            body["data"]["token"]
-                .as_str()
-                .expect("token do admin")
-                .to_string(),
-        ),
+        token: Some(body["token"].as_str().expect("token do admin").to_string()),
     }
 }
 
@@ -68,7 +63,7 @@ pub async fn create_pending(request: &TestServer, email: &str) -> Account {
 
     assert_eq!(response.status_code(), 201, "{}", response.text());
     assert!(
-        response.json::<Value>()["data"].is_null(),
+        response.json::<Value>().get("token").is_none(),
         "um cadastro pendente nao pode devolver token"
     );
 
@@ -107,7 +102,7 @@ pub async fn login(request: &TestServer, email: &str) -> String {
 
     assert_eq!(response.status_code(), 200, "{}", response.text());
 
-    response.json::<Value>()["data"]["token"]
+    response.json::<Value>()["token"]
         .as_str()
         .expect("token do login")
         .to_string()
@@ -117,13 +112,13 @@ pub async fn login(request: &TestServer, email: &str) -> String {
 pub async fn find_id(request: &TestServer, admin_token: &str, email: &str) -> i64 {
     let response = request
         .get("/api/users")
-        .add_query_param("limit", "100")
+        .add_query_param("page_size", "100")
         .authorization_bearer(admin_token)
         .await;
 
     assert_eq!(response.status_code(), 200, "{}", response.text());
 
-    response.json::<Value>()["data"]
+    response.json::<Value>()["results"]
         .as_array()
         .expect("lista de usuarios")
         .iter()

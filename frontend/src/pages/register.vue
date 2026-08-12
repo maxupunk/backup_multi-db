@@ -94,7 +94,7 @@
 <script lang="ts" setup>
   import { onMounted, reactive, ref } from 'vue'
   import { useRouter } from 'vue-router'
-  import { ApiError, authApi } from '@/services/api'
+  import { ApiError, authApi, fieldError } from '@/services/api'
   import { useAuthStore } from '@/stores/auth'
 
   // Define layout authentication
@@ -135,43 +135,31 @@
 
     try {
       const response = await authApi.register(form)
-      if (response.success) {
-        // Se tiver token, login automático
-        if (response.data && response.data.token) {
-          authStore.setToken(response.data.token)
-          authStore.setUser(response.data.user)
-          router.push('/')
-        } else {
-          // Caso contrário pode estar pendente de aprovação
-          // Limpar formulário
-          form.fullName = ''
-          form.email = ''
-          form.password = ''
-          form.bootstrapToken = ''
-          errorMessage.value = ''
 
-          // Exibir mensagem de sucesso (usando errorMessage como alerta verde ou criando um novo estado)
-          // Vamos usar um alert simples ou reaproveitar errorMessage como "success" se adicionar type
-          // Por simplicidade, vou usar um alert separado se possível, ou mudar o texto do errorMessage para type success.
-          // Vou adicionar successMessage no state.
-          successMessage.value = response.message || 'Cadastro realizado. Aguarde aprovação.'
-        }
+      // O primeiro cadastro nasce administrador ativo e vem com token; os
+      // seguintes ficam pendentes e trazem só a mensagem.
+      if ('token' in response) {
+        authStore.setToken(response.token)
+        authStore.setUser(response.user)
+        router.push('/')
+      } else {
+        form.fullName = ''
+        form.email = ''
+        form.password = ''
+        form.bootstrapToken = ''
+        errorMessage.value = ''
+        successMessage.value = response.message
       }
     } catch (error) {
       successMessage.value = ''
       console.error(error)
       if (error instanceof ApiError) {
-        // Erro de validação
-        if (error.statusCode === 422 && error.data && typeof error.data === 'object' && 'errors' in error.data) {
-          const validationErrors = (error.data as any).errors
-          if (Array.isArray(validationErrors)) {
-            for (const err of validationErrors) {
-              if (err.field === 'fullName') errors.fullName = err.message
-              if (err.field === 'email') errors.email = err.message
-              if (err.field === 'password') errors.password = err.message
-              if (err.field === 'bootstrapToken') errors.bootstrapToken = err.message
-            }
-          }
+        // Falha de validação: um problema por campo, sob o nome dele.
+        if (error.statusCode === 400) {
+          errors.fullName = fieldError(error.data, 'fullName')
+          errors.email = fieldError(error.data, 'email')
+          errors.password = fieldError(error.data, 'password')
+          errors.bootstrapToken = fieldError(error.data, 'bootstrapToken')
         } else {
           errorMessage.value = error.message
         }
@@ -186,7 +174,7 @@
   onMounted(async () => {
     try {
       const response = await authApi.checkStatus()
-      showBootstrapToken.value = !!response.data && !response.data.hasUsers
+      showBootstrapToken.value = !!response && !response.hasUsers
     } catch (error) {
       console.error('Falha ao verificar status do bootstrap:', error)
     }

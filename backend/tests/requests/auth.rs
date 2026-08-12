@@ -18,10 +18,9 @@ async fn status_reports_an_empty_installation() {
 
         assert_eq!(response.status_code(), 200);
         let body: Value = response.json();
-        assert_eq!(body["success"], true);
-        assert_eq!(body["data"]["hasUsers"], false);
+        assert_eq!(body["hasUsers"], false);
         // Fora de producao o primeiro admin nasce sem token de bootstrap.
-        assert_eq!(body["data"]["requiresBootstrapToken"], false);
+        assert_eq!(body["requiresBootstrapToken"], false);
     })
     .await;
 }
@@ -33,7 +32,7 @@ async fn status_reports_an_installation_with_users() {
         session::create_admin(&request, "admin@contract.test").await;
 
         let body: Value = request.get("/api/auth/status").await.json();
-        assert_eq!(body["data"]["hasUsers"], true);
+        assert_eq!(body["hasUsers"], true);
     })
     .await;
 }
@@ -50,11 +49,11 @@ async fn the_first_user_becomes_an_active_admin() {
             .await
             .json();
 
-        assert_eq!(body["data"]["isAdmin"], true);
-        assert_eq!(body["data"]["isActive"], true);
-        assert_eq!(body["data"]["email"], "admin@contract.test");
+        assert_eq!(body["isAdmin"], true);
+        assert_eq!(body["isActive"], true);
+        assert_eq!(body["email"], "admin@contract.test");
         // `me` traz `createdAt`; o usuario que acompanha o token nao traz.
-        assert!(body["data"]["createdAt"].is_string());
+        assert!(body["createdAt"].is_string());
     })
     .await;
 }
@@ -80,7 +79,10 @@ async fn anyone_after_the_first_waits_for_approval() {
             body["message"],
             "Cadastro realizado. Aguarde aprovação de um administrador."
         );
-        assert!(body["data"].is_null());
+        assert!(
+            body.get("token").is_none(),
+            "conta pendente nao recebe token"
+        );
     })
     .await;
 }
@@ -100,20 +102,17 @@ async fn a_pending_account_cannot_log_in() {
             }))
             .await;
 
-        // 401 na familia dos controllers — diferente do 400 de senha errada.
         assert_eq!(response.status_code(), 401);
         let body: Value = response.json();
-        assert_eq!(body["success"], false);
-        assert_eq!(body["message"], "Sua conta aguarda aprovação.");
+        assert_eq!(body["error"], "unauthorized");
+        assert_eq!(body["description"], "Sua conta aguarda aprovação.");
     })
     .await;
 }
 
 #[tokio::test]
 #[serial]
-async fn a_wrong_password_is_a_400_not_a_401() {
-    // Um dos achados da Fase 2, e o tipo de coisa que se "corrige" por engano
-    // durante um porte. O golden `auth/login-invalid-credentials` fixa o 400.
+async fn a_wrong_password_is_a_401() {
     request::<App, _, _>(|request, _ctx| async move {
         session::create_admin(&request, "admin@contract.test").await;
 
@@ -125,11 +124,12 @@ async fn a_wrong_password_is_a_400_not_a_401() {
             }))
             .await;
 
-        assert_eq!(response.status_code(), 400);
+        assert_eq!(response.status_code(), 401);
         let body: Value = response.json();
-        assert_eq!(body["errors"][0]["message"], "Invalid user credentials");
-        // Familia do framework: sem `success` nem `message` no topo.
-        assert!(body.get("success").is_none());
+        // Mesmo shape de todo erro da API: razao legivel por maquina e
+        // descricao legivel por gente.
+        assert_eq!(body["error"], "unauthorized");
+        assert_eq!(body["description"], "E-mail ou senha inválidos.");
     })
     .await;
 }
@@ -164,7 +164,7 @@ async fn an_unknown_email_is_indistinguishable_from_a_wrong_password() {
 
 #[tokio::test]
 #[serial]
-async fn a_duplicated_email_is_a_422_in_the_vinejs_shape() {
+async fn a_duplicated_email_is_reported_on_the_field() {
     request::<App, _, _>(|request, _ctx| async move {
         session::create_admin(&request, "admin@contract.test").await;
 
@@ -176,11 +176,12 @@ async fn a_duplicated_email_is_a_422_in_the_vinejs_shape() {
             }))
             .await;
 
-        assert_eq!(response.status_code(), 422);
-        let error = &response.json::<Value>()["errors"][0];
-        assert_eq!(error["field"], "email");
-        assert_eq!(error["rule"], "database.unique");
-        assert_eq!(error["message"], "The email has already been taken");
+        // 400 com o erro sob o nome do campo: unicidade precisa da tabela, mas
+        // chega ao cliente no mesmo formato de uma regra do `derive`.
+        assert_eq!(response.status_code(), 400);
+        let errors = &response.json::<Value>()["errors"]["email"];
+        assert_eq!(errors[0]["code"], "unique");
+        assert_eq!(errors[0]["message"], "Este e-mail já está cadastrado.");
     })
     .await;
 }
@@ -194,27 +195,20 @@ async fn registration_validates_the_payload() {
             .json(&serde_json::json!({ "email": "nao-e-email", "password": "curta" }))
             .await;
 
-        assert_eq!(response.status_code(), 422);
-        let errors = response.json::<Value>()["errors"]
-            .as_array()
-            .expect("lista de erros")
-            .clone();
+        assert_eq!(response.status_code(), 400);
+        let errors = response.json::<Value>()["errors"].clone();
 
-        let fields: Vec<&str> = errors
-            .iter()
-            .filter_map(|error| error["field"].as_str())
-            .collect();
-        assert!(fields.contains(&"email"), "faltou o erro de e-mail");
-        assert!(fields.contains(&"password"), "faltou o erro de senha");
+        assert!(errors["email"].is_array(), "faltou o erro de e-mail");
+        assert!(errors["password"].is_array(), "faltou o erro de senha");
     })
     .await;
 }
 
 #[tokio::test]
 #[serial]
-async fn the_gmail_address_is_normalised_the_way_vinejs_does() {
-    // O banco migrado guarda o endereco ja' normalizado. Sem esta regra, quem
-    // se cadastrou com pontos nao consegue mais entrar apos o cutover.
+async fn the_gmail_address_is_normalised_before_being_stored() {
+    // Sem a normalizacao, `j.oao@gmail.com` e `joao@gmail.com` viram duas
+    // contas para a mesma caixa — e o Gmail entrega as duas no mesmo lugar.
     request::<App, _, _>(|request, _ctx| async move {
         let response = request
             .post("/api/auth/register")
@@ -226,7 +220,7 @@ async fn the_gmail_address_is_normalised_the_way_vinejs_does() {
         assert_eq!(response.status_code(), 201);
 
         let body: Value = response.json();
-        assert_eq!(body["data"]["user"]["email"], "joao@gmail.com");
+        assert_eq!(body["user"]["email"], "joao@gmail.com");
 
         // E a forma sem pontos entra na mesma conta.
         let login = request
@@ -329,7 +323,7 @@ async fn logout_acknowledges_without_revoking_anything() {
             .authorization_bearer(&token)
             .await;
         assert_eq!(logout.status_code(), 200);
-        assert_eq!(logout.json::<Value>()["message"], "Logged out successfully");
+        assert_eq!(logout.json::<Value>()["message"], "Sessão encerrada.");
 
         // Still valid until it expires. Shortening `auth.jwt.expiration` is the
         // only lever over a leaked token's life.
@@ -398,7 +392,7 @@ async fn deactivating_a_user_does_not_revoke_the_session() {
             .await;
 
         assert_eq!(response.status_code(), 200, "a sessao foi revogada");
-        assert_eq!(response.json::<Value>()["data"]["isActive"], false);
+        assert_eq!(response.json::<Value>()["isActive"], false);
     })
     .await;
 }
@@ -409,8 +403,8 @@ async fn the_auth_limiter_blocks_the_sixth_attempt() {
     request::<App, _, _>(|request, _ctx| async move {
         session::create_admin(&request, "admin@contract.test").await;
 
-        // Um e-mail que **nao** passou pelo cadastro: o `register` usa o mesmo
-        // limitador e a mesma chave, e consumiria uma das cinco unidades.
+        // O `register` do admin acima ja' consumiu uma ficha: a chave e' o IP,
+        // e as duas rotas dividem o mesmo balde.
         let attempt = || {
             request.post("/api/auth/login").json(&serde_json::json!({
                 "email": "alvo@contract.test",
@@ -418,10 +412,11 @@ async fn the_auth_limiter_blocks_the_sixth_attempt() {
             }))
         };
 
-        for index in 1..=5 {
+        for index in 1..=4 {
             let response = attempt().await;
-            assert_eq!(response.status_code(), 400, "tentativa {index}");
-            // O limitador da rota vence o global: 5, e nao 600.
+            assert_eq!(response.status_code(), 401, "tentativa {index}");
+            // O limitador da rota anuncia o proprio teto; o global roda sem
+            // cabecalho justamente para nao sobrescrever este numero.
             assert_eq!(
                 response
                     .headers()
@@ -434,10 +429,7 @@ async fn the_auth_limiter_blocks_the_sixth_attempt() {
 
         let blocked = attempt().await;
         assert_eq!(blocked.status_code(), 429);
-        assert_eq!(
-            blocked.json::<Value>()["errors"][0]["message"],
-            "Too many requests"
-        );
+        assert_eq!(blocked.json::<Value>()["error"], "too_many_requests");
         assert!(blocked.headers().contains_key("retry-after"));
     })
     .await;
@@ -446,12 +438,12 @@ async fn the_auth_limiter_blocks_the_sixth_attempt() {
 #[tokio::test]
 #[serial]
 async fn register_and_login_share_the_auth_budget() {
-    // Os dois usam o limitador `auth` e a mesma chave `auth_<ip>_<email>`, e
-    // portanto dividem as cinco unidades por minuto. Lojas separadas por rota
-    // dariam dez tentativas a quem alterna entre `register` e `login` — que e'
-    // exatamente o que um ataque de forca bruta faria.
+    // Os dois usam o limitador `auth`, que conta por IP — e portanto dividem o
+    // mesmo balde. Baldes separados por rota dariam o dobro de tentativas a
+    // quem alterna entre `register` e `login`, que e' exatamente o que um
+    // ataque de forca bruta faria.
     request::<App, _, _>(|request, _ctx| async move {
-        // O cadastro do admin ja' consome a primeira unidade.
+        // O cadastro do admin ja' consome a primeira ficha.
         session::create_admin(&request, "admin@contract.test").await;
 
         for index in 2..=5 {
@@ -462,7 +454,7 @@ async fn register_and_login_share_the_auth_budget() {
                     "password": "senha-errada",
                 }))
                 .await;
-            assert_eq!(response.status_code(), 400, "unidade {index}");
+            assert_eq!(response.status_code(), 401, "unidade {index}");
         }
 
         let blocked = request
@@ -479,9 +471,10 @@ async fn register_and_login_share_the_auth_budget() {
 
 #[tokio::test]
 #[serial]
-async fn the_auth_limiter_counts_per_email() {
-    // A chave e' IP+e-mail. Sem o e-mail, cinco tentativas contra uma conta
-    // trancariam todo mundo que sai do mesmo IP corporativo.
+async fn the_auth_limiter_counts_per_ip_not_per_email() {
+    // A chave **deixou de incluir** o e-mail: trocar de endereco zerava o
+    // contador, e era assim que um password spraying passava por baixo do
+    // limite. O custo esta' aqui: quem sai do mesmo IP divide o orcamento.
     request::<App, _, _>(|request, _ctx| async move {
         session::create_admin(&request, "admin@contract.test").await;
 
@@ -495,7 +488,7 @@ async fn the_auth_limiter_counts_per_email() {
                 .await;
         }
 
-        // O admin, com outro e-mail, continua entrando.
+        // Mesmo IP, outro e-mail, credencial correta: ainda assim recusado.
         let response = request
             .post("/api/auth/login")
             .json(&serde_json::json!({
@@ -504,24 +497,22 @@ async fn the_auth_limiter_counts_per_email() {
             }))
             .await;
 
-        assert_eq!(response.status_code(), 200, "{}", response.text());
+        assert_eq!(response.status_code(), 429, "{}", response.text());
     })
     .await;
 }
 
 #[tokio::test]
 #[serial]
-async fn an_unlimited_route_reports_the_global_limit() {
+async fn a_route_without_its_own_limiter_advertises_nothing() {
+    // O limitador global conta, mas nao escreve cabecalho: como e' a camada
+    // mais externa, escreveria por ultimo e apagaria o teto anunciado pela
+    // rota. O numero que interessa a um cliente e' o da rota que ele chama.
     request::<App, _, _>(|request, _ctx| async move {
         let response = request.get("/api/auth/status").await;
 
-        assert_eq!(
-            response
-                .headers()
-                .get("x-ratelimit-limit")
-                .map(|v| v.to_str().unwrap_or("")),
-            Some("600")
-        );
+        assert_eq!(response.status_code(), 200);
+        assert!(response.headers().get("x-ratelimit-limit").is_none());
     })
     .await;
 }
@@ -623,7 +614,7 @@ async fn reset_enforces_the_password_length_range() {
             .json(&serde_json::json!({ "token": "qualquer", "password": "curta" }))
             .await;
 
-        assert_eq!(response.status_code(), 422);
+        assert_eq!(response.status_code(), 400);
     })
     .await;
 }

@@ -41,7 +41,7 @@ export const useStorageExplorerStore = defineStore('storage-explorer', () => {
 
     try {
       const response = await storagesApi.browse(id, path ?? '', appendCursor)
-      const data = response.data
+      const data = response
       if (data) {
         if (appendCursor) {
           objects.value = [...objects.value, ...data.objects]

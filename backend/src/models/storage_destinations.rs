@@ -9,10 +9,11 @@
 //! secreto de nome novo passaria batido. Aqui, um provider desconhecido cai no
 //! `_ =>` e a config **inteira** e' omitida — falha fechada, e nao aberta.
 
+use loco_rs::model::query::{self, PageResponse, PaginationQuery};
 use loco_rs::prelude::{ConnectionTrait, Error};
 use sea_orm::entity::prelude::*;
 use sea_orm::sea_query::Expr;
-use sea_orm::{ActiveValue::Set, Condition, PaginatorTrait, QueryOrder, QuerySelect};
+use sea_orm::{ActiveValue::Set, Condition, PaginatorTrait, QueryOrder};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use std::str::FromStr;
@@ -24,7 +25,6 @@ use crate::models::storage::config::{
     resolve_s3_region, AzureConfig, GcsConfig, LocalConfig, S3Config, SftpConfig, StorageConfig,
 };
 use crate::models::validation;
-use crate::views::pagination::PageRequest;
 
 impl ActiveModelBehavior for ActiveModel {}
 
@@ -401,7 +401,7 @@ pub const PROVIDER_CHOICES: [&str; 7] = [
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct ListQuery {
     pub page: Option<String>,
-    pub limit: Option<String>,
+    pub page_size: Option<String>,
     pub r#type: Option<String>,
     pub provider: Option<String>,
     pub status: Option<String>,
@@ -492,8 +492,8 @@ impl Model {
     pub async fn list_page(
         db: &impl ConnectionTrait,
         query: &ListQuery,
-        page: PageRequest,
-    ) -> loco_rs::Result<(Vec<Self>, u64)> {
+        page: &PaginationQuery,
+    ) -> loco_rs::Result<PageResponse<Self>> {
         let mut condition = Condition::all()
             .add_option(query.r#type.as_ref().map(|v| Column::Type.eq(v.as_str())))
             .add_option(
@@ -515,20 +515,14 @@ impl Model {
             condition = condition.add(Column::Name.like(format!("%{search}%")));
         }
 
-        let total = Entity::find().filter(condition.clone()).count(db).await?;
-
         let rows = Entity::find()
             .filter(condition)
             .order_by_asc(Column::Name)
             // Desempate estavel: dois destinos de mesmo nome nao podem aparecer
             // duas vezes numa pagina e sumir de outra.
-            .order_by_asc(Column::Id)
-            .offset(page.offset())
-            .limit(page.per_page)
-            .all(db)
-            .await?;
+            .order_by_asc(Column::Id);
 
-        Ok((rows, total))
+        query::fetch_page(db, rows, page).await
     }
 
     pub async fn find_one(db: &impl ConnectionTrait, id: i64) -> loco_rs::Result<Option<Self>> {
@@ -724,9 +718,8 @@ impl Validate for CreateStorageParams {
                 provider_rules(provider, true),
                 self.config.as_ref(),
             ),
-            // Sem um provider reconhecido nenhum grupo casa, e o VineJS reprova
-            // o **objeto inteiro** — daí o campo vazio e a regra `unionGroup`.
-            None => errors.add("", union_group_error()),
+            // Sem um provider reconhecido nao ha' regra de config a aplicar.
+            None => errors.add("provider", unknown_provider_error()),
         }
 
         validation::finish(errors)
@@ -781,7 +774,7 @@ impl Validate for CreateDestinationParams {
                     self.config.as_ref(),
                 );
             }
-            None => errors.add("", union_group_error()),
+            None => errors.add("provider", unknown_provider_error()),
         }
 
         validation::finish(errors)
@@ -829,11 +822,14 @@ fn parse_type(value: Option<&str>) -> Option<StorageType> {
 }
 
 /// Erro que o VineJS produz quando nenhum grupo de uma union casa.
-fn union_group_error() -> validator::ValidationError {
-    validation::rule(
-        "unionGroup",
-        "Invalid value provided for data field".to_string(),
-    )
+/// Recusa de um provider que nao existe.
+///
+/// O erro e' anexado a `provider`, e nao a um campo vazio: quais chaves de
+/// `config` sao obrigatorias depende dele, entao sem um provider valido nao ha'
+/// o que validar adiante — e e' o select de provider que a interface precisa
+/// destacar.
+fn unknown_provider_error() -> validator::ValidationError {
+    validation::rule_enum("provider", &PROVIDER_CHOICES)
 }
 
 /// Quais campos da config sao obrigatorios.
@@ -1374,19 +1370,17 @@ mod tests {
     }
 
     #[test]
-    fn an_unknown_provider_fails_as_a_union_group() {
-        // O golden `storages/store-invalid-provider` tem exatamente
-        // `{"field":"","message":"Invalid value provided for data field","rule":"unionGroup"}`.
+    fn an_unknown_provider_is_refused_on_the_provider_field() {
         let params = CreateStorageParams {
             name: Some("Storage".to_string()),
             provider: Some("dropbox".to_string()),
             ..CreateStorageParams::default()
         };
 
-        let errors = Validate::validate(&params).expect_err("provider invalido e' 422");
+        let errors = Validate::validate(&params).expect_err("provider invalido e recusado");
         assert_eq!(
             field_codes(&errors),
-            vec![(String::new(), "unionGroup".into())]
+            vec![("provider".to_string(), "enum".into())]
         );
     }
 
@@ -1396,11 +1390,11 @@ mod tests {
             name: Some("Storage".to_string()),
             ..CreateStorageParams::default()
         })
-        .expect_err("sem provider e' 422");
+        .expect_err("sem provider e recusado");
 
         assert_eq!(
             field_codes(&errors),
-            vec![(String::new(), "unionGroup".into())]
+            vec![("provider".to_string(), "enum".into())]
         );
     }
 

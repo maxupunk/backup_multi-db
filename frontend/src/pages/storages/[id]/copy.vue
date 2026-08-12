@@ -192,7 +192,7 @@ async function startCopy () {
       deleteExtraneous: form.value.deleteExtraneous || undefined,
     })
 
-    const jobId = response.data?.jobId
+    const jobId = response.jobId
     if (jobId) {
       activeJobIds.value.push(jobId)
       notify('Cópia iniciada com sucesso', 'info')
@@ -208,7 +208,7 @@ async function startCopy () {
 onMounted(async () => {
   try {
     const response = await storagesApi.get(id)
-    const data = response.data as Storage | undefined
+    const data = response as Storage | undefined
     storageName.value = data?.name ?? `#${id}`
   } catch { /* ignore */ }
 

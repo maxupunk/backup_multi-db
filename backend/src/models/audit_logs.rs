@@ -22,9 +22,10 @@ use sea_orm::{
     QueryFilter, QueryOrder, QuerySelect,
 };
 
+use loco_rs::model::query::{PageResponse, PaginationQuery};
+
 use crate::initializers::settings::Settings;
 use crate::models::audit_log::{AuditAction, AuditEntityType, AuditStatus};
-use crate::views::pagination::PageRequest;
 
 pub use super::_entities::audit_logs::{ActiveModel, Column, Entity, Model};
 
@@ -230,29 +231,20 @@ impl Model {
 
     /// Uma pagina da listagem, com os filtros aplicados.
     ///
-    /// Ordena por `created_at desc` mais `id desc` — o desempate nao existe no
-    /// Adonis e e' o que impede a mesma linha de aparecer em duas paginas
-    /// quando varias entradas caem no mesmo segundo, que e' o caso normal numa
-    /// operacao em lote.
+    /// Ordena por `created_at desc` mais `id desc`. O desempate e' o que impede
+    /// a mesma linha de aparecer em duas paginas quando varias entradas caem no
+    /// mesmo segundo, que e' o caso normal numa operacao em lote.
     pub async fn list_page(
         db: &impl ConnectionTrait,
         filters: &AuditFilters,
-        page: PageRequest,
-    ) -> Result<(Vec<Self>, u64)> {
-        let condition = filters.to_condition();
-
-        let total = Entity::find().filter(condition.clone()).count(db).await?;
-
+        page: &PaginationQuery,
+    ) -> Result<PageResponse<Self>> {
         let rows = Entity::find()
-            .filter(condition)
+            .filter(filters.to_condition())
             .order_by_desc(Column::CreatedAt)
-            .order_by_desc(Column::Id)
-            .offset(page.offset())
-            .limit(page.per_page)
-            .all(db)
-            .await?;
+            .order_by_desc(Column::Id);
 
-        Ok((rows, total))
+        query::fetch_page(db, rows, page).await
     }
 
     /// Estatisticas agregadas.

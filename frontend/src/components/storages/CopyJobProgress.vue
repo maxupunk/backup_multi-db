@@ -40,7 +40,7 @@
 import type { CopyJob } from '@/types/api'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { storagesApi } from '@/services/api'
-import { transmit } from '@/plugins/transmit'
+import { subscribe } from '@/services/events'
 import { formatFileSize } from '@/utils/format'
 
 const props = defineProps<{
@@ -50,7 +50,7 @@ const props = defineProps<{
 const job = ref<CopyJob | null>(null)
 const loading = ref(false)
 
-let subscription: ReturnType<typeof transmit.subscription> | null = null
+let unsubscribe: (() => void) | null = null
 
 const progressPercent = computed(() => {
   if (!job.value || !job.value.totalFiles) return 0
@@ -83,7 +83,7 @@ async function fetchJob () {
   loading.value = true
   try {
     const response = await storagesApi.getCopyJob(props.jobId)
-    if (response.data) job.value = response.data
+    if (response) job.value = response
   } finally {
     loading.value = false
   }
@@ -92,23 +92,15 @@ async function fetchJob () {
 onMounted(async () => {
   await fetchJob()
 
-  try {
-    subscription = transmit.subscription(`notifications/storage-copy/${props.jobId}`)
-    await subscription.create()
-    subscription.onMessage<Partial<CopyJob>>((data) => {
-      if (job.value) {
-        Object.assign(job.value, data)
-      }
-    })
-  } catch (error) {
-    console.error('[CopyJobProgress] Erro SSE:', error)
-  }
+  unsubscribe = subscribe(`notifications/storage-copy/${props.jobId}`, (data) => {
+    if (job.value) {
+      Object.assign(job.value, data as Partial<CopyJob>)
+    }
+  })
 })
 
-onUnmounted(async () => {
-  if (subscription) {
-    try { await subscription.delete() } catch { /* ignore */ }
-    subscription = null
-  }
+onUnmounted(() => {
+  unsubscribe?.()
+  unsubscribe = null
 })
 </script>

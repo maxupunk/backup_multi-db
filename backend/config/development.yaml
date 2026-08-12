@@ -22,10 +22,34 @@ server:
   binding: {{ get_env(name="BINDING", default="localhost") }}
   # The UI hostname or IP address that mailers will point to.
   host: http://localhost
-  # Out of the box middleware configuration. to disable middleware you can changed the `enable` field to `false` of comment the middleware block
+  # Middlewares que o proprio Loco traz. O que nao esta' aqui esta' desligado.
   middlewares:
+    # A SPA e' servida por um `ServeDir` em `after_routes`, e `/api` tem o
+    # proprio catch-all: a pagina de fallback do Loco nunca deveria aparecer.
     fallback:
+      enable: false
+    # Um panico num handler vira 500 em JSON em vez de derrubar a conexao sem
+    # resposta nenhuma.
+    catch_panic:
       enable: true
+    # Correlaciona as linhas de log de uma mesma requisicao. Sem ele, dois
+    # backups simultaneos produzem um log intercalado e ilegivel.
+    request_id:
+      enable: true
+    # Teto de corpo. O upload de backup tem o proprio limite, em
+    # `backup_import::MAX_UPLOAD_BYTES`; este cobre todas as outras rotas, para
+    # que um corpo gigante nao seja lido inteiro na memoria antes de ser
+    # recusado.
+    limit_payload:
+      enable: true
+      body_limit: 512mb
+    # Uma requisicao presa (um dump contra um host que engole pacotes) libera o
+    # worker em vez de segurar a conexao ate' o cliente desistir.
+    timeout_request:
+      enable: false
+    secure_headers:
+      enable: true
+      preset: github
 
 # Worker Configuration
 workers:
@@ -106,8 +130,11 @@ auth:
     # `JWT_SECRET` e' obrigatorio, e um segredo vazado permite forjar sessao de
     # qualquer usuario.
     #
-    # Precisa ser base64 valido: e' assim que o Loco deriva a chave HMAC.
-    secret: {{ get_env(name="JWT_SECRET", default="ZGV2LW9ubHktand0LXNlY3JldA") }}
+    # Precisa ser base64 valido **com padding**: o Loco chama
+    # `EncodingKey::from_base64_secret`, que recusa `=` faltando com
+    # "Invalid padding" — e a falha so' aparece na primeira tentativa de assinar
+    # um token, como um 500 no `login`.
+    secret: {{ get_env(name="JWT_SECRET", default="ZGV2LW9ubHktand0LXNlY3JldA==") }}
     # Vida do token, em segundos. Como o JWT nao pode ser revogado, este e' o
     # unico limite sobre quanto tempo um token vazado continua servindo.
     expiration: {{ get_env(name="JWT_EXPIRATION", default="604800") }} # 7 dias
@@ -132,6 +159,6 @@ settings:
   # `duration` em segundos.
   rate_limits:
     global: { requests: 600, duration: 60 }
-    auth: { requests: 5, duration: 60 }
+    auth: { requests: 20, duration: 60 }
     strict: { requests: 60, duration: 60 }
     backup: { requests: 60, duration: 60 }

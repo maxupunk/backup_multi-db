@@ -1,5 +1,4 @@
 import type {
-  ApiResponse,
   DockerActionResult,
   DockerContainerDetail,
   DockerContainerGroup,
@@ -27,19 +26,25 @@ async function apiFetch<T>(url: string, options: RequestInit = {}): Promise<T> {
   }
 
   const res = await fetch(url, { ...options, headers: { ...headers, ...(options.headers as Record<string, string> | undefined) } })
-  const data = (await res.json()) as ApiResponse<T> & { available?: boolean }
+  const body = (await res.json()) as unknown
 
   if (!res.ok) {
-    const msg =
-      (data as unknown as { message?: string }).message ?? 'Erro na requisição Docker'
-    throw new Error(msg)
+    const failure = body as { description?: string, error?: string }
+    throw new Error(failure.description ?? failure.error ?? 'Erro na requisição Docker')
   }
 
-  if (data.available === false) {
-    throw new Error('DOCKER_UNAVAILABLE')
+  // As listagens respondem `{ available, data }` — com a Engine fora do ar são
+  // 200 com lista vazia, e só esse campo separa "não há containers" de "não
+  // consigo falar com o Docker". As demais rotas devolvem o recurso cru.
+  if (typeof body === 'object' && body !== null && 'available' in body) {
+    const listing = body as { available: boolean, data: unknown }
+    if (!listing.available) {
+      throw new Error('DOCKER_UNAVAILABLE')
+    }
+    return listing.data as T
   }
 
-  return data.data as T
+  return body as T
 }
 
 function buildDockerLogsQuery(params: DockerLogsParams = {}): string {

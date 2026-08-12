@@ -22,6 +22,9 @@ server:
   # The UI hostname or IP address that mailers will point to.
   host: http://localhost
   # Out of the box middleware configuration. to disable middleware you can changed the `enable` field to `false` of comment the middleware block
+  # Em teste os middlewares ficam desligados de proposito: `catch_panic` e
+  # `secure_headers` mudariam o corpo e os cabecalhos que as asercoes comparam,
+  # e `limit_payload` recusaria o upload de 500 MB que um teste exercita.
   middlewares:
 
 # Worker Configuration
@@ -107,6 +110,8 @@ settings:
   # `duration` em segundos.
   rate_limits:
     global: { requests: 600, duration: 60 }
+    # Menor que o default de producao (20) de proposito: o teste que prova o
+    # bloqueio faz uma requisicao por ficha, e cada login paga um argon2.
     auth: { requests: 5, duration: 60 }
     strict: { requests: 60, duration: 60 }
     backup: { requests: 60, duration: 60 }

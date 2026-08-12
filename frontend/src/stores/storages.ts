@@ -12,10 +12,10 @@ export const useStoragesStore = defineStore('storages', () => {
   const storages = ref<Storage[]>([])
   const loading = ref(false)
   const pagination = ref({
-    total: 0,
-    perPage: 15,
-    currentPage: 1,
-    lastPage: 1,
+    page: 1,
+    page_size: 15,
+    total_pages: 1,
+    total_items: 0,
   })
 
   const activeStorages = computed(() =>
@@ -34,11 +34,11 @@ export const useStoragesStore = defineStore('storages', () => {
     try {
       const response = await storagesApi.list({
         ...filters,
-        limit: filters?.limit ?? pagination.value.perPage,
+        limit: filters?.limit ?? pagination.value.page_size,
       })
-      storages.value = response.data?.data ?? []
-      if (response.data?.meta) {
-        pagination.value = response.data.meta
+      storages.value = response.results
+      if (response.pagination) {
+        pagination.value = response.pagination
       }
     } catch (error) {
       storages.value = []
@@ -50,14 +50,14 @@ export const useStoragesStore = defineStore('storages', () => {
 
   async function create (payload: CreateStoragePayload): Promise<Storage> {
     const response = await storagesApi.create(payload)
-    if (!response.data) throw new ApiError('Resposta inválida', 500)
-    return response.data
+    if (!response) throw new ApiError('Resposta inválida', 500)
+    return response
   }
 
   async function update (id: number, payload: UpdateStoragePayload): Promise<Storage> {
     const response = await storagesApi.update(id, payload)
-    if (!response.data) throw new ApiError('Resposta inválida', 500)
-    return response.data
+    if (!response) throw new ApiError('Resposta inválida', 500)
+    return response
   }
 
   async function remove (id: number) {
@@ -67,8 +67,8 @@ export const useStoragesStore = defineStore('storages', () => {
 
   async function testConnection (id: number): Promise<{ latencyMs: number }> {
     const response = await storagesApi.test(id)
-    if (!response.data) throw new ApiError('Resposta inválida', 500)
-    return response.data
+    if (!response) throw new ApiError('Resposta inválida', 500)
+    return response
   }
 
   return {

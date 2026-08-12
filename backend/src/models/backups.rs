@@ -1,5 +1,6 @@
 //! Logica de dominio de `backups`.
 
+use loco_rs::model::query::{self, PageResponse, PaginationQuery};
 use loco_rs::prelude::ConnectionTrait;
 use sea_orm::entity::prelude::*;
 use sea_orm::Statement;
@@ -396,7 +397,7 @@ impl Model {
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct ListQuery {
     pub page: Option<String>,
-    pub limit: Option<String>,
+    pub page_size: Option<String>,
     pub status: Option<String>,
     #[serde(rename = "connectionId")]
     pub connection_id: Option<String>,
@@ -406,15 +407,11 @@ pub struct ListQuery {
 
 impl Model {
     /// Uma pagina da listagem, do mais recente para o mais antigo.
-    ///
-    /// Um `connectionId` que nao seja numero **nao** vira 422: o Adonis passa o
-    /// valor cru ao `where`, o SQLite nao casa nada e a resposta e' uma lista
-    /// vazia. Reproduzir isso e' o contrato; o filtro e' ignorado, nao rejeitado.
     pub async fn list_page(
         db: &impl ConnectionTrait,
         query: &ListQuery,
-        page: crate::views::pagination::PageRequest,
-    ) -> loco_rs::Result<(Vec<Self>, u64)> {
+        page: &PaginationQuery,
+    ) -> loco_rs::Result<PageResponse<Self>> {
         let condition = sea_orm::Condition::all()
             .add_option(query.status.as_ref().map(|v| Column::Status.eq(v.as_str())))
             .add_option(
@@ -440,42 +437,28 @@ impl Model {
                     }),
             );
 
-        let total = Entity::find().filter(condition.clone()).count(db).await?;
-
         let rows = Entity::find()
             .filter(condition)
             .order_by_desc(Column::CreatedAt)
             // Desempate estavel: `created_at` tem resolucao de segundos, e sem
-            // isto a mesma linha pode aparecer em duas paginas (ACHADO 6).
-            .order_by_desc(Column::Id)
-            .offset(page.offset())
-            .limit(page.per_page)
-            .all(db)
-            .await?;
+            // isto a mesma linha pode aparecer em duas paginas.
+            .order_by_desc(Column::Id);
 
-        Ok((rows, total))
+        query::fetch_page(db, rows, page).await
     }
 
     /// Uma pagina dos backups de uma conexao.
     pub async fn list_page_for_connection(
         db: &impl ConnectionTrait,
         connection_id: i64,
-        page: crate::views::pagination::PageRequest,
-    ) -> loco_rs::Result<(Vec<Self>, u64)> {
-        let filter = Column::ConnectionId.eq(connection_id);
-
-        let total = Entity::find().filter(filter.clone()).count(db).await?;
-
+        page: &PaginationQuery,
+    ) -> loco_rs::Result<PageResponse<Self>> {
         let rows = Entity::find()
-            .filter(filter)
+            .filter(Column::ConnectionId.eq(connection_id))
             .order_by_desc(Column::CreatedAt)
-            .order_by_desc(Column::Id)
-            .offset(page.offset())
-            .limit(page.per_page)
-            .all(db)
-            .await?;
+            .order_by_desc(Column::Id);
 
-        Ok((rows, total))
+        query::fetch_page(db, rows, page).await
     }
 
     pub async fn find_one(db: &impl ConnectionTrait, id: i64) -> loco_rs::Result<Option<Self>> {

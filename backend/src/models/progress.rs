@@ -41,10 +41,9 @@ const THROTTLE: Duration = Duration::from_millis(500);
 /// bloquear: uma tela de progresso lenta nao pode segurar o backup.
 const CHANNEL_CAPACITY: usize = 256;
 
-/// Canais de notificacao, com os mesmos nomes do `notification_service.ts`.
+/// Canais de notificacao.
 ///
-/// Sao os nomes que o frontend ja' assina; a Fase 10 os expoe pelo
-/// `/__transmit/*` sem tradução.
+/// Sao os nomes que o frontend assina em `GET /api/events?channels=`.
 pub mod channels {
     pub const BACKUP_PROGRESS: &str = "notifications/backup-progress";
     pub const RESTORE: &str = "notifications/restore";

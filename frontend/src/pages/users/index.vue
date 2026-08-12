@@ -121,7 +121,7 @@
     loading.value = true
     try {
       const response = await usersApi.list()
-      users.value = response.data?.data ?? []
+      users.value = response.results
     } catch (error) {
       console.error('Erro ao carregar usuários:', error)
       notify('Erro ao carregar usuários', 'error')

@@ -845,7 +845,7 @@ async function checkApi() {
     const response = await systemApi.status()
     apiLatency.value = Date.now() - startTime
     apiStatus.value = 'online'
-    systemStatus.value = response.data ?? null
+    systemStatus.value = response
   } catch {
     apiStatus.value = 'offline'
     apiLatency.value = null
@@ -882,7 +882,7 @@ async function loadRetentionPolicy() {
   loadingRetentionPolicy.value = true
   try {
     const response = await systemApi.retentionPolicy()
-    const policy = response.data
+    const policy = response
 
     if (!policy) {
       return
@@ -908,7 +908,7 @@ async function saveRetentionPolicy() {
   savingRetentionPolicy.value = true
   try {
     const response = await systemApi.updateRetentionPolicy({ ...retentionPolicy })
-    const policy = response.data
+    const policy = response
 
     if (policy) {
       retentionPolicy.daily = policy.daily
@@ -935,9 +935,9 @@ async function runRetentionNow() {
   runningRetentionPolicy.value = true
   try {
     const response = await systemApi.runRetentionNow()
-    lastRetentionRun.value = response.data ?? null
+    lastRetentionRun.value = response
 
-    if ((response.data?.errors.length ?? 0) > 0) {
+    if ((response.errors.length ?? 0) > 0) {
       notify('Prune executado com alertas', 'warning')
     } else {
       notify('Prune executado com sucesso', 'success')
@@ -960,7 +960,7 @@ async function loadDestinations() {
       search: destinationFilters.search || undefined,
       limit: 100,
     })
-    storageDestinations.value = response.data?.data ?? []
+    storageDestinations.value = response.results
     // Carregar espaços após carregar destinos
     loadStorageSpaces()
   } catch {
@@ -975,7 +975,7 @@ async function loadStorageSpaces() {
   loadingSpaces.value = true
   try {
     const response = await storageDestinationsApi.spaceAll()
-    const spaces = response.data ?? []
+    const spaces = response
     const spaceMap = new Map<number, StorageSpaceInfo>()
     for (const space of spaces) {
       if (space.destinationId !== null) {
@@ -1048,7 +1048,7 @@ async function openEditDestination(id: number) {
   editingDestinationId.value = id
   try {
     const response = await storageDestinationsApi.get(id)
-    const destination = response.data
+    const destination = response
     if (!destination) return
     originalDestination.value = destination
 
@@ -1246,7 +1246,7 @@ async function loadDiagnostics() {
   loadingDiagnostics.value = true
   try {
     const response = await systemApi.diagnostics()
-    diagnostics.value = response.data ?? null
+    diagnostics.value = response
   } catch (error) {
     notify(error instanceof ApiError ? error.message : 'Erro ao listar diagnósticos', 'error')
   } finally {

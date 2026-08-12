@@ -12,18 +12,16 @@
 //!    unknown e-mail and the controller answers the same either way.
 
 use loco_rs::hash;
+use loco_rs::model::query::{PageResponse, PaginationQuery};
 use loco_rs::prelude::*;
 use sea_orm::{
     ActiveValue::Set, ColumnTrait, Condition, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder,
-    QuerySelect,
 };
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use validator::{Validate, ValidationErrors};
+use validator::Validate;
 
 use crate::models::email;
-use crate::models::validation::{finish, required_email, required_text};
-use crate::views::pagination::PageRequest;
 
 pub use super::_entities::users::{ActiveModel, Column, Entity, Model};
 
@@ -97,102 +95,72 @@ static DUMMY_HASH: std::sync::LazyLock<String> = std::sync::LazyLock::new(|| {
 
 /// Body of `POST /api/auth/register`, as it arrives from the client.
 ///
-/// Every field is `Option` on purpose: a body without `email` has to become
-/// `{"field":"email","rule":"required"}`, not a bare deserialisation failure
-/// with no detail.
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+/// Every field is `Option` on purpose: a body without `email` has to fail as
+/// `{"email":[{"code":"required"}]}`, naming the field, not as a bare
+/// deserialisation error that says only "invalid body".
+#[derive(Debug, Clone, Default, Deserialize, Serialize, Validate)]
 pub struct RegisterParams {
     #[serde(default, rename = "fullName")]
+    #[validate(length(max = 100, message = "O nome deve ter no máximo 100 caracteres."))]
     pub full_name: Option<String>,
     #[serde(default)]
+    #[validate(required(message = "Informe o e-mail."))]
+    #[validate(email(message = "E-mail inválido."))]
     pub email: Option<String>,
     #[serde(default)]
+    #[validate(required(message = "Informe a senha."))]
+    #[validate(length(
+        min = 8,
+        max = 32,
+        message = "A senha deve ter entre 8 e 32 caracteres."
+    ))]
     pub password: Option<String>,
     #[serde(default, rename = "bootstrapToken")]
+    #[validate(length(max = 255, message = "Token de bootstrap longo demais."))]
     pub bootstrap_token: Option<String>,
 }
 
 /// Body of `POST /api/auth/login`.
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize, Validate)]
 pub struct LoginParams {
     #[serde(default)]
+    #[validate(required(message = "Informe o e-mail."))]
+    #[validate(email(message = "E-mail inválido."))]
     pub email: Option<String>,
+    // No length bound: rejecting by length here would answer "invalid payload"
+    // to a wrong password, and would lock out anyone whose password predates
+    // the current range.
     #[serde(default)]
+    #[validate(required(message = "Informe a senha."))]
     pub password: Option<String>,
 }
 
 /// Body of `POST /api/auth/forgot`.
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize, Validate)]
 pub struct ForgotParams {
     #[serde(default)]
+    #[validate(required(message = "Informe o e-mail."))]
+    #[validate(email(message = "E-mail inválido."))]
     pub email: Option<String>,
 }
 
 /// Body of `POST /api/auth/reset`.
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize, Validate)]
 pub struct ResetParams {
     #[serde(default)]
+    #[validate(required(message = "Token ausente."))]
+    #[validate(length(min = 1, max = 255, message = "Token inválido."))]
     pub token: Option<String>,
+    // Same range the registration enforces: a reset must not be a way to set a
+    // password the sign-up form would have refused.
     #[serde(default)]
+    #[validate(required(message = "Informe a senha."))]
+    #[validate(length(
+        min = 8,
+        max = 32,
+        message = "A senha deve ter entre 8 e 32 caracteres."
+    ))]
     pub password: Option<String>,
-}
-
-impl Validate for RegisterParams {
-    fn validate(&self) -> std::result::Result<(), ValidationErrors> {
-        let mut errors = ValidationErrors::new();
-
-        if let Some(full_name) = self.full_name.as_ref() {
-            required_text(&mut errors, "fullName", Some(full_name), 0, 100);
-        }
-        required_email(&mut errors, self.email.as_ref());
-        required_text(&mut errors, "password", self.password.as_ref(), 8, 32);
-        if let Some(token) = self.bootstrap_token.as_ref() {
-            required_text(&mut errors, "bootstrapToken", Some(token), 0, 255);
-        }
-
-        finish(errors)
-    }
-}
-
-impl Validate for LoginParams {
-    fn validate(&self) -> std::result::Result<(), ValidationErrors> {
-        let mut errors = ValidationErrors::new();
-
-        required_email(&mut errors, self.email.as_ref());
-        // No length bound: rejecting by length here would turn a wrong
-        // credential (400) into a validation failure (422), and would lock out
-        // anyone whose password predates the current range.
-        required_text(
-            &mut errors,
-            "password",
-            self.password.as_ref(),
-            1,
-            usize::MAX,
-        );
-
-        finish(errors)
-    }
-}
-
-impl Validate for ForgotParams {
-    fn validate(&self) -> std::result::Result<(), ValidationErrors> {
-        let mut errors = ValidationErrors::new();
-        required_email(&mut errors, self.email.as_ref());
-        finish(errors)
-    }
-}
-
-impl Validate for ResetParams {
-    fn validate(&self) -> std::result::Result<(), ValidationErrors> {
-        let mut errors = ValidationErrors::new();
-
-        required_text(&mut errors, "token", self.token.as_ref(), 1, 255);
-        // Same range the registration enforces: a reset must not be a way to
-        // set a password the sign-up form would have refused.
-        required_text(&mut errors, "password", self.password.as_ref(), 8, 32);
-
-        finish(errors)
-    }
 }
 
 impl RegisterParams {
@@ -394,23 +362,17 @@ impl Model {
     /// Fails when either query cannot be executed.
     pub async fn list_page(
         db: &impl ConnectionTrait,
-        page: PageRequest,
+        page: &PaginationQuery,
         is_active: Option<bool>,
-    ) -> Result<(Vec<Self>, u64)> {
+    ) -> Result<PageResponse<Self>> {
         let filter = Condition::all().add_option(is_active.map(|value| Column::IsActive.eq(value)));
-
-        let total = Entity::find().filter(filter.clone()).count(db).await?;
 
         let rows = Entity::find()
             .filter(filter)
             .order_by_desc(Column::CreatedAt)
-            .order_by_desc(Column::Id)
-            .offset(page.offset())
-            .limit(page.per_page)
-            .all(db)
-            .await?;
+            .order_by_desc(Column::Id);
 
-        Ok((rows, total))
+        query::fetch_page(db, rows, page).await
     }
 
     /// Flips `is_active` and returns the updated record.
@@ -487,14 +449,16 @@ mod tests {
 
     #[test]
     fn enforces_the_password_length_range() {
-        for (password, expected) in [("1234567", "minLength"), (&"a".repeat(33), "maxLength")] {
+        // Um codigo so' para os dois lados: e' o que o
+        // emite, e a mensagem e' quem distingue curta demais de longa demais.
+        for password in ["1234567", &"a".repeat(33)] {
             let params = RegisterParams {
                 password: Some(password.to_string()),
                 ..valid_register()
             };
             assert_eq!(
                 errors_of(&params),
-                vec![("password".to_string(), expected.to_string())],
+                vec![("password".to_string(), "length".to_string())],
                 "senha {password:?}"
             );
         }
@@ -536,7 +500,7 @@ mod tests {
         };
         assert_eq!(
             errors_of(&short),
-            vec![("password".to_string(), "minLength".to_string())]
+            vec![("password".to_string(), "length".to_string())]
         );
     }
 

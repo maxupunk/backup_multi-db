@@ -1,40 +1,28 @@
 //! `/api/docker` — Docker Manager e diagnósticos (Fase 9).
 
-use axum::body::{Body, Bytes};
+use axum::body::Body;
 use axum::http::{header, StatusCode};
 use axum::response::{IntoResponse, Response};
 use loco_rs::prelude::*;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::controllers::json_body;
-use crate::controllers::middlewares::limiters::{enforce, Limiters};
-use crate::controllers::Auth;
+use crate::controllers::middlewares::limiters::Limiters;
+use crate::controllers::{
+    bad_request, conflict, not_found, unprocessable, validation_failed, Auth,
+};
 use crate::models::docker::{self, ContainerAction, DockerError, LogFilters};
 use crate::models::docker_diagnostics;
 use crate::models::storage_destinations::Model as StorageDestination;
-use crate::views::errors::ApiError;
 
-type Reply = std::result::Result<Response, ApiError>;
-
+/// Listagem de um recurso do Docker.
+///
+/// `available` sobrevive a' saida dos envelopes porque nao e' decoracao: sem a
+/// Engine acessivel, a rota responde **200 com lista vazia** e este campo e' o
+/// unico jeito de a interface distinguir "nao ha' containers" de "nao consigo
+/// falar com o Docker". As duas situacoes pedem telas diferentes.
 #[derive(Debug, Serialize)]
-struct StatusData {
-    available: bool,
-}
-#[derive(Debug, Serialize)]
-struct StatusEnvelope {
-    success: bool,
-    available: bool,
-    data: StatusData,
-}
-#[derive(Debug, Serialize)]
-struct DataEnvelope<T: Serialize> {
-    success: bool,
-    data: T,
-}
-#[derive(Debug, Serialize)]
-struct AvailableEnvelope<T: Serialize> {
-    success: bool,
+struct Listing<T: Serialize> {
     available: bool,
     data: T,
 }
@@ -59,7 +47,7 @@ pub struct LogsQuery {
 }
 #[derive(Debug, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
-struct NetworkParams {
+pub struct NetworkParams {
     name: Option<String>,
     driver: Option<String>,
     container_id: Option<String>,
@@ -67,7 +55,7 @@ struct NetworkParams {
 }
 #[derive(Debug, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
-struct DiagnosticParams {
+pub struct DiagnosticParams {
     tool: Option<String>,
     target: Option<String>,
     port: Option<u16>,
@@ -75,77 +63,58 @@ struct DiagnosticParams {
     timeout_ms: Option<u64>,
 }
 
-fn engine_error(error: DockerError) -> ApiError {
+fn engine_error(error: DockerError) -> Error {
     match error {
-        DockerError::Validation(message) => ApiError::bad_request(message),
-        DockerError::VolumeInUse { message, .. } => ApiError::Controller {
-            status: StatusCode::CONFLICT,
-            message,
-            error: None,
-        },
-        DockerError::Unavailable | DockerError::Engine => {
-            ApiError::from(loco_rs::Error::Message(error.to_string()))
-        }
+        DockerError::Validation(message) => bad_request(message),
+        DockerError::VolumeInUse { message, .. } => conflict(message),
+        DockerError::Unavailable | DockerError::Engine => Error::Message(error.to_string()),
     }
 }
 
 async fn list_or_empty(
     operation: impl std::future::Future<Output = Result<Value, DockerError>>,
-) -> Reply {
+) -> Result<Response> {
     if !docker::status().await.available {
-        return Ok(axum::Json(AvailableEnvelope {
-            success: true,
+        return format::json(Listing {
             available: false,
             data: Vec::<Value>::new(),
-        })
-        .into_response());
+        });
     }
-    Ok(axum::Json(AvailableEnvelope {
-        success: true,
+
+    format::json(Listing {
         available: true,
         data: operation.await.map_err(engine_error)?,
     })
-    .into_response())
 }
 
 /// `GET /api/docker/status`.
 #[debug_handler]
-pub async fn status(State(_ctx): State<AppContext>, _session: Auth) -> Reply {
+pub async fn status(State(_ctx): State<AppContext>, _session: Auth) -> Result<Response> {
     let status = docker::status().await;
-    Ok(axum::Json(StatusEnvelope {
-        success: true,
-        available: status.available,
-        data: StatusData {
-            available: status.available,
-        },
-    })
-    .into_response())
+
+    format::json(data!({ "available": status.available }))
 }
 
 /// `GET /api/docker/environment`, used internally by discovery and useful to diagnose socket mounting.
 #[debug_handler]
-pub async fn environment(State(_ctx): State<AppContext>, _session: Auth) -> Reply {
-    Ok(axum::Json(DataEnvelope {
-        success: true,
-        data: docker::environment().await,
-    })
-    .into_response())
+pub async fn environment(State(_ctx): State<AppContext>, _session: Auth) -> Result<Response> {
+    format::json(docker::environment().await)
 }
 
 #[debug_handler]
-pub async fn list_containers(State(_ctx): State<AppContext>, _session: Auth) -> Reply {
+pub async fn list_containers(State(_ctx): State<AppContext>, _session: Auth) -> Result<Response> {
     list_or_empty(docker::list_containers()).await
 }
 #[debug_handler]
-pub async fn list_volumes(State(_ctx): State<AppContext>, _session: Auth) -> Reply {
+pub async fn list_volumes(State(_ctx): State<AppContext>, _session: Auth) -> Result<Response> {
     list_or_empty(docker::list_volumes()).await
 }
 #[debug_handler]
-pub async fn list_networks(State(_ctx): State<AppContext>, _session: Auth) -> Reply {
+pub async fn list_networks(State(_ctx): State<AppContext>, _session: Auth) -> Result<Response> {
     list_or_empty(docker::list_networks()).await
 }
 #[debug_handler]
-pub async fn list_images(State(_ctx): State<AppContext>, _session: Auth) -> Reply {
+pub async fn list_images(State(_ctx): State<AppContext>, _session: Auth) -> Result<Response> {
     list_or_empty(docker::list_images()).await
 }
 
@@ -154,65 +123,47 @@ pub async fn inspect_container(
     State(_ctx): State<AppContext>,
     _session: Auth,
     Path(id): Path<String>,
-) -> Reply {
-    Ok(axum::Json(DataEnvelope {
-        success: true,
-        data: docker::inspect_container(&id).await.map_err(engine_error)?,
-    })
-    .into_response())
+) -> Result<Response> {
+    format::json(docker::inspect_container(&id).await.map_err(engine_error)?)
 }
 #[debug_handler]
 pub async fn inspect_volume(
     State(_ctx): State<AppContext>,
     _session: Auth,
     Path(name): Path<String>,
-) -> Reply {
-    Ok(axum::Json(DataEnvelope {
-        success: true,
-        data: docker::inspect_volume(&name).await.map_err(engine_error)?,
-    })
-    .into_response())
+) -> Result<Response> {
+    format::json(docker::inspect_volume(&name).await.map_err(engine_error)?)
 }
 #[debug_handler]
 pub async fn inspect_network(
     State(_ctx): State<AppContext>,
     _session: Auth,
     Path(id): Path<String>,
-) -> Reply {
-    Ok(axum::Json(DataEnvelope {
-        success: true,
-        data: docker::inspect_network(&id).await.map_err(engine_error)?,
-    })
-    .into_response())
+) -> Result<Response> {
+    format::json(docker::inspect_network(&id).await.map_err(engine_error)?)
 }
 #[debug_handler]
 pub async fn inspect_image(
     State(_ctx): State<AppContext>,
     _session: Auth,
     Path(id): Path<String>,
-) -> Reply {
-    Ok(axum::Json(DataEnvelope {
-        success: true,
-        data: docker::inspect_image(&id).await.map_err(engine_error)?,
-    })
-    .into_response())
+) -> Result<Response> {
+    format::json(docker::inspect_image(&id).await.map_err(engine_error)?)
 }
 
-async fn container_action(id: String, action: ContainerAction) -> Reply {
-    Ok(axum::Json(DataEnvelope {
-        success: true,
-        data: docker::container_action(&id, action)
+async fn container_action(id: String, action: ContainerAction) -> Result<Response> {
+    format::json(
+        docker::container_action(&id, action)
             .await
             .map_err(engine_error)?,
-    })
-    .into_response())
+    )
 }
 #[debug_handler]
 pub async fn start_container(
     State(_ctx): State<AppContext>,
     _session: Auth,
     Path(id): Path<String>,
-) -> Reply {
+) -> Result<Response> {
     container_action(id, ContainerAction::Start).await
 }
 #[debug_handler]
@@ -220,7 +171,7 @@ pub async fn stop_container(
     State(_ctx): State<AppContext>,
     _session: Auth,
     Path(id): Path<String>,
-) -> Reply {
+) -> Result<Response> {
     container_action(id, ContainerAction::Stop).await
 }
 #[debug_handler]
@@ -228,7 +179,7 @@ pub async fn restart_container(
     State(_ctx): State<AppContext>,
     _session: Auth,
     Path(id): Path<String>,
-) -> Reply {
+) -> Result<Response> {
     container_action(id, ContainerAction::Restart).await
 }
 #[debug_handler]
@@ -237,7 +188,7 @@ pub async fn remove_container(
     _session: Auth,
     Path(id): Path<String>,
     Query(query): Query<ForceQuery>,
-) -> Reply {
+) -> Result<Response> {
     container_action(
         id,
         ContainerAction::Remove {
@@ -253,7 +204,7 @@ pub async fn container_logs(
     _session: Auth,
     Path(id): Path<String>,
     Query(query): Query<LogsQuery>,
-) -> Reply {
+) -> Result<Response> {
     let filters = LogFilters {
         tail: query.tail.unwrap_or_else(|| "200".into()),
         since: query.since.unwrap_or_default(),
@@ -261,17 +212,15 @@ pub async fn container_logs(
         timestamps: matches!(query.timestamps.as_deref(), Some("true") | Some("1")),
     };
     if filters.since > 0 && filters.until > 0 && filters.since > filters.until {
-        return Err(ApiError::bad_request(
+        return Err(bad_request(
             "O parâmetro since deve ser menor ou igual ao parâmetro until.",
         ));
     }
-    Ok(axum::Json(DataEnvelope {
-        success: true,
-        data: docker::container_logs(&id, filters)
+    format::json(
+        docker::container_logs(&id, filters)
             .await
             .map_err(engine_error)?,
-    })
-    .into_response())
+    )
 }
 
 /// Limpa logs quando o diretório do Docker foi montado no backend.
@@ -280,14 +229,12 @@ pub async fn clear_container_logs(
     State(_ctx): State<AppContext>,
     _session: Auth,
     Path(id): Path<String>,
-) -> Reply {
-    Ok(axum::Json(DataEnvelope {
-        success: true,
-        data: docker::clear_container_logs(&id)
+) -> Result<Response> {
+    format::json(
+        docker::clear_container_logs(&id)
             .await
             .map_err(engine_error)?,
-    })
-    .into_response())
+    )
 }
 
 #[debug_handler]
@@ -296,14 +243,12 @@ pub async fn remove_volume(
     _session: Auth,
     Path(name): Path<String>,
     Query(query): Query<ForceQuery>,
-) -> Reply {
-    Ok(axum::Json(DataEnvelope {
-        success: true,
-        data: docker::remove_volume(&name, query.enabled())
+) -> Result<Response> {
+    format::json(
+        docker::remove_volume(&name, query.enabled())
             .await
             .map_err(engine_error)?,
-    })
-    .into_response())
+    )
 }
 /// Arquivo temporario que se auto-remove quando o stream termina ou e' dropado.
 struct DeletingFile {
@@ -341,7 +286,7 @@ pub async fn export_volume(
     State(_ctx): State<AppContext>,
     _session: Auth,
     Path(name): Path<String>,
-) -> Reply {
+) -> Result<Response> {
     let (temp_path, file_name) = crate::models::docker_volume::export_to_temp_file(&name)
         .await
         .map_err(engine_error)?;
@@ -370,7 +315,7 @@ pub async fn export_volume(
 
 #[derive(Debug, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
-struct BackupVolumeBody {
+pub struct BackupVolumeBody {
     storage_id: Option<i64>,
 }
 
@@ -379,83 +324,78 @@ pub async fn backup_volume(
     State(ctx): State<AppContext>,
     _session: Auth,
     Path(name): Path<String>,
-    body: Bytes,
-) -> Reply {
-    let params: BackupVolumeBody = json_body(&body)?;
+    Json(params): Json<BackupVolumeBody>,
+) -> Result<Response> {
     let Some(storage_id) = params.storage_id else {
-        return Err(ApiError::bad_request("storageId é obrigatório"));
+        return Err(bad_request("storageId é obrigatório"));
     };
 
     let destination = StorageDestination::find_one(&ctx.db, storage_id)
         .await?
-        .ok_or_else(|| ApiError::not_found("Destino de armazenamento não encontrado"))?;
+        .ok_or_else(|| not_found("Destino de armazenamento não encontrado"))?;
 
     let outcome = crate::models::docker_volume::backup_to_storage(&ctx, &name, &destination)
         .await
         .map_err(engine_error)?;
 
-    Ok(axum::Json(DataEnvelope {
-        success: true,
-        data: serde_json::json!({
-            "fileName": outcome.file_name,
-            "relativePath": outcome.relative_path,
-        }),
-    })
-    .into_response())
+    format::json(serde_json::json!({
+        "fileName": outcome.file_name,
+        "relativePath": outcome.relative_path,
+    }))
 }
 
 #[debug_handler]
-pub async fn create_network(State(_ctx): State<AppContext>, _session: Auth, body: Bytes) -> Reply {
-    let params: NetworkParams = json_body(&body)?;
+pub async fn create_network(
+    State(_ctx): State<AppContext>,
+    _session: Auth,
+    Json(params): Json<NetworkParams>,
+) -> Result<Response> {
     let name = params
         .name
         .filter(|name| !name.trim().is_empty())
-        .ok_or_else(|| ApiError::bad_request("Nome da rede é obrigatório."))?;
-    Ok(axum::Json(DataEnvelope {
-        success: true,
-        data: docker::create_network(
+        .ok_or_else(|| bad_request("Nome da rede é obrigatório."))?;
+    format::json(
+        docker::create_network(
             name.trim().into(),
             params.driver.unwrap_or_else(|| "bridge".into()),
         )
         .await
         .map_err(engine_error)?,
-    })
-    .into_response())
+    )
 }
-async fn network_connection(id: String, body: Bytes, disconnect: bool) -> Reply {
-    let params: NetworkParams = json_body(&body)?;
+async fn network_connection(
+    id: String,
+    params: NetworkParams,
+    disconnect: bool,
+) -> Result<Response> {
     let container = params
         .container_id
         .filter(|value| !value.trim().is_empty())
-        .ok_or_else(|| ApiError::bad_request("containerId é obrigatório."))?;
+        .ok_or_else(|| bad_request("containerId é obrigatório."))?;
     let data = if disconnect {
         docker::disconnect_network(&id, container, params.force.unwrap_or(false)).await
     } else {
         docker::connect_network(&id, container).await
     };
-    Ok(axum::Json(DataEnvelope {
-        success: true,
-        data: data.map_err(engine_error)?,
-    })
-    .into_response())
+    format::json(data.map_err(engine_error)?)
 }
 #[debug_handler]
 pub async fn connect_network(
     State(_ctx): State<AppContext>,
     _session: Auth,
     Path(id): Path<String>,
-    body: Bytes,
-) -> Reply {
-    network_connection(id, body, false).await
+    Json(params): Json<NetworkParams>,
+) -> Result<Response> {
+    network_connection(id, params, false).await
 }
 #[debug_handler]
 pub async fn disconnect_network(
     State(_ctx): State<AppContext>,
     _session: Auth,
     Path(id): Path<String>,
-    body: Bytes,
-) -> Reply {
-    network_connection(id, body, true).await
+    Json(params): Json<NetworkParams>,
+) -> Result<Response> {
+    network_connection(id, params, true).await
 }
 
 #[debug_handler]
@@ -464,41 +404,35 @@ pub async fn remove_image(
     _session: Auth,
     Path(id): Path<String>,
     Query(query): Query<ForceQuery>,
-) -> Reply {
-    Ok(axum::Json(DataEnvelope {
-        success: true,
-        data: docker::remove_image(&id, query.enabled())
+) -> Result<Response> {
+    format::json(
+        docker::remove_image(&id, query.enabled())
             .await
             .map_err(engine_error)?,
-    })
-    .into_response())
+    )
 }
 #[debug_handler]
-pub async fn prune_images(State(_ctx): State<AppContext>, _session: Auth) -> Reply {
-    Ok(axum::Json(DataEnvelope {
-        success: true,
-        data: docker::prune_images().await.map_err(engine_error)?,
-    })
-    .into_response())
+pub async fn prune_images(State(_ctx): State<AppContext>, _session: Auth) -> Result<Response> {
+    format::json(docker::prune_images().await.map_err(engine_error)?)
 }
 
 #[debug_handler]
-pub async fn start_diagnostic(State(ctx): State<AppContext>, _session: Auth, body: Bytes) -> Reply {
+pub async fn start_diagnostic(
+    State(ctx): State<AppContext>,
+    _session: Auth,
+    Json(params): Json<DiagnosticParams>,
+) -> Result<Response> {
     use validator::ValidationErrors;
 
-    let params: DiagnosticParams = json_body(&body)?;
-
-    // A validacao emite o shape de erro do VineJS (422 com `errors[]`), nao o
-    // envelope de controller, para bater com o contrato da suite.
+    // Validado a mao, e nao por `JsonValidateWithMessage`: a obrigatoriedade de
+    // `port` depende de `tool`, e nao ha' atributo para "obrigatorio quando o
+    // irmao vale `port_scan`".
     let mut errors = ValidationErrors::new();
     let tool = params.tool.as_deref().unwrap_or_default().to_string();
     if !matches!(tool.as_str(), "ping" | "curl" | "port_scan") {
         errors.add(
             "tool",
-            crate::models::validation::rule(
-                "enum",
-                "Ferramenta de diagnóstico não suportada".into(),
-            ),
+            crate::models::validation::rule("enum", "Ferramenta de diagnóstico não suportada"),
         );
     }
     let target = params
@@ -510,23 +444,16 @@ pub async fn start_diagnostic(State(ctx): State<AppContext>, _session: Auth, bod
     if target.is_empty() || target.len() > 253 || target.chars().any(char::is_whitespace) {
         errors.add(
             "target",
-            crate::models::validation::rule(
-                "required",
-                "Destino do diagnóstico é obrigatório".into(),
-            ),
+            crate::models::validation::rule("required", "Destino do diagnóstico é obrigatório"),
         );
     }
     if tool == "port_scan" && params.port.is_none() {
         errors.add(
             "port",
-            crate::models::validation::rule(
-                "required",
-                "Porta é obrigatória para scan de porta".into(),
-            ),
+            crate::models::validation::rule("required", "Porta é obrigatória para scan de porta"),
         );
     }
-    crate::models::validation::finish(errors)
-        .map_err(|errors| ApiError::from_validation_errors(&errors))?;
+    crate::models::validation::finish(errors).map_err(validation_failed)?;
 
     let job = docker_diagnostics::start(
         &ctx,
@@ -539,36 +466,24 @@ pub async fn start_diagnostic(State(ctx): State<AppContext>, _session: Auth, bod
         },
     )
     .await
-    .map_err(ApiError::unprocessable)?;
-    Ok((
-        StatusCode::ACCEPTED,
-        axum::Json(DataEnvelope {
-            success: true,
-            data: job,
-        }),
-    )
-        .into_response())
+    .map_err(unprocessable)?;
+    format::render().status(202).json(job)
 }
 #[debug_handler]
 pub async fn diagnostic_status(
     State(ctx): State<AppContext>,
     _session: Auth,
     Path(id): Path<String>,
-) -> Reply {
+) -> Result<Response> {
     let job = docker_diagnostics::get(&ctx, &id)
-        .await
-        .map_err(ApiError::from)?
-        .ok_or_else(|| ApiError::not_found("Job de diagnóstico não encontrado"))?;
-    Ok(axum::Json(DataEnvelope {
-        success: true,
-        data: job,
-    })
-    .into_response())
+        .await?
+        .ok_or_else(|| not_found("Job de diagnóstico não encontrado"))?;
+    format::json(job)
 }
 
 /// Rotas da Fase 9. Operações mutáveis levam o limitador `strict`, idêntico ao legado.
 pub fn routes(limiters: &Limiters) -> Routes {
-    let strict = axum::middleware::from_fn_with_state(limiters.strict(), enforce);
+    let strict = limiters.strict();
     Routes::new()
         .prefix("/api/docker")
         .add("/status", get(status))

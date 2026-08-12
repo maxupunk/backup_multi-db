@@ -1,0 +1,89 @@
+# Verificação do backend Rust/Loco e do frontend Vue.
+#
+# Substitui a antiga `contract-tests.yml`, que comparava as respostas contra os
+# golden files gravados do backend AdonisJS. Aquele contrato deixou de existir
+# na v2.0.0, e um job que o verificasse estaria testando uma API que já não é a
+# desta aplicação.
+#
+# O job de bindings existe pelo mesmo motivo que os golden existiam: sem ele,
+# um campo renomeado no Rust vira `undefined` na tela em vez de erro de
+# compilação. A diferença é que agora a fonte da verdade é o código, e não um
+# arquivo gravado que alguém precisa lembrar de regravar.
+
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          components: rustfmt, clippy
+
+      - name: Formatação
+        working-directory: backend
+        run: cargo fmt --all --check
+
+      - name: Lint
+        working-directory: backend
+        run: cargo clippy --all-targets -- -D warnings
+
+      # `minio_and_sftp_adapters_work_against_the_compose_services` precisa dos
+      # serviços do compose e é excluído aqui de propósito: ele verifica os
+      # adaptadores de storage contra servidores reais, o que é trabalho de um
+      # job de integração, não do de unidade.
+      - name: Testes
+        working-directory: backend
+        run: cargo test -- --skip minio_and_sftp_adapters
+
+  bindings:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+
+      - name: Regera os bindings TypeScript
+        working-directory: backend
+        run: cargo test --lib dtos
+
+      # Um binding fora de data **quebra o build**, que é a garantia que a spec
+      # OpenAPI removida não dava: uma spec desatualizada mente em silêncio.
+      - name: Os bindings commitados estão em dia?
+        run: git diff --exit-code -- frontend/src/bindings
+
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Dependências
+        working-directory: frontend
+        run: npm ci
+
+      - name: Lint
+        working-directory: frontend
+        run: npx eslint .
+
+      - name: Tipos e build
+        working-directory: frontend
+        run: npm run build

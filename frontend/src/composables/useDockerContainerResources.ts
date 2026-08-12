@@ -1,6 +1,6 @@
 import type { DockerContainerResourceOverview } from '@/types/api'
 import { onMounted, onUnmounted, ref, type Ref } from 'vue'
-import { transmit } from '@/plugins/transmit'
+import { subscribe } from '@/services/events'
 import { systemApi } from '@/services/api'
 
 type UseDockerContainerResourcesOptions = {
@@ -35,7 +35,7 @@ export function useDockerContainerResources(
   const isConnected = ref(false)
 
   let fallbackIntervalHandle: ReturnType<typeof setInterval> | null = null
-  let subscription: ReturnType<typeof transmit.subscription> | null = null
+  let unsubscribe: (() => void) | null = null
 
   async function refresh(): Promise<void> {
     if (loading.value) {
@@ -46,7 +46,7 @@ export function useDockerContainerResources(
 
     try {
       const response = await systemApi.containerResources()
-      overview.value = response.data ?? null
+      overview.value = response
       error.value = null
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'Erro ao carregar recursos dos contêineres'
@@ -58,19 +58,11 @@ export function useDockerContainerResources(
   onMounted(async () => {
     await refresh()
 
-    try {
-      subscription = transmit.subscription(CHANNEL)
-      await subscription.create()
+    unsubscribe = subscribe(CHANNEL, (data) => {
+      overview.value = data as DockerContainerResourceOverview
+      error.value = null
       isConnected.value = true
-
-      subscription.onMessage<DockerContainerResourceOverview>((data) => {
-        overview.value = data
-        error.value = null
-      })
-    } catch (err) {
-      error.value = err instanceof Error ? err.message : 'Erro ao conectar no canal de recursos Docker'
-      isConnected.value = false
-    }
+    })
 
     if (enableFallbackPolling) {
       fallbackIntervalHandle = setInterval(() => {
@@ -85,16 +77,9 @@ export function useDockerContainerResources(
       fallbackIntervalHandle = null
     }
 
-    if (subscription) {
-      try {
-        await subscription.delete()
-      } catch {
-        // noop
-      } finally {
-        subscription = null
-        isConnected.value = false
-      }
-    }
+    unsubscribe?.()
+    unsubscribe = null
+    isConnected.value = false
   })
 
   return {

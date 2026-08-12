@@ -20,17 +20,19 @@
 | 2 — Autenticação JWT | ✅ concluída |
 | 3 — Hash argon2 + `forgot`/`reset` | ✅ concluída |
 | 4 — Criptografia padrão | ✅ concluída |
-| 5 a 10 | ⏳ pendentes (alguns itens saíram por tabela — marcados abaixo) |
+| 5 — Contrato HTTP | ✅ concluída (backend **e** frontend) |
+| 6 — Middlewares | ✅ concluída |
+| 7 — Eventos SSE próprios | ✅ concluída — **nenhum `@adonisjs/*` no repositório** |
+| 8 — Contrato tipado em `dtos/` | ⚠️ parcial — as formas comuns saem geradas e o CI as verifica; as views por recurso, não |
+| 9 — Configuração e limpeza final | ⚠️ parcial — falta a varredura das menções ao Adonis |
+| 10 — Suíte de testes | ⏳ pendente |
 
-**Ponto de corte.** É exatamente o corte que a §6 sugere: núcleo (schema, auth,
-hash, cifra) já é Loco nativo e a API ainda responde no formato antigo
-(`{success, data}`, paginação do `SimplePaginator`, duas famílias de erro).
-
-**Portões de qualidade no fim da Fase 4:** `cargo fmt`, `cargo clippy
---all-targets -- -D warnings` e `cargo test` verdes — 448 testes de unidade e
-155 de request. O único vermelho é
+**Portões de qualidade agora:** `cargo fmt`, `cargo clippy --all-targets -- -D
+warnings` e `cargo test` verdes — **414 testes de unidade e 155 de request** —,
+mais `npm run type-check` e `npm run build` do frontend. O único vermelho é
 `minio_and_sftp_adapters_work_against_the_compose_services`, que exige o MinIO e
-o SFTP do `docker-compose.test.yml` de pé; é falha de ambiente, não de código.
+o SFTP do `docker-compose.test.yml` de pé; é falha de ambiente, não de código, e
+o novo `.github/workflows/ci.yml` o exclui explicitamente.
 
 **O que quebrou de propósito e precisa de ação operacional:**
 
@@ -42,6 +44,34 @@ o SFTP do `docker-compose.test.yml` de pé; é falha de ambiente, não de códig
    `openssl rand -base64 48 | tr -d '\n'`.
 5. **`AUTH_ACCESS_TOKEN_EXPIRES_IN` deixou de existir.** A vida do token agora é
    `JWT_EXPIRATION`, em segundos.
+6. **Toda resposta da API mudou de forma.** Sem envelope, sem `success`, uma só
+   família de erro, paginação em `{results, pagination}`. Qualquer cliente que
+   não seja este frontend precisa ser reescrito — ver a Fase 5.
+7. **`?limit=` virou `?page_size=`** nas listagens. O `?limit=` do
+   `GET /api/storages/:id/browse` **não** mudou: é o teto de objetos listados,
+   não paginação.
+8. **O limitador de autenticação conta por IP**, não mais por IP+e-mail, e por
+   isso subiu de 5 para 20 por minuto — ver a Fase 6.
+9. **O SSE trocou de endereço e de protocolo:** `GET /api/events?channels=…` no
+   lugar de `/__transmit/*` — ver a Fase 7.
+
+### Dois defeitos encontrados durante a execução
+
+Nenhum dos dois é consequência do roadmap; os dois foram corrigidos.
+
+- **`SSE registry was not initialized` no primeiro tick de métricas.** O
+  `run_app` do Loco executa `before_run` → `initializers[].before_run` →
+  `routes`, e os registros do `shared_store` moravam em `routes`. O
+  inicializador de métricas subia antes deles existirem. Os registros passaram
+  para `Hooks::before_run`, que é onde estado compartilhado pertence — uma
+  função de roteamento não deveria instanciar nada, até porque o
+  `cargo loco routes` a chama só para listar caminhos.
+- **O `JWT_SECRET` default de desenvolvimento nunca funcionou.** O valor no
+  `development.yaml` (`ZGV2LW9ubHktand0LXNlY3JldA`) tem 26 caracteres e faltava
+  o `==` de padding; o `EncodingKey::from_base64_secret` do Loco recusa com
+  "Invalid padding", e a falha só aparecia na primeira tentativa de assinar um
+  token — um 500 no `register`/`login` de qualquer instalação que não exportasse
+  a variável.
 
 ---
 
@@ -53,7 +83,7 @@ No levantamento havia **233 menções ao Adonis em 65 arquivos** de
 algoritmo ou de schema que existe porque o outro backend fazia assim.
 
 Tamanho do território (levantamento original; depois da seta, o estado após as
-fases 0 a 4):
+fases 0 a 9):
 
 | Área | Volume |
 |---|---|
@@ -61,7 +91,7 @@ fases 0 a 4):
 | `backend/tests/` | 5.751 linhas |
 | `backend/migration/src/` | 1.097 linhas → **629**, numa migration só |
 | `contract-tests/` | 6.190 linhas + 63 golden files (a apagar) |
-| Menções ao Adonis em `backend/` | 233 → **192** |
+| Menções ao Adonis em `backend/` | 233 → **136** (mais 19 a VineJS/Lucid e 23 a "golden") |
 
 **O que este roadmap NÃO toca.** O domínio do produto — dump/restore, adapters
 de storage (S3/GCS/Azure/SFTP/local), Docker manager, retenção GFS, agendador,
@@ -76,21 +106,21 @@ e schema.
 
 Cada linha foi verificada no código, não herdada de documento anterior.
 
-A coluna **Estado** foi preenchida depois da execução das fases 0 a 4.
+A coluna **Estado** reflete a execução das fases 0 a 9.
 
 | # | Adaptação | Vira | Estado |
 |---|---|---|---|
 | A | **Token opaco `oat_<id>.<secret>`** com SHA-256 na tabela `auth_access_tokens`, réplica do `DbAccessTokensProvider` | `loco_rs::auth::JWT` | ✅ Fase 2 |
 | B | **scrypt** com parâmetros do `@adonisjs/hash` (`$scrypt$n=16384,r=8,p=1$…`) | `loco_rs::hash` (argon2) | ✅ Fase 3 |
 | C | **AES-256-GCM fora do padrão**: IV de 16 bytes (não 12), chave crua sem KDF, formato `b64(iv):b64(tag):b64(ct)` | `Aes256Gcm` padrão, nonce de 12 bytes, chave derivada | ✅ Fase 4 |
-| D | **Envelope `{success, data}`** em três variantes | payload direto via `format::json` | ⏳ Fase 5 |
-| E | **Duas famílias de erro** — `{errors:[…]}` do VineJS e `{success:false,message}` escrito à mão | `loco_rs::Error` + um shape único | ⏳ Fase 5 (só o 401 já mudou) |
-| F | **Paginação do `SimplePaginator` do Lucid** — 9 chaves em `meta`, com `nextPageUrl` que ignora os filtros | paginação do Loco | ⏳ Fase 5 |
+| D | **Envelope `{success, data}`** em três variantes | payload direto via `format::json` | ✅ Fase 5 |
+| E | **Duas famílias de erro** — `{errors:[…]}` do VineJS e `{success:false,message}` escrito à mão | `loco_rs::Error` + um shape único | ✅ Fase 5 |
+| F | **Paginação do `SimplePaginator` do Lucid** — 9 chaves em `meta`, com `nextPageUrl` que ignora os filtros | paginação do Loco | ✅ Fase 5 — `query::fetch_page` + `Pager` |
 | G | **Timestamp local ingênuo sem fuso** (`2026-08-06T16:49:25.000`) porque o Lucid gravava assim | RFC 3339 em UTC | ✅ antecipado na Fase 1 |
-| H | **Mensagens e nomes de regra do VineJS** replicados à mão, sem `derive` | `validator` com `derive` | ⏳ Fase 5 |
-| I | **Rate limit de janela fixa em memória** reproduzindo `rate-limiter-flexible` | `tower-governor` | ⏳ Fase 6 |
-| J | **`force_json`** — porte do `force_json_response` | deletar | ⏳ Fase 6 |
-| K | **SSE em `/__transmit/*`** com o protocolo do `@adonisjs/transmit` | SSE próprio em `/api/events` | ⏳ Fase 7 |
+| H | **Mensagens e nomes de regra do VineJS** replicados à mão, sem `derive` | `validator` com `derive` | ✅ Fase 5 — `derive` onde a regra é do campo; `impl Validate` onde depende de outro campo ou do banco |
+| I | **Rate limit de janela fixa em memória** reproduzindo `rate-limiter-flexible` | `tower-governor` | ✅ Fase 6 — e a chave do limitador `auth` mudou de (IP, e-mail) para IP |
+| J | **`force_json`** — porte do `force_json_response` | deletar | ✅ Fase 6 — o problema real era o fallback da SPA capturar `/api` |
+| K | **SSE em `/__transmit/*`** com o protocolo do `@adonisjs/transmit` | SSE próprio em `/api/events` | ✅ Fase 7 |
 | L | **Schema espelhando o Knex** — `auth_access_tokens`, `datetime_text`, enums como TEXT+CHECK, `users` sem `pid`/`api_key` | migration inicial única, padrão Loco | ✅ Fase 1 |
 | M | **OpenAPI é o arquivo gravado do Adonis**, embutido com `include_str!` | removido ao fim da Fase 1 (decisão 3) | ✅ rotas e `include_str!` removidos; falta apagar `docs/` |
 | N | **`nodeVersion`** em `/api/system/status` | `runtimeVersion` | ✅ |
@@ -108,10 +138,13 @@ Não são adaptação do Adonis, mas aparecem no mesmo caminho e devem sair junt
   tem default nenhum.
 - ✅ **`mailer.smtp.enable: true`** com `src/mailers/` contendo só `mod.rs` —
   resolvido na Fase 0: existe um `AuthMailer` de verdade.
-- ⏳ **`src/dtos/` tem só `common.rs`**, e o frontend só recebeu dois bindings
-  (`ApiError.ts`, `Page.ts`), enquanto os `views/` montam os shapes à mão. O
-  [AGENTS.md §5](backend/AGENTS.md) manda o contrato tipado ir para `dtos/` com
-  `ts-rs` — continua sendo a Fase 8.
+- ⚠️ **`src/dtos/` tem só `common.rs`.** Os dois bindings antigos (`ApiError.ts`,
+  `Page.ts`) descreviam formas que a API **nunca** teve — `{code, message,
+  details}` e `{items, total, page, per_page}` — e ninguém os importava: eram
+  documentação errada que não quebrava nada por não ser usada. Foram
+  substituídos na Fase 8 pelas cinco formas reais, agora importadas pelo
+  `types/api.ts` e verificadas por teste contra o que o framework serializa. As
+  views por recurso continuam à mão.
 - ✅ **`backend/.github/workflows/ci.yaml`** — removido na Fase 0.
 
 ---
@@ -137,17 +170,17 @@ Fase 1   Schema do zero                                  │  ✅
       │     │                  │        (precisa do mailer)   com a Fase 1)
       └─────┴─────────┬────────┘
                       ▼
-              Fase 5   Contrato HTTP          ◄── próximo
+              Fase 5   Contrato HTTP          ✅
                       │
          ┌────────────┼────────────┐
          ▼            ▼            ▼
-     Fase 6       Fase 7       Fase 8
+     Fase 6       Fase 7       Fase 8      ✅ ✅ ⚠️
    Middlewares      SSE      DTOs/ts-rs
          └────────────┼────────────┘
                       ▼
-              Fase 9   Config e limpeza final
+              Fase 9   Config e limpeza final   ⚠️ falta a varredura
                       ▼
-              Fase 10  Suíte de testes
+              Fase 10  Suíte de testes          ◄── próximo
 ```
 
 ---
@@ -418,95 +451,174 @@ antigo. ✅
 
 ---
 
-## Fase 5 — Contrato HTTP
+## Fase 5 — Contrato HTTP ✅
 
-A fase mais larga: toca todos os controllers e views. É onde o "cheiro de
-Adonis" some da API.
+A fase mais larga: tocou todos os controllers e views. É onde o "cheiro de
+Adonis" sumiu da API.
 
 **Remover**
-- [ ] `src/views/envelope.rs` — `{success, data}` nas três variantes
-- [ ] `src/views/errors.rs` — as duas famílias de erro
-- [ ] `src/views/pagination.rs` — as 9 chaves do `SimplePaginator`, incluindo o
-      `nextPageUrl` que ignora filtros
+- [x] `src/views/envelope.rs` — `{success, data}` nas três variantes
+- [x] `src/views/errors.rs` — as duas famílias de erro
+- [x] `src/views/pagination.rs` — as 9 chaves do `SimplePaginator`, incluindo o
+      `nextPageUrl` que ignorava filtros
 - [x] `src/views/timestamp.rs` — timestamp sem fuso **(feito na Fase 1)**
-- [ ] `src/models/validation.rs` — mensagens e nomes de regra do VineJS
+- [x] `src/models/validation.rs` — mensagens e nomes de regra do VineJS. O
+      arquivo **não** sumiu: sobrou nele o que o `derive` não alcança, e só
+      isso — regra que depende de outro campo (quais chaves de `config` são
+      obrigatórias depende do `provider`) e regra que precisa do banco
+      (unicidade de e-mail). Os códigos agora são os do `validator`
+      (`required`, `length`, `range`, `enum`), e as mensagens estão em português
 
 **Adotar**
-- [ ] `format::json(payload)` direto, sem envelope; status HTTP carrega o
+- [x] `format::json(payload)` direto, sem envelope; o status HTTP carrega o
       sucesso/falha
-- [ ] `loco_rs::Error` como erro de aplicação, com **um** shape de erro
-- [ ] `validator` com `derive` nos `Params` (o motivo de não usar `derive` era
-      reproduzir o texto do VineJS — motivo que morre aqui)
+- [x] `loco_rs::Error` como erro de aplicação, com **um** shape de erro:
+      `{error, description}`, e `{errors: {campo: [...]}}` quando é validação
+- [x] `validator` com `derive` nos `Params` de `users`; os demais mantêm
+      `impl Validate` **porque a regra não é do campo** — está documentado em
+      `models/validation.rs`
 - [x] `chrono` serializando RFC 3339 em UTC; o frontend formata para local
       **(feito na Fase 1)** — `formatDateTimePtBR` já usa
       `new Date(x).toLocaleString`, que lê o deslocamento e renderiza no fuso do
       navegador, então esta parte não exigiu mudança no frontend
-- [ ] Paginação do Loco
+- [x] Paginação do Loco: `query::fetch_page` nos models, `Pager` na resposta
 
-> **Já mudou de shape, mesmo com a Fase 5 pendente:** o 401 das rotas
-> protegidas. Quem responde agora é o extractor do Loco, com
-> `{"error":"unauthorized","description":…}` no lugar de
-> `{"errors":[{"message":"Unauthorized access"}]}`. O `extractErrorMessage` de
-> [api.ts](frontend/src/services/api.ts) já tratava a chave `error`, então o
-> frontend absorveu sem mudança.
+> **Um vazamento encontrado e fechado no caminho.** Os extractors
+> `JsonValidateWithMessage`/`QueryValidateWithMessage` do Loco serializam o mapa
+> `params` do `validator` como está — e o `derive` grava ali o **valor
+> enviado**. Uma senha do tamanho errado voltava dentro do corpo do 400, e daí
+> para o log de acesso, o proxy e o rastreador de erros. Por isso os handlers
+> usam `Json<T>` + `validate()` explícito, passando por
+> `controllers::validation_failed`, que remove `value` e preserva o resto
+> (`min`, `max`, `choices` — o que a tela usa). Há teste que trava isso.
 
-**Quebra:** **toda** resposta da API. 6 arquivos do frontend leem
-`success`/`data`/`lastPage`/`perPage`; [api.ts](frontend/src/services/api.ts) é
-o ponto central de adaptação.
+**Outras decisões desta fase, com o porquê:**
 
-**Pronto quando:** nenhuma resposta contém `success`, os timestamps têm fuso, e
-o frontend consome a API nova sem camada de tradução.
+- **Credencial inválida virou 401**, não mais 400. O 400 era um traço do
+  `E_INVALID_CREDENTIALS`; 401 é o que o status significa.
+- **Falha de validação virou 400**, não mais 422 — é o que o
+  `Error::Validation` do Loco emite, e unificar evitou um terceiro shape.
+- **Backup parcial responde 200**, não mais 422. A requisição fez o que foi
+  pedido: rodou os *n* backups e relata cada um em `backups`, com
+  `successful`/`failed` no topo. Era o único ponto da API em que dados úteis
+  vinham dentro de um corpo de erro.
+- **`PATCH /api/users/:id/status` não devolve mais mensagem**: `isActive` já diz
+  o que aconteceu, e o texto da notificação é da interface, que fala o idioma do
+  usuário.
+- **O erro de provider desconhecido saiu do campo vazio.** Era
+  `{"field":"","rule":"unionGroup"}`; agora é `errors.provider` com a lista de
+  providers aceitos em `params.choices` — que é o que a tela usa para remontar o
+  select.
 
-**Risco:** alto. **Custo:** alto — é a fase que domina o cronograma.
+**Quebra:** **toda** resposta da API. No frontend, 25 arquivos liam
+`success`/`data`/`lastPage`/`perPage`; todos foram convertidos.
+[api.ts](frontend/src/services/api.ts) deixou de desembrulhar envelope — cada
+método devolve o recurso, e não `ApiResponse<T>`.
+
+**Pronto:** nenhuma resposta contém `success`, os timestamps têm fuso, e o
+frontend consome a API nova **sem camada de tradução**. `npm run type-check` e
+`npm run build` verdes. ✅
+
+**Risco:** alto. **Custo:** alto — foi a fase que dominou o cronograma.
 
 ---
 
-## Fase 6 — Middlewares
+## Fase 6 — Middlewares ✅
 
 **Remover**
-- [ ] `src/controllers/middlewares/force_json.rs` — resolve um problema que só
-      existia no Adonis (o handler de exceção devolvendo HTML do Youch). No
-      Loco, `IntoResponse` já sempre emite JSON
-- [ ] `src/controllers/middlewares/rate_limit.rs` e `limiters.rs` — janela fixa
-      em memória, replicando `rate-limiter-flexible` e a ordem dos headers
+- [x] `src/controllers/middlewares/force_json.rs`. Ele remendava **na saída** um
+      problema que estava **na rota**: o fallback do router serve a SPA, então
+      `GET /api/typo` respondia `200 text/html` com a página inteira do Vue. A
+      correção foi um catch-all `/api/{*path}` em `controllers::public`, que
+      devolve 404 em JSON — o `matchit` prefere a rota mais específica, então
+      ele só é alcançado quando nenhuma outra casou
+- [x] `src/controllers/middlewares/rate_limit.rs` — a janela fixa aceitava
+      **duas vezes** o limite em torno da virada do minuto (5 às 12:00:59 e
+      mais 5 às 12:01:00)
 
 **Adotar**
-- [ ] `tower-governor` (janela deslizante, que é o comportamento correto — a
-      janela fixa existia só para bater com o golden gravado)
-- [ ] Os middlewares que o Loco já traz em `server.middlewares` do YAML
+- [x] `tower-governor` (GCRA: um balde de `requests` fichas que repõe uma a cada
+      `duration / requests`, sem virada de janela)
+- [x] Os middlewares que o Loco já traz, ligados no `server.middlewares` do
+      YAML: `catch_panic`, `request_id`, `limit_payload` (512 MB),
+      `secure_headers` (preset `github`). O `fallback` do Loco foi **desligado**
+      — a SPA e o catch-all de `/api` já cobrem os dois casos. Em `test.yaml`
+      ficam todos desligados, com a razão escrita no arquivo
 
-**Quebra:** headers `X-RateLimit-*` e o corpo do 429 mudam.
+**Quebra, e ela é maior do que "headers e corpo do 429":**
 
-**Pronto quando:** `src/controllers/middlewares/` só tem o que o Loco não cobre.
+1. **A chave do limitador `auth` deixou de incluir o e-mail.** O extrator de
+   chave do `tower-governor` só vê as partes da requisição, e o e-mail está no
+   corpo — ler o corpo antes de decidir bloquear era o que tornava o limitador
+   antigo um vetor de ataque por si só (daí o teto de 1 MB que ele carregava).
+   O saldo não é só perda: `5` por `(IP, e-mail)` dava tentativas **ilimitadas**
+   a quem varria uma lista de endereços, porque trocar de e-mail zerava o
+   contador. Agora conta por IP, e por isso o limite subiu de **5 para 20** por
+   minuto — cinco por minuto para um escritório inteiro atrás de um NAT tranca a
+   porta na primeira pessoa que erra a senha duas vezes.
+2. **Só os limitadores de rota escrevem `X-RateLimit-*`.** As camadas do Axum
+   montam a resposta de dentro para fora, então o limitador global — o mais
+   externo — escreveria por último e apagaria o teto anunciado pela rota:
+   `POST /api/auth/login` diria 600 em vez de 20. O global passou a rodar sem
+   cabeçalho. `Retry-After` é escrito à mão e sai nos dois casos.
+3. **O corpo do 429** virou `{"error":"too_many_requests","description":…}`, o
+   mesmo shape de todo erro.
+
+**Pronto:** `src/controllers/middlewares/` tem `layers.rs` (uma camada),
+`limiters.rs` e `origin.rs` — o extractor de IP/agente para a auditoria, que o
+Loco não cobre. ✅
 
 **Risco:** baixo. **Custo:** baixo.
 
 ---
 
-## Fase 7 — Eventos SSE próprios
+## Fase 7 — Eventos SSE próprios ✅
 
 **Remover**
-- [ ] `src/controllers/transmit.rs` — handshake, `uid`, `$$transmit/ping`,
-      `subscribe`/`unsubscribe` do `@adonisjs/transmit`
-- [ ] `@adonisjs/transmit-client` do [frontend/package.json](frontend/package.json#L15)
-- [ ] `frontend/src/plugins/transmit.ts`
+- [x] `src/controllers/transmit.rs` — handshake, `uid`, `$$transmit/ping`,
+      `subscribe`/`unsubscribe`
+- [x] `@adonisjs/transmit-client` do `frontend/package.json` (e do
+      `package-lock.json`)
+- [x] `frontend/src/plugins/transmit.ts` e o proxy `/__transmit` do
+      `vite.config.mts`
 
 **Adotar**
-- [ ] `axum::response::sse` em `/api/events`, com o mesmo `models/sse.rs` por
-      baixo (o broadcast interno não é adaptação — só o protocolo era)
-- [ ] `EventSource` nativo do navegador no frontend
+- [x] `axum::response::sse` em `GET /api/events?channels=a,b,c`. O nome do canal
+      vai no campo `event:` do SSE, que é exatamente o que o `EventSource` usa
+      para despachar por `addEventListener(canal, …)`. Sem handshake, sem `uid`,
+      sem rotas de `subscribe`/`unsubscribe`: quem quer trocar de canal reabre a
+      conexão, e o servidor deixa de ter estado por cliente para envelhecer
+- [x] `EventSource` nativo no frontend, em `services/events.ts` — **uma**
+      conexão para o aplicativo inteiro. O navegador limita ~6 conexões por
+      origem em HTTP/1.1; uma por componente encostaria no teto e as requisições
+      normais ficariam na fila atrás de fluxos que nunca terminam
 
-**Quebra:** notificações em tempo real. Componentes afetados incluem
-`DockerDiagnosticDialog.vue` e `ArchiveProgress.vue`.
+**Duas coisas que precisaram de cuidado:**
 
-**Pronto quando:** nenhuma dependência `@adonisjs/*` no `package.json` do
-frontend — o **último** vínculo com o Adonis no repositório.
+- **A contagem de ouvintes é o que desliga a coleta de métricas.** O poller de
+  recursos só coleta CPU, memória e containers quando há alguém ouvindo o canal.
+  Com o `subscribe`/`unsubscribe` fora, a contagem passou a ser mantida por um
+  guarda com `Drop` (`sse::Listener`): uma conexão que cai sem avisar decrementa
+  do mesmo jeito. Verificado com o servidor de pé — abrir o fluxo faz as
+  métricas começarem a chegar; fechar, pararem.
+- **O teste não usa o `TestServer`.** Ele lê o corpo inteiro antes de devolver a
+  resposta, e um fluxo SSE só termina quando o cliente desconecta — a chamada
+  nunca voltaria. `tests/requests/events.rs` sobe o router num socket efêmero e
+  lê os primeiros bytes, que é o que um `EventSource` faz.
+
+> **Esta rota não exige sessão, e continua não exigindo.** O `EventSource` não
+> permite cabeçalho `Authorization`, e as alternativas (token na query, cookie)
+> têm cada uma o seu custo. O fluxo do `transmit` era aberto e este também é —
+> **não houve regressão**, mas fica registrado como pendência de segurança. É
+> decisão de produto, não efeito colateral de um porte.
+
+**Pronto:** `grep -ri adonis frontend/src frontend/package.json` volta vazio. ✅
 
 **Risco:** médio. **Custo:** médio.
 
 ---
 
-## Fase 8 — Contrato tipado em `dtos/`
+## Fase 8 — Contrato tipado em `dtos/` ⚠️ parcial
 
 Não é remoção de legado: é a regra do próprio [AGENTS.md §5](backend/AGENTS.md)
 que nunca foi cumprida, porque os `views/` estavam ocupados replicando shapes.
@@ -518,15 +630,28 @@ API aceita e devolve. A diferença a favor: uma spec Swagger desatualizada mente
 em silêncio; um binding desatualizado **quebra o build do frontend**.
 
 **Adotar**
-- [ ] Mover o contrato consumido pelo frontend para `src/dtos/` com
-      `#[derive(TS)] #[ts(export, export_to = "../frontend/src/bindings/")]`
-- [ ] `views/` volta a ser só serialização específica de recurso
-- [ ] Frontend passa a importar de `src/bindings/` em vez de tipar à mão
-- [ ] Garantir que a geração dos bindings roda no CI e que um binding fora de
-      data falha o build — sem isso a garantia acima não existe de fato
+- [x] As formas comuns a **toda** resposta em `src/dtos/common.rs`, geradas para
+      `frontend/src/bindings/`: `Paginated<T>`, `PageInfo`, `ApiErrorBody`,
+      `FieldError`, `MessageResponse`
+- [x] Frontend importa de `@/bindings/` em vez de tipar à mão — `types/api.ts`
+      reexporta os cinco
+- [x] O CI regera e reprova binding fora de data
+      (`.github/workflows/ci.yml`, job `bindings`)
+- [ ] As views por recurso (`Connection`, `Backup`, `Storage`, `AuditLog`, …)
+      ainda são tipadas à mão no frontend
 
-**Pronto quando:** todo endpoint consumido pelo frontend tem binding gerado, e
-o CI reprova binding desatualizado.
+> **Por que os DTOs redeclaram tipos que o framework já tem.** `Pager` e
+> `ErrorDetail` são do `loco_rs` e não derivam `TS`; não dá para acrescentar um
+> derive a um tipo de outro crate. A alternativa era o frontend redigitar os
+> campos, que é exatamente o que esta fase existe para acabar. O risco da
+> duplicação — as duas descrições divergirem — é fechado por três testes em
+> `dtos/common.rs` que comparam a struct com o que o framework **de fato**
+> serializa. Uma divergência quebra o build.
+
+**Pronto quando:** todo endpoint consumido pelo frontend tem binding gerado. O
+que falta é mecânico e repetitivo: mover cada `views::*` para `dtos/` com o
+derive. A parte que dava a garantia — o CI que reprova binding fora de data —
+já está de pé.
 
 **Risco:** baixo. **Custo:** médio.
 
@@ -536,18 +661,24 @@ o CI reprova binding desatualizado.
 
 - [x] **`auth.jwt.secret` fora do YAML versionado** — saiu na Fase 2, junto com
       `JWT_EXPIRATION`, o `.env.example` e os dois `docker-compose`
-- [ ] Revisar `config/*.yaml` inteiro contra o scaffold do Loco: remover bloco
-      sem consumidor, manter o que é usado *(só o bloco
-      `auth_access_token_expires_in` saiu até agora)*
+- [x] Revisar `config/*.yaml` contra o scaffold do Loco. Saiu
+      `auth_access_token_expires_in`; entrou o bloco `server.middlewares` de
+      verdade (antes só tinha `fallback: true`), com o motivo de cada
+      middleware escrito no arquivo; o `secret` do JWT ganhou o padding que
+      faltava
 - [ ] Remover as **menções ao Adonis** em `backend/src/`. Regra: o comentário
       que explica *por que o código é assim* perde o objeto quando o "assim"
       deixa de existir. O que sobreviver deve justificar a decisão **em si**,
       sem citar o framework antigo.
-      **Estado: 192 restantes** (eram 233). As que saíram foram as dos arquivos
-      reescritos nas fases 0–4; o grosso do que sobra está em `views/`,
-      `middlewares/` e nos models de storage — ou seja, no território das fases
-      5 a 7. Fazer a varredura agora apagaria a justificativa de código que
-      ainda não mudou
+      **Estado: 136 menções a "Adonis", 19 a VineJS/Lucid e 23 a "golden"**,
+      em `backend/src/` e `backend/tests/` (eram 233 no levantamento).
+      **Deliberadamente não varridas em massa.** A maioria está em `views/`, e
+      lá as menções ainda descrevem uma decisão real: os campos que cada view
+      emite não mudaram na Fase 5 — só o envelope em volta saiu. Trocar
+      "o Adonis omite a chave" por "omite a chave" produziria um comentário que
+      não explica nada, que é pior do que um que cita um framework morto.
+      O trabalho certo é reescrever cada um justificando a decisão em si, um a
+      um, e isso é uma tarefa própria — não um `sed`
 - [x] `nodeVersion` → `runtimeVersion` em `/api/system/status` (backend, o
       binding TS e o rótulo "Node.js" do `SystemInfoCard.vue`)
 - [x] `GET /api/health`: passou a usar `App::app_version()` no lugar do
@@ -556,9 +687,13 @@ o CI reprova binding desatualizado.
 - [x] Reescrever `backend/AGENTS.md` §10.9 (a exigência `contract:roco`) e a
       seção de suíte de contrato do `backend/README.md`
 - [x] Atualizar as árvores de `README.md` e `CHECKLIST.md`
-- [ ] `DOCKER_MANAGER_CHECKLIST.md`
+- [ ] `DOCKER_MANAGER_CHECKLIST.md` — 346 linhas, **zero menções ao Adonis**;
+      a revisão pendente é de conteúdo (o que ainda vale), não de porte
+- [x] `.github/workflows/ci.yml` no lugar de `contract-tests.yml`: formatação,
+      clippy, testes, bindings em dia, lint e build do frontend
 
-**Pronto quando:** `grep -ri adonis` no repositório volta **vazio**.
+**Pronto quando:** `grep -ri adonis` no repositório volta **vazio**. Hoje volta
+vazio em `frontend/`; falta `backend/`.
 
 **Risco:** baixo. **Custo:** médio.
 
@@ -597,13 +732,13 @@ O frontend **não sobrevive** a este roadmap sem mudança. Consolidado por fase:
 |---|---|---|
 | 2 | Formato do token; fluxo de login/logout | ✅ o token é opaco para a store — ela só guarda a string, então bastou nada |
 | 3 | Senhas inválidas; **duas telas novas** (`forgot` e `reset`) | ✅ `pages/forgot.vue`, `pages/reset.vue` e o link no login |
-| 5 | **Toda** leitura de resposta: `success`, `data`, `meta.lastPage`, `perPage`, parsing de timestamp | ⏳ pendente — mas o parsing de timestamp já foi absorvido sem mudança (RFC 3339 e `toLocaleString`) |
-| 6 | Tratamento de 429 | ⏳ pendente |
-| 7 | Notificações em tempo real; remoção do `@adonisjs/transmit-client` | ⏳ pendente |
-| 8 | Tipos passam a vir de `src/bindings/` | ⏳ pendente (`runtimeVersion` foi renomeado à mão em `types/api.ts`) |
+| 5 | **Toda** leitura de resposta: `success`, `data`, `meta.lastPage`, `perPage`, parsing de timestamp | ✅ 25 arquivos convertidos; `api.ts` devolve o recurso, não `ApiResponse<T>`. O parsing de timestamp foi absorvido sem mudança (RFC 3339 e `toLocaleString`) |
+| 6 | Tratamento de 429 | ✅ `extractErrorMessage` lê `description`; o 429 tem o mesmo shape dos demais erros |
+| 7 | Notificações em tempo real; remoção do `@adonisjs/transmit-client` | ✅ `services/events.ts` com `EventSource`, uma conexão para o app inteiro |
+| 8 | Tipos passam a vir de `src/bindings/` | ⚠️ parcial — as formas comuns sim; as views por recurso ainda são tipadas à mão |
 
 Ponto de concentração: [frontend/src/services/api.ts](frontend/src/services/api.ts).
-Vale tratá-lo como a fronteira e adaptar ali primeiro em cada fase.
+Foi tratado como a fronteira e adaptado primeiro em cada fase.
 
 ---
 
@@ -699,7 +834,16 @@ e é por isso que a última execução verde do `contract-tests/` não aconteceu
 ### Próximos passos concretos
 
 1. `git rm -r contract-tests docs .github/workflows/contract-tests.yml`
-   (o único pendente do marco da Fase 1)
+   (o único pendente do marco da Fase 1; o `ci.yml` que os substitui já está no
+   lugar, então o `contract-tests.yml` hoje só reprova o PR por testar um
+   contrato que não existe mais)
 2. Definir `JWT_SECRET` no ambiente de produção antes do deploy
 3. Subir um SMTP de desenvolvimento e confirmar a chegada do e-mail de `forgot`
-4. Fase 5 — é o próximo item da fila e o que domina o resto do cronograma
+   — o único caminho das fases 0–9 que nunca foi exercitado de ponta a ponta
+4. **Fase 10 — suíte de testes.** É o próximo item da fila, e o mais urgente:
+   `tests/requests/*` foi convertido para o contrato novo (155 testes verdes),
+   mas convertido é diferente de *revisado*. As asserções continuam sendo as que
+   descreviam a API antiga, com os campos trocados
+5. Terminar a Fase 8: mover cada `views::*` para `dtos/` com o derive `TS`
+6. Fazer a varredura das menções ao Adonis, uma a uma (Fase 9)
+7. Decidir se o fluxo SSE deve exigir sessão (Fase 7)

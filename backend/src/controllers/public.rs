@@ -6,6 +6,7 @@
 
 use axum::http::header;
 use axum::response::{IntoResponse, Response};
+use axum::routing::any;
 use loco_rs::prelude::*;
 use serde::Serialize;
 
@@ -52,9 +53,26 @@ pub async fn health() -> Response {
         .into_response()
 }
 
+/// `/api/*` sem rota — 404 em JSON.
+///
+/// Existe porque o fallback do router serve a SPA: sem este catch-all,
+/// `GET /api/typo` responderia **200 `text/html`** com a página inteira do Vue,
+/// e um cliente que pediu JSON receberia um documento. O `matchit` prefere a
+/// rota mais específica, então isto só é alcançado quando nenhuma outra casou.
+#[debug_handler]
+pub async fn unknown_route() -> Result<Response> {
+    Err(Error::NotFound)
+}
+
 /// Public routes.
+///
+/// O catch-all vem por último de propósito: registrar `/api/{*path}` antes de
+/// `/api/health` não muda o casamento (o `matchit` decide por especificidade),
+/// mas ler o arquivo de cima para baixo deixaria a dúvida.
 pub fn routes() -> Routes {
-    Routes::new().add("/api/health", get(health))
+    Routes::new()
+        .add("/api/health", get(health))
+        .add("/api/{*path}", any(unknown_route))
 }
 
 #[cfg(test)]

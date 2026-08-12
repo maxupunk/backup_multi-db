@@ -21,18 +21,14 @@ use crate::models::backup_retention_policy::UpdateBackupRetentionPolicy;
 use crate::models::backup_runner;
 use crate::models::storage::space;
 use crate::models::system_monitor;
-use crate::views::envelope::{Data, Message, MessageWithData};
-use crate::views::errors::ApiError;
 use crate::views::system as view;
-
-type Reply = std::result::Result<Response, ApiError>;
 
 /// Quantos backups recentes o painel mostra. Igual ao `limit(5)` do Adonis.
 const RECENT_BACKUPS: u64 = 5;
 
 /// `GET /api/stats` — o painel inicial.
 #[debug_handler]
-pub async fn stats(State(ctx): State<AppContext>, _session: Auth) -> Reply {
+pub async fn stats(State(ctx): State<AppContext>, _session: Auth) -> Result<Response> {
     // Local midnight: "today" is the operator's day, not UTC's.
     let now = chrono::Local::now().fixed_offset();
     let today = now
@@ -53,7 +49,7 @@ pub async fn stats(State(ctx): State<AppContext>, _session: Auth) -> Reply {
     let storage_spaces =
         space::all_destinations_space(&ctx.db, &encryption, &settings.backup_storage_path).await?;
 
-    Ok(axum::Json(Data::new(view::Stats {
+    format::json(view::Stats {
         connections: view::ConnectionCounts {
             total: connections_total,
             active: connections_active,
@@ -71,23 +67,25 @@ pub async fn stats(State(ctx): State<AppContext>, _session: Auth) -> Reply {
             .map(crate::views::storages::SpaceItem::from)
             .collect(),
         system: view::SystemOverview::from(overview),
-    }))
-    .into_response())
+    })
 }
 
 /// `GET /api/system/status` — CPU, memoria, uptime e estado do agendador.
 #[debug_handler]
-pub async fn status(State(ctx): State<AppContext>, _session: Auth) -> Reply {
+pub async fn status(State(ctx): State<AppContext>, _session: Auth) -> Result<Response> {
     let overview = system_monitor::SystemOverview::collect(&ctx).await;
 
-    Ok(axum::Json(Data::new(view::SystemOverview::from(overview))).into_response())
+    format::json(view::SystemOverview::from(overview))
 }
 
 /// `GET /api/system/containers/resources` — metricas de containers Docker.
 #[debug_handler]
-pub async fn container_resources(State(ctx): State<AppContext>, _session: Auth) -> Reply {
+pub async fn container_resources(
+    State(ctx): State<AppContext>,
+    _session: Auth,
+) -> Result<Response> {
     let overview = crate::models::docker_container_monitoring::overview(&ctx).await;
-    Ok(axum::Json(Data::new(overview)).into_response())
+    format::json(overview)
 }
 
 #[derive(Debug, Deserialize)]
@@ -106,16 +104,19 @@ pub async fn resources_history(
     State(ctx): State<AppContext>,
     _session: Auth,
     Query(query): Query<HistoryQuery>,
-) -> Reply {
+) -> Result<Response> {
     let history = crate::models::resource_metric_history::history(&ctx, query.range_hours).await?;
-    Ok(axum::Json(Data::new(history)).into_response())
+    format::json(history)
 }
 
 /// `GET /api/system/backup-retention` — politica GFS atual.
 #[debug_handler]
-pub async fn backup_retention_policy(State(ctx): State<AppContext>, _session: Auth) -> Reply {
+pub async fn backup_retention_policy(
+    State(ctx): State<AppContext>,
+    _session: Auth,
+) -> Result<Response> {
     let policy = crate::models::backup_retention_policy::get_policy(&ctx).await?;
-    Ok(axum::Json(Data::new(view::BackupRetentionPolicy::from(policy))).into_response())
+    format::json(view::BackupRetentionPolicy::from(policy))
 }
 
 /// `PUT /api/system/backup-retention` — atualiza a politica GFS.
@@ -125,13 +126,12 @@ pub async fn update_backup_retention_policy(
     _session: Auth,
     origin: RequestOrigin,
     Json(payload): Json<UpdateBackupRetentionPolicy>,
-) -> Reply {
-    validator::Validate::validate(&payload)
-        .map_err(|errors| ApiError::from_validation_errors(&errors))?;
+) -> Result<Response> {
+    validator::Validate::validate(&payload).map_err(crate::controllers::validation_failed)?;
 
     let prune_cron = payload.prune_cron.as_deref().unwrap_or_default();
     if !crate::models::backup_retention_policy::is_valid_cron(prune_cron) {
-        return Err(ApiError::unprocessable(
+        return Err(crate::controllers::unprocessable(
             "Expressao cron invalida para o prune automatico",
         ));
     }
@@ -154,34 +154,29 @@ pub async fn update_backup_retention_policy(
         .await;
     }
 
-    Ok(axum::Json(MessageWithData::new(
-        "Política de retenção atualizada com sucesso",
-        view::BackupRetentionPolicy::from(policy),
-    ))
-    .into_response())
+    format::json(view::BackupRetentionPolicy::from(policy))
 }
 
 /// `POST /api/system/backup-retention/run` — executa o prune de retencao.
 #[debug_handler]
-pub async fn run_backup_retention(State(ctx): State<AppContext>, __session: Auth) -> Reply {
+pub async fn run_backup_retention(
+    State(ctx): State<AppContext>,
+    __session: Auth,
+) -> Result<Response> {
     let result = crate::models::retention::prune_backups(&ctx).await?;
-    Ok(axum::Json(MessageWithData::new(
-        "Prune de backups executado com sucesso",
-        result,
-    ))
-    .into_response())
+    format::json(result)
 }
 
 /// `GET /api/system/diagnostics` — lista artefatos de diagnostico.
 #[debug_handler]
-pub async fn diagnostics(State(ctx): State<AppContext>, session: Auth) -> Reply {
+pub async fn diagnostics(State(ctx): State<AppContext>, session: Auth) -> Result<Response> {
     crate::controllers::require_admin(
         &session.user,
         "Apenas administradores podem acessar artefatos de diagnostico.",
     )?;
 
     let overview = crate::models::diagnostics::list(&ctx).await?;
-    Ok(axum::Json(Data::new(overview)).into_response())
+    format::json(overview)
 }
 
 /// `GET /api/system/diagnostics/:name/download` — baixa um artefato.
@@ -191,14 +186,14 @@ pub async fn download_diagnostic(
     session: Auth,
     origin: RequestOrigin,
     axum::extract::Path(name): axum::extract::Path<String>,
-) -> Reply {
+) -> Result<Response> {
     crate::controllers::require_admin(
         &session.user,
         "Apenas administradores podem acessar artefatos de diagnostico.",
     )?;
 
     let Some(path) = crate::models::diagnostics::resolve(&ctx, &name)? else {
-        return Err(ApiError::not_found(
+        return Err(crate::controllers::not_found(
             "Artefato de diagnostico nao encontrado",
         ));
     };
@@ -243,14 +238,14 @@ pub async fn destroy_diagnostic(
     session: Auth,
     origin: RequestOrigin,
     axum::extract::Path(name): axum::extract::Path<String>,
-) -> Reply {
+) -> Result<Response> {
     crate::controllers::require_admin(
         &session.user,
         "Apenas administradores podem acessar artefatos de diagnostico.",
     )?;
 
     let Some(path) = crate::models::diagnostics::resolve(&ctx, &name)? else {
-        return Err(ApiError::not_found(
+        return Err(crate::controllers::not_found(
             "Artefato de diagnostico nao encontrado",
         ));
     };
@@ -269,7 +264,7 @@ pub async fn destroy_diagnostic(
     )
     .await;
 
-    Ok(axum::Json(Message::new("Artefato de diagnostico removido")).into_response())
+    format::json(data!({ "message": "Artefato de diagnostico removido" }))
 }
 
 /// Rotas de system.

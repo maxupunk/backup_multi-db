@@ -15,14 +15,11 @@
 //! As rotas de espaço (`/space` e `/storage-destinations-space`) são da tarefa
 //! 8.13 e ainda não entraram.
 
-use axum::body::Bytes;
-use axum::http::StatusCode;
-use axum::response::{IntoResponse, Response};
+use loco_rs::controller::views::pagination::Pager;
 use loco_rs::prelude::*;
-use validator::Validate;
 
-use crate::controllers::json_body;
 use crate::controllers::Auth;
+use crate::controllers::{page_request, validation_failed, MAX_PAGE_SIZE};
 use crate::initializers::settings::Settings;
 use crate::models::backup_runner;
 use crate::models::encryption::EncryptionService;
@@ -31,17 +28,11 @@ use crate::models::storage_destinations::{
     self as destinations, CreateDestinationParams, DestinationUpdate, ListQuery, NewDestination,
     UpdateDestinationParams,
 };
-use crate::views::envelope::{Data, Message, MessageWithData};
-use crate::views::errors::ApiError;
-use crate::views::pagination::{Page, PageRequest};
 use crate::views::storages as view;
-
-type Reply = std::result::Result<Response, ApiError>;
 
 const NOT_FOUND: &str = "Destino de armazenamento não encontrado";
 
-const DEFAULT_PER_PAGE: u64 = 20;
-const MAX_PER_PAGE: u64 = 100;
+const DEFAULT_PAGE_SIZE: u64 = 20;
 
 /// `GET /api/storage-destinations`.
 #[debug_handler]
@@ -49,39 +40,42 @@ pub async fn index(
     State(ctx): State<AppContext>,
     _session: Auth,
     Query(query): Query<ListQuery>,
-) -> Reply {
+) -> Result<Response> {
     query
         .validate_legacy()
-        .map_err(|errors| ApiError::from_validation_errors(&errors))?;
+        .map_err(crate::controllers::validation_failed)?;
 
-    let page = PageRequest::from_query(
+    let page = page_request(
         query.page.as_deref(),
-        query.limit.as_deref(),
-        DEFAULT_PER_PAGE,
-        Some(MAX_PER_PAGE),
+        query.page_size.as_deref(),
+        DEFAULT_PAGE_SIZE,
+        MAX_PAGE_SIZE,
     );
 
     // O validador legado não declara `provider`, e o VineJS descarta chave
     // desconhecida — filtrar por ele aqui seria um comportamento novo.
     let query = query.without_provider();
 
-    let (rows, total) = destinations::Model::list_page(&ctx.db, &query, page).await?;
-    let items: Vec<view::LegacyItem> = rows.iter().map(view::LegacyItem::from).collect();
+    let found = destinations::Model::list_page(&ctx.db, &query, &page).await?;
+    let items: Vec<view::LegacyItem> = found.page.iter().map(view::LegacyItem::from).collect();
 
-    Ok(axum::Json(Data::new(Page::new(items, total, page))).into_response())
+    format::json(Pager::new(items, found.meta))
 }
 
 /// `POST /api/storage-destinations`.
 #[debug_handler]
-pub async fn store(State(ctx): State<AppContext>, _session: Auth, body: Bytes) -> Reply {
-    let params: CreateDestinationParams = json_body(&body)?;
-    Validate::validate(&params).map_err(|errors| ApiError::from_validation_errors(&errors))?;
+pub async fn store(
+    State(ctx): State<AppContext>,
+    _session: Auth,
+    Json(params): Json<CreateDestinationParams>,
+) -> Result<Response> {
+    Validate::validate(&params).map_err(validation_failed)?;
 
     let storage_type = params
         .r#type
         .as_deref()
         .and_then(|raw| raw.parse().ok())
-        .ok_or_else(|| ApiError::unprocessable("Tipo de armazenamento inválido"))?;
+        .ok_or_else(|| crate::controllers::unprocessable("Tipo de armazenamento inválido"))?;
 
     // `provider = None`: esta rota não conhece o conceito, e inventar um valor
     // faria a listagem nova exibir "Amazon S3" para um MinIO.
@@ -111,23 +105,22 @@ pub async fn store(State(ctx): State<AppContext>, _session: Auth, body: Bytes) -
 
     let safe = safe_config(&destination, &encryption)?;
 
-    Ok((
-        StatusCode::CREATED,
-        axum::Json(MessageWithData::new(
-            "Destino de armazenamento criado com sucesso",
-            view::LegacyDetail::new(&destination, safe),
-        )),
-    )
-        .into_response())
+    format::render()
+        .status(201)
+        .json(view::LegacyDetail::new(&destination, safe))
 }
 
 /// `GET /api/storage-destinations/:id`.
 #[debug_handler]
-pub async fn show(State(ctx): State<AppContext>, _session: Auth, Path(id): Path<i64>) -> Reply {
+pub async fn show(
+    State(ctx): State<AppContext>,
+    _session: Auth,
+    Path(id): Path<i64>,
+) -> Result<Response> {
     let destination = find_or_404(&ctx, id).await?;
     let safe = safe_config(&destination, &encryption(&ctx)?)?;
 
-    Ok(axum::Json(Data::new(view::LegacyDetail::new(&destination, safe))).into_response())
+    format::json(view::LegacyDetail::new(&destination, safe))
 }
 
 /// `PUT /api/storage-destinations/:id`.
@@ -136,12 +129,11 @@ pub async fn update(
     State(ctx): State<AppContext>,
     _session: Auth,
     Path(id): Path<i64>,
-    body: Bytes,
-) -> Reply {
-    let destination = find_or_404(&ctx, id).await?;
+    Json(params): Json<UpdateDestinationParams>,
+) -> Result<Response> {
+    Validate::validate(&params).map_err(validation_failed)?;
 
-    let params: UpdateDestinationParams = json_body(&body)?;
-    Validate::validate(&params).map_err(|errors| ApiError::from_validation_errors(&errors))?;
+    let destination = find_or_404(&ctx, id).await?;
 
     let requested_type: Option<destinations::StorageType> =
         params.r#type.as_deref().and_then(|raw| raw.parse().ok());
@@ -181,11 +173,7 @@ pub async fn update(
 
     let safe = safe_config(&destination, &encryption)?;
 
-    Ok(axum::Json(MessageWithData::new(
-        "Destino de armazenamento atualizado com sucesso",
-        view::LegacyDetail::new(&destination, safe),
-    ))
-    .into_response())
+    format::json(view::LegacyDetail::new(&destination, safe))
 }
 
 /// `DELETE /api/storage-destinations/:id`.
@@ -195,14 +183,15 @@ pub async fn update(
 /// conexões órfãos em vez de impedir a remoção. Acrescentar a guarda aqui
 /// mudaria o contrato de uma rota que a interface antiga ainda usa.
 #[debug_handler]
-pub async fn destroy(State(ctx): State<AppContext>, _session: Auth, Path(id): Path<i64>) -> Reply {
+pub async fn destroy(
+    State(ctx): State<AppContext>,
+    _session: Auth,
+    Path(id): Path<i64>,
+) -> Result<Response> {
     let destination = find_or_404(&ctx, id).await?;
     destinations::Model::delete_by_id(&ctx.db, destination.id).await?;
 
-    Ok(axum::Json(Message::new(
-        "Destino de armazenamento removido com sucesso",
-    ))
-    .into_response())
+    format::json(data!({ "message": "Destino de armazenamento removido com sucesso" }))
 }
 
 /// `GET /api/storage-destinations/:id/space`.
@@ -211,7 +200,11 @@ pub async fn destroy(State(ctx): State<AppContext>, _session: Auth, Path(id): Pa
 /// existe e a resposta é "este tipo não sabe informar espaço". Um 404 aqui
 /// faria a interface tratar o destino como inexistente.
 #[debug_handler]
-pub async fn space(State(ctx): State<AppContext>, _session: Auth, Path(id): Path<i64>) -> Reply {
+pub async fn space(
+    State(ctx): State<AppContext>,
+    _session: Auth,
+    Path(id): Path<i64>,
+) -> Result<Response> {
     let destination = find_or_404(&ctx, id).await?;
     let settings = settings(&ctx)?;
     let encryption = backup_runner::encryption_service(&settings)?;
@@ -221,14 +214,10 @@ pub async fn space(State(ctx): State<AppContext>, _session: Auth, Path(id): Path
         &encryption,
         &settings.backup_storage_path,
     ) else {
-        return Ok(axum::Json(MessageWithData::new(
-            "Informações de espaço não disponíveis para este tipo de armazenamento",
-            serde_json::Value::Null,
-        ))
-        .into_response());
+        return format::json(serde_json::Value::Null);
     };
 
-    Ok(axum::Json(Data::new(view::SpaceItem::from(info))).into_response())
+    format::json(view::SpaceItem::from(info))
 }
 
 /// `GET /api/storage-destinations-space`.
@@ -236,46 +225,42 @@ pub async fn space(State(ctx): State<AppContext>, _session: Auth, Path(id): Path
 /// Note o hífen: a rota **não** está sob `/api/storage-destinations`, e por isso
 /// tem o seu próprio grupo em [`space_routes`].
 #[debug_handler]
-pub async fn space_all(State(ctx): State<AppContext>, _session: Auth) -> Reply {
+pub async fn space_all(State(ctx): State<AppContext>, _session: Auth) -> Result<Response> {
     let settings = settings(&ctx)?;
     let encryption = backup_runner::encryption_service(&settings)?;
 
     let spaces =
         space::all_destinations_space(&ctx.db, &encryption, &settings.backup_storage_path).await?;
 
-    Ok(axum::Json(Data::new(
+    format::json(
         spaces
             .into_iter()
             .map(view::SpaceItem::from)
             .collect::<Vec<_>>(),
-    ))
-    .into_response())
+    )
 }
 
-async fn find_or_404(
-    ctx: &AppContext,
-    id: i64,
-) -> std::result::Result<destinations::Model, ApiError> {
+async fn find_or_404(ctx: &AppContext, id: i64) -> Result<destinations::Model> {
     destinations::Model::find_one(&ctx.db, id)
         .await?
-        .ok_or_else(|| ApiError::not_found(NOT_FOUND))
+        .ok_or_else(|| crate::controllers::not_found(NOT_FOUND))
 }
 
-fn settings(ctx: &AppContext) -> std::result::Result<Settings, ApiError> {
-    Ok(Settings::from_json(ctx.config.settings.as_ref())?)
+fn settings(ctx: &AppContext) -> Result<Settings> {
+    Settings::from_json(ctx.config.settings.as_ref())
 }
 
-fn encryption(ctx: &AppContext) -> std::result::Result<EncryptionService, ApiError> {
-    Ok(backup_runner::encryption_service(&settings(ctx)?)?)
+fn encryption(ctx: &AppContext) -> Result<EncryptionService> {
+    backup_runner::encryption_service(&settings(ctx)?)
 }
 
 fn safe_config(
     destination: &destinations::Model,
     encryption: &EncryptionService,
-) -> std::result::Result<serde_json::Value, ApiError> {
+) -> Result<serde_json::Value> {
     destination
         .safe_config(encryption)
-        .map_err(|err| ApiError::from(Error::Message(err.to_string())))
+        .map_err(|err| Error::Message(err.to_string()))
 }
 
 /// Rotas de `/api/storage-destinations`.

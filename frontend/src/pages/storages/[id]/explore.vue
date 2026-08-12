@@ -98,7 +98,7 @@ function getReplicaTitle (replica: BucketObjectReplica) {
 onMounted(async () => {
   try {
     const response = await storagesApi.get(id)
-    const data = response.data as Storage | undefined
+    const data = response as Storage | undefined
     storageName.value = data?.name ?? `#${id}`
   } catch { /* ignore */ }
 

@@ -46,7 +46,7 @@ export function useResourceHistory(): UseResourceHistoryResult {
 
     try {
       const response = await systemApi.resourcesHistory(rangeHours)
-      const data = response.data ?? ({} as ResourceMetricsHistoryResponse)
+      const data = response ?? ({} as ResourceMetricsHistoryResponse)
 
       retentionDays.value = data.retentionDays ?? 15
       systemHistory.value = downsamplePoints(data.system ?? [])

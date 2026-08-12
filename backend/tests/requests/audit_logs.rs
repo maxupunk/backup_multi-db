@@ -52,12 +52,11 @@ async fn lists_the_entries_with_the_derived_fields() {
 
         assert_eq!(response.status_code(), 200);
         let body: Value = response.json();
-        assert_eq!(body["success"], true);
-        assert_eq!(body["meta"]["total"], 2);
-        assert_eq!(body["meta"]["perPage"], 50);
+        assert_eq!(body["pagination"]["total_items"], 2);
+        assert_eq!(body["pagination"]["page_size"], 50);
 
         // A mais recente primeiro.
-        let first = &body["data"][0];
+        let first = &body["results"][0];
         assert_eq!(first["action"], "backup.failed");
         assert_eq!(first["actionDescription"], "Backup falhou");
         assert_eq!(first["statusColor"], "error");
@@ -82,8 +81,8 @@ async fn filters_by_action_and_status() {
             .authorization_bearer(&token)
             .await
             .json();
-        assert_eq!(by_action["meta"]["total"], 1);
-        assert_eq!(by_action["data"][0]["entityName"], "Contract Postgres");
+        assert_eq!(by_action["pagination"]["total_items"], 1);
+        assert_eq!(by_action["results"][0]["entityName"], "Contract Postgres");
 
         let by_status: Value = request
             .get("/api/audit-logs")
@@ -91,7 +90,7 @@ async fn filters_by_action_and_status() {
             .authorization_bearer(&token)
             .await
             .json();
-        assert_eq!(by_status["meta"]["total"], 1);
+        assert_eq!(by_status["pagination"]["total_items"], 1);
 
         // Filtro vazio nao filtra — e' o que a tela manda com o campo em branco.
         let empty: Value = request
@@ -100,7 +99,7 @@ async fn filters_by_action_and_status() {
             .authorization_bearer(&token)
             .await
             .json();
-        assert_eq!(empty["meta"]["total"], 2);
+        assert_eq!(empty["pagination"]["total_items"], 2);
     })
     .await;
 }
@@ -115,14 +114,14 @@ async fn caps_the_page_size_at_a_hundred() {
 
         let body: Value = request
             .get("/api/audit-logs")
-            .add_query_param("limit", "5000")
+            .add_query_param("page_size", "5000")
             .authorization_bearer(&token)
             .await
             .json();
 
-        // Sem o teto, `?limit=1000000` seria um jeito barato de derrubar o
+        // Sem o teto, `?page_size=1000000` seria um jeito barato de derrubar o
         // processo pela memoria.
-        assert_eq!(body["meta"]["perPage"], 100);
+        assert_eq!(body["pagination"]["page_size"], 100);
     })
     .await;
 }
@@ -141,7 +140,7 @@ async fn shows_one_entry_with_the_user_agent() {
             .authorization_bearer(&token)
             .await
             .json();
-        let id = list["data"][0]["id"].as_i64().expect("id");
+        let id = list["results"][0]["id"].as_i64().expect("id");
 
         let body: Value = request
             .get(&format!("/api/audit-logs/{id}"))
@@ -149,16 +148,15 @@ async fn shows_one_entry_with_the_user_agent() {
             .await
             .json();
 
-        assert_eq!(body["success"], true);
-        assert_eq!(body["data"]["userAgent"], "curl/8");
-        assert_eq!(body["data"]["ipAddress"], "127.0.0.1");
+        assert_eq!(body["userAgent"], "curl/8");
+        assert_eq!(body["ipAddress"], "127.0.0.1");
     })
     .await;
 }
 
 #[tokio::test]
 #[serial]
-async fn a_missing_entry_is_a_404_in_the_controller_family() {
+async fn a_missing_entry_is_a_404_with_its_own_message() {
     request::<App, _, _>(|request, _ctx| async move {
         let admin = session::create_admin(&request, "admin@contract.test").await;
         let token = admin.token.expect("token");
@@ -170,8 +168,8 @@ async fn a_missing_entry_is_a_404_in_the_controller_family() {
 
         assert_eq!(response.status_code(), 404);
         let body: Value = response.json();
-        assert_eq!(body["success"], false);
-        assert_eq!(body["message"], "Log de auditoria não encontrado");
+        assert_eq!(body["error"], "not_found");
+        assert_eq!(body["description"], "Log de auditoria não encontrado");
     })
     .await;
 }
@@ -192,7 +190,7 @@ async fn stats_never_collide_with_the_id_route() {
             .await;
 
         assert_eq!(response.status_code(), 200, "{}", response.text());
-        let data = &response.json::<Value>()["data"];
+        let data = response.json::<Value>();
 
         assert_eq!(data["total"], 2);
         assert_eq!(data["today"], 2);
@@ -231,7 +229,7 @@ async fn an_unknown_action_omits_the_derived_keys() {
             .await
             .json();
 
-        let entry = &body["data"][0];
+        let entry = &body["results"][0];
         assert_eq!(entry["action"], "plugin.executed");
         assert!(entry.get("actionDescription").is_none());
         assert!(entry.get("actionIcon").is_none());

@@ -10,14 +10,14 @@
 //!    campo `password` cru sequer existe, para que nao haja como serializa-lo
 //!    por engano.
 
+use loco_rs::model::query::{self, PageResponse, PaginationQuery};
 use loco_rs::prelude::ConnectionTrait;
 use loco_rs::prelude::Error;
 use sea_orm::entity::prelude::*;
-use sea_orm::{ActiveValue::Set, Condition, QueryOrder, QuerySelect};
+use sea_orm::{ActiveValue::Set, Condition, QueryOrder};
 use validator::{Validate, ValidationErrors};
 
 use crate::models::validation;
-use crate::views::pagination::PageRequest;
 use sea_orm::{ColumnTrait, EntityTrait, PaginatorTrait, QueryFilter};
 
 use serde::{Deserialize, Serialize};
@@ -351,7 +351,7 @@ pub struct UpdateParams {
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct ListQuery {
     pub page: Option<String>,
-    pub limit: Option<String>,
+    pub page_size: Option<String>,
     pub r#type: Option<String>,
     pub status: Option<String>,
     pub search: Option<String>,
@@ -407,10 +407,7 @@ fn validate_databases(errors: &mut ValidationErrors, databases: Option<&Vec<Stri
     if databases.is_empty() {
         errors.add(
             "databases",
-            validation::rule(
-                "minLength",
-                "The databases field must have at least 1 items".to_string(),
-            ),
+            validation::rule("length", "Informe ao menos um database."),
         );
         return;
     }
@@ -441,10 +438,7 @@ impl Validate for CreateParams {
         if self.databases.is_none() {
             errors.add(
                 "databases",
-                validation::rule(
-                    "required",
-                    "The databases field must be defined".to_string(),
-                ),
+                validation::rule("required", "Informe os databases a acompanhar."),
             );
         }
         validate_databases(&mut errors, self.databases.as_ref());
@@ -594,8 +588,8 @@ impl Model {
     pub async fn list_page(
         db: &impl ConnectionTrait,
         query: &ListQuery,
-        page: PageRequest,
-    ) -> loco_rs::Result<(Vec<Self>, u64)> {
+        page: &PaginationQuery,
+    ) -> loco_rs::Result<PageResponse<Self>> {
         let mut condition = Condition::all()
             .add_option(query.r#type.as_ref().map(|v| Column::Type.eq(v.as_str())))
             .add_option(query.status.as_ref().map(|v| Column::Status.eq(v.as_str())));
@@ -616,20 +610,14 @@ impl Model {
             );
         }
 
-        let total = Entity::find().filter(condition.clone()).count(db).await?;
-
         let rows = Entity::find()
             .filter(condition)
             .order_by_asc(Column::Name)
             // Desempate estavel: sem ele, duas conexoes de mesmo nome podem
             // aparecer duas vezes numa pagina e sumir de outra.
-            .order_by_asc(Column::Id)
-            .offset(page.offset())
-            .limit(page.per_page)
-            .all(db)
-            .await?;
+            .order_by_asc(Column::Id);
 
-        Ok((rows, total))
+        query::fetch_page(db, rows, page).await
     }
 
     pub async fn find_one(db: &impl ConnectionTrait, id: i64) -> loco_rs::Result<Option<Self>> {

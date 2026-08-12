@@ -447,8 +447,8 @@ async function discoverDatabases() {
       password: form.password || undefined,
     })
 
-    if (response.success && response.data?.databases) {
-      availableDatabases.value = response.data.databases
+    if (response.databases) {
+      availableDatabases.value = response.databases
 
       // Se estiver editando e tiver um database já selecionado, mantém a seleção
       // se o database existir na lista disponível OU for o marcador especial "*"
@@ -481,14 +481,14 @@ async function loadDockerHosts() {
   dockerUnavailableReason.value = ''
   try {
     const response = await connectionsApi.listDockerHosts()
-    if (!response.success || !response.data) {
+    if (!response) {
       dockerHostSuggestions.value = []
       return
     }
 
-    dockerHostSuggestions.value = response.data.hosts ?? []
-    if (!response.data.dockerAvailable && response.data.unavailableReason) {
-      dockerUnavailableReason.value = response.data.unavailableReason
+    dockerHostSuggestions.value = response.hosts ?? []
+    if (!response.dockerAvailable && response.unavailableReason) {
+      dockerUnavailableReason.value = response.unavailableReason
     }
   } catch (error) {
     dockerHostSuggestions.value = []
@@ -503,7 +503,7 @@ async function loadStorageDestinations() {
   loadingDestinations.value = true
   try {
     const response = await storageDestinationsApi.list({ status: 'active', limit: 100 })
-    storageDestinations.value = response.data?.data ?? []
+    storageDestinations.value = response.results
   } catch {
     storageDestinations.value = []
   } finally {
@@ -517,7 +517,7 @@ async function loadConnection() {
   loading.value = true
   try {
     const response = await connectionsApi.get(getConnectionId())
-    const connection = response.data
+    const connection = response
     if (connection) {
       form.name = connection.name
       form.type = connection.type
@@ -608,7 +608,7 @@ async function testConnection() {
   try {
     const response = await connectionsApi.test(getConnectionId())
     notify(
-      `Conexão bem-sucedida! Latência: ${response.data?.latencyMs}ms`,
+      `Conexão bem-sucedida! Latência: ${response.latencyMs}ms`,
       'success',
     )
   } catch (error) {

@@ -33,9 +33,8 @@ async fn status_reports_a_boolean_without_breaking_when_docker_is_unavailable() 
 
         assert_eq!(response.status_code(), 200, "{}", response.text());
         let body: Value = response.json();
-        assert_eq!(body["success"], true);
         assert!(body["available"].is_boolean());
-        assert!(body["data"]["available"].is_boolean());
+        assert!(body["available"].is_boolean());
     })
     .await;
 }
@@ -67,7 +66,6 @@ async fn listings_degrade_to_an_empty_array_when_the_engine_is_unavailable() {
             let response = request.get(route).authorization_bearer(&token).await;
             assert_eq!(response.status_code(), 200, "{route}: {}", response.text());
             let body: Value = response.json();
-            assert_eq!(body["success"], true);
             assert!(body["available"].is_boolean());
             assert!(body["data"].is_array());
         }
@@ -86,8 +84,10 @@ async fn diagnostics_validate_the_required_target_before_starting_a_job() {
         let response = request
             .post("/api/docker/diagnostics")
             .authorization_bearer(&token)
+            .json(&serde_json::json!({ "tool": "ping" }))
             .await;
-        assert_eq!(response.status_code(), 422, "{}", response.text());
+        assert_eq!(response.status_code(), 400, "{}", response.text());
+        assert!(response.json::<Value>()["errors"]["target"].is_array());
     })
     .await;
 }
@@ -141,10 +141,9 @@ async fn container_resources_has_the_expected_contract() {
             .await;
         assert_eq!(response.status_code(), 200, "{}", response.text());
         let body: Value = response.json();
-        assert_eq!(body["success"], true);
-        assert!(body["data"]["dockerAvailable"].is_boolean());
-        assert!(body["data"]["containers"].is_array());
-        assert!(body["data"]["collectedAt"].is_string());
+        assert!(body["dockerAvailable"].is_boolean());
+        assert!(body["containers"].is_array());
+        assert!(body["collectedAt"].is_string());
     })
     .await;
 }
@@ -226,7 +225,7 @@ async fn volume_backup_to_local_storage_works_when_docker_is_available() {
             .authorization_bearer(&token)
             .await;
         assert_eq!(storage.status_code(), 201, "{}", storage.text());
-        let storage_id = storage.json::<Value>()["data"]["id"]
+        let storage_id = storage.json::<Value>()["id"]
             .as_i64()
             .expect("id do storage");
 
@@ -237,9 +236,8 @@ async fn volume_backup_to_local_storage_works_when_docker_is_available() {
             .await;
         assert_eq!(response.status_code(), 200, "{}", response.text());
         let body: Value = response.json();
-        assert_eq!(body["success"], true);
-        let file_name = body["data"]["fileName"].as_str().expect("fileName");
-        let relative_path = body["data"]["relativePath"].as_str().expect("relativePath");
+        let file_name = body["fileName"].as_str().expect("fileName");
+        let relative_path = body["relativePath"].as_str().expect("relativePath");
         assert!(file_name.starts_with("volume-"));
         assert!(relative_path.starts_with("docker-volumes/"));
 
@@ -318,8 +316,10 @@ async fn volume_remove_reports_conflict_when_in_use() {
             .await;
         assert_eq!(response.status_code(), 409, "{}", response.text());
         let body: Value = response.json();
-        assert_eq!(body["success"], false);
-        assert!(body["message"].as_str().unwrap_or("").contains("em uso"));
+        assert!(body["description"]
+            .as_str()
+            .unwrap_or("")
+            .contains("em uso"));
     })
     .await;
 

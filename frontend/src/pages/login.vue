@@ -41,7 +41,7 @@
 <script lang="ts" setup>
 import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ApiError, authApi } from '@/services/api'
+import { ApiError, authApi, fieldError } from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
 
 // Define layout authentication
@@ -110,24 +110,16 @@ async function handleLogin() {
 
   try {
     const response = await authApi.login(form)
-    if (response.success && response.data) {
-      authStore.setToken(response.data.token)
-      authStore.setUser(response.data.user)
-      router.push('/')
-    }
+    authStore.setToken(response.token)
+    authStore.setUser(response.user)
+    router.push('/')
   } catch (error) {
     console.error(error)
     if (error instanceof ApiError) {
-      // Erro de validação (422)
-      if (error.statusCode === 422 && error.data && typeof error.data === 'object' && 'errors' in error.data) {
-        const validationErrors = (error.data as any).errors
-        if (Array.isArray(validationErrors)) {
-          for (const err of validationErrors) {
-            const translatedMessage = translateError(err.message || '')
-            if (err.field === 'email') errors.email = translatedMessage
-            if (err.field === 'password') errors.password = translatedMessage
-          }
-        }
+      // Falha de validação: os problemas vêm sob o nome de cada campo.
+      if (error.statusCode === 400) {
+        errors.email = fieldError(error.data, 'email')
+        errors.password = fieldError(error.data, 'password')
       } else {
         // Outros erros da API (401, 400, etc.)
         errorMessage.value = translateError(error.message)
@@ -143,7 +135,7 @@ async function handleLogin() {
 onMounted(async () => {
   try {
     const response = await authApi.checkStatus()
-    if (response.success && response.data && !response.data.hasUsers) {
+    if (!response.hasUsers) {
       router.push('/register')
     }
   } catch (error) {

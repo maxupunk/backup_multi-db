@@ -85,9 +85,7 @@ async fn creates_a_storage_and_masks_the_secret() {
         )
         .await;
 
-        assert_eq!(body["message"], "Armazenamento criado com sucesso");
-
-        let data = &body["data"];
+        let data = &body;
         assert_eq!(data["name"], "Storage Criado");
         // Tres providers colapsam em `s3`; o `provider` e' que distingue.
         assert_eq!(data["type"], "s3");
@@ -123,7 +121,7 @@ async fn the_raw_secret_never_appears_in_any_response() {
             }),
         )
         .await;
-        let id = created["data"]["id"].as_i64().expect("id");
+        let id = created["id"].as_i64().expect("id");
 
         let show = request
             .get(&format!("/api/storages/{id}"))
@@ -146,7 +144,7 @@ async fn the_raw_secret_never_appears_in_any_response() {
 
 #[tokio::test]
 #[serial]
-async fn an_unknown_provider_is_a_union_group_error() {
+async fn an_unknown_provider_is_refused_on_the_provider_field() {
     // Golden `storages/store-invalid-provider`.
     request::<App, _, _>(|request, _ctx| async move {
         let token = admin_token(&request).await;
@@ -157,17 +155,10 @@ async fn an_unknown_provider_is_a_union_group_error() {
             .json(&serde_json::json!({ "name": "X", "provider": "dropbox" }))
             .await;
 
-        assert_eq!(response.status_code(), 422);
+        assert_eq!(response.status_code(), 400);
 
         let body: Value = response.json();
-        assert_eq!(body["errors"][0]["field"], "");
-        assert_eq!(body["errors"][0]["rule"], "unionGroup");
-        assert_eq!(
-            body["errors"][0]["message"],
-            "Invalid value provided for data field"
-        );
-        // Familia do framework: sem `success` e sem `message` no topo.
-        assert!(body.get("success").is_none());
+        assert!(body["errors"]["provider"].is_array(), "corpo: {body}");
     })
     .await;
 }
@@ -191,18 +182,14 @@ async fn minio_without_an_endpoint_is_rejected() {
             }))
             .await;
 
-        assert_eq!(response.status_code(), 422);
+        assert_eq!(response.status_code(), 400);
 
         let body: Value = response.json();
-        let fields: Vec<&str> = body["errors"]
-            .as_array()
-            .expect("lista de erros")
-            .iter()
-            .filter_map(|error| error["field"].as_str())
-            .collect();
-
         // Sem endpoint o SDK apontaria para a AWS em vez do MinIO local.
-        assert!(fields.contains(&"config.endpoint"), "{fields:?}");
+        assert!(
+            body["errors"]["config.endpoint"].is_array(),
+            "corpo: {body}"
+        );
     })
     .await;
 }
@@ -230,12 +217,12 @@ async fn lists_storages_in_a_paginated_envelope() {
         assert_eq!(response.status_code(), 200);
 
         let body: Value = response.json();
-        let items = body["data"]["data"].as_array().expect("lista");
+        let items = body["results"].as_array().expect("lista");
 
         // O boot cria um destino local padrao chamado "Local"; os dois criados
         // acima se juntam a ele, mantendo a ordenacao por nome.
-        assert_eq!(body["data"]["meta"]["total"], 3);
-        assert_eq!(body["data"]["meta"]["perPage"], 20);
+        assert_eq!(body["pagination"]["total_items"], 3);
+        assert_eq!(body["pagination"]["page_size"], 20);
         assert_eq!(items[0]["name"], "Alfa");
         assert_eq!(items[1]["name"], "Local");
         assert_eq!(items[2]["name"], "Zulu");
@@ -271,8 +258,8 @@ async fn filters_by_provider_and_by_name() {
             .authorization_bearer(&token)
             .await
             .json();
-        assert_eq!(by_provider["data"]["meta"]["total"], 1);
-        assert_eq!(by_provider["data"]["data"][0]["name"], "BucketX");
+        assert_eq!(by_provider["pagination"]["total_items"], 1);
+        assert_eq!(by_provider["results"][0]["name"], "BucketX");
 
         // Busca por termo exclusivo: o boot ja' deixa um destino chamado "Local".
         let by_search: Value = request
@@ -280,8 +267,8 @@ async fn filters_by_provider_and_by_name() {
             .authorization_bearer(&token)
             .await
             .json();
-        assert_eq!(by_search["data"]["meta"]["total"], 1);
-        assert_eq!(by_search["data"]["data"][0]["name"], "LocalX");
+        assert_eq!(by_search["pagination"]["total_items"], 1);
+        assert_eq!(by_search["results"][0]["name"], "LocalX");
     })
     .await;
 }
@@ -300,8 +287,7 @@ async fn an_unknown_storage_is_a_controller_shaped_404() {
         assert_eq!(response.status_code(), 404);
 
         let body: Value = response.json();
-        assert_eq!(body["success"], false);
-        assert_eq!(body["message"], "Armazenamento não encontrado");
+        assert_eq!(body["description"], "Armazenamento não encontrado");
         assert!(body.get("errors").is_none());
     })
     .await;
@@ -323,7 +309,7 @@ async fn updating_without_the_secret_keeps_the_stored_one() {
             }),
         )
         .await;
-        let id = created["data"]["id"].as_i64().expect("id");
+        let id = created["id"].as_i64().expect("id");
 
         let mut config = minio_config();
         config["secretAccessKey"] = Value::String(String::new());
@@ -341,11 +327,10 @@ async fn updating_without_the_secret_keeps_the_stored_one() {
         assert_eq!(response.status_code(), 200, "{}", response.text());
 
         let body: Value = response.json();
-        assert_eq!(body["message"], "Armazenamento atualizado com sucesso");
-        assert_eq!(body["data"]["name"], "Storage Renomeado");
+        assert_eq!(body["name"], "Storage Renomeado");
         // A resposta continua mascarando — e o valor gravado continua sendo o
         // original, que so' o banco pode confirmar.
-        assert_eq!(body["data"]["config"]["secretAccessKey"], "***");
+        assert_eq!(body["config"]["secretAccessKey"], "***");
 
         let stored = backend::models::_entities::storage_destinations::Entity::find_by_id(id)
             .one(&ctx.db)
@@ -377,7 +362,7 @@ async fn a_config_without_a_provider_is_rejected_on_update() {
             &serde_json::json!({ "name": "Sem provider", "provider": "local" }),
         )
         .await;
-        let id = created["data"]["id"].as_i64().expect("id");
+        let id = created["id"].as_i64().expect("id");
 
         let response = request
             .put(&format!("/api/storages/{id}"))
@@ -385,10 +370,17 @@ async fn a_config_without_a_provider_is_rejected_on_update() {
             .json(&serde_json::json!({ "config": { "basePath": "/tmp" } }))
             .await;
 
-        assert_eq!(response.status_code(), 422);
+        assert_eq!(response.status_code(), 400);
 
         let body: Value = response.json();
-        assert_eq!(body["errors"][0]["rule"], "storage.provider_required");
+        let errors = body["errors"].as_object().expect("mapa de erros");
+        assert!(
+            errors
+                .values()
+                .flat_map(|list| list.as_array().into_iter().flatten())
+                .any(|error| error["code"] == "storage.provider_required"),
+            "corpo: {body}"
+        );
     })
     .await;
 }
@@ -412,7 +404,7 @@ async fn only_one_storage_stays_the_default() {
         )
         .await;
 
-        let id = first["data"]["id"].as_i64().expect("id");
+        let id = first["id"].as_i64().expect("id");
         let reloaded: Value = request
             .get(&format!("/api/storages/{id}"))
             .authorization_bearer(&token)
@@ -421,7 +413,7 @@ async fn only_one_storage_stays_the_default() {
 
         // O segundo default derruba o primeiro; dois defaults fariam o backup
         // sem destino explicito escolher um deles ao acaso.
-        assert_eq!(reloaded["data"]["isDefault"], false);
+        assert_eq!(reloaded["isDefault"], false);
     })
     .await;
 }
@@ -438,7 +430,7 @@ async fn removes_a_storage_that_nothing_points_to() {
             &serde_json::json!({ "name": "Descartavel", "provider": "local" }),
         )
         .await;
-        let id = created["data"]["id"].as_i64().expect("id");
+        let id = created["id"].as_i64().expect("id");
 
         let response = request
             .delete(&format!("/api/storages/{id}"))
@@ -471,7 +463,7 @@ async fn refuses_to_remove_a_storage_with_a_connection_attached() {
             &serde_json::json!({ "name": "Em uso", "provider": "local" }),
         )
         .await;
-        let id = created["data"]["id"].as_i64().expect("id");
+        let id = created["id"].as_i64().expect("id");
 
         let connection = request
             .post("/api/connections")
@@ -498,14 +490,13 @@ async fn refuses_to_remove_a_storage_with_a_connection_attached() {
         assert_eq!(response.status_code(), 422);
 
         let body: Value = response.json();
-        assert_eq!(body["success"], false);
         assert!(
-            body["message"]
+            body["description"]
                 .as_str()
                 .expect("mensagem")
                 .contains("1 conexão(ões)"),
             "{}",
-            body["message"]
+            body["description"]
         );
     })
     .await;
@@ -521,7 +512,7 @@ async fn tests_a_local_destination_that_exists() {
         let base = tempfile::tempdir().expect("diretorio temporario");
 
         let created = create_local(&request, &token, "Local Real", base.path()).await;
-        let id = created["data"]["id"].as_i64().expect("id");
+        let id = created["id"].as_i64().expect("id");
 
         let response = request
             .post(&format!("/api/storages/{id}/test"))
@@ -544,7 +535,7 @@ async fn a_failing_test_is_a_422_with_the_provider_message() {
 
         let missing = std::env::temp_dir().join("backend-destino-que-nao-existe");
         let created = create_local(&request, &token, "Local Ausente", &missing).await;
-        let id = created["data"]["id"].as_i64().expect("id");
+        let id = created["id"].as_i64().expect("id");
 
         let response = request
             .post(&format!("/api/storages/{id}/test"))
@@ -555,14 +546,13 @@ async fn a_failing_test_is_a_422_with_the_provider_message() {
         assert_eq!(response.status_code(), 422, "{}", response.text());
 
         let body: Value = response.json();
-        assert_eq!(body["success"], false);
         assert!(
-            body["message"]
+            body["description"]
                 .as_str()
                 .expect("mensagem")
                 .starts_with("Falha no teste de conexão: "),
             "{}",
-            body["message"]
+            body["description"]
         );
     })
     .await;
@@ -580,7 +570,7 @@ async fn browses_one_level_of_a_local_destination() {
         std::fs::write(base.path().join("raiz.txt"), b"x").expect("arquivo na raiz");
 
         let created = create_local(&request, &token, "Local Navegavel", base.path()).await;
-        let id = created["data"]["id"].as_i64().expect("id");
+        let id = created["id"].as_i64().expect("id");
 
         let root: Value = request
             .get(&format!("/api/storages/{id}/browse"))
@@ -588,7 +578,7 @@ async fn browses_one_level_of_a_local_destination() {
             .await
             .json();
 
-        let objects = root["data"]["objects"].as_array().expect("objetos");
+        let objects = root["objects"].as_array().expect("objetos");
         assert_eq!(objects.len(), 2, "{objects:?}");
 
         let directory = objects
@@ -605,7 +595,7 @@ async fn browses_one_level_of_a_local_destination() {
             .await
             .json();
 
-        let objects = inside["data"]["objects"].as_array().expect("objetos");
+        let objects = inside["objects"].as_array().expect("objetos");
         assert_eq!(objects.len(), 1);
         assert_eq!(objects[0]["key"], "12/vendas.sql.gz");
         assert_eq!(objects[0]["size"], 4);
@@ -624,7 +614,7 @@ async fn browsing_outside_the_base_is_refused() {
         let base = tempfile::tempdir().expect("diretorio temporario");
 
         let created = create_local(&request, &token, "Local Fechado", base.path()).await;
-        let id = created["data"]["id"].as_i64().expect("id");
+        let id = created["id"].as_i64().expect("id");
 
         let response = request
             .get(&format!("/api/storages/{id}/browse?path=../../etc"))
@@ -635,12 +625,12 @@ async fn browsing_outside_the_base_is_refused() {
 
         let body: Value = response.json();
         assert!(
-            body["message"]
+            body["description"]
                 .as_str()
                 .expect("mensagem")
                 .contains("path traversal"),
             "{}",
-            body["message"]
+            body["description"]
         );
     })
     .await;
@@ -648,23 +638,23 @@ async fn browsing_outside_the_base_is_refused() {
 
 #[tokio::test]
 #[serial]
-async fn a_page_size_above_the_ceiling_is_rejected() {
+async fn a_listing_limit_above_the_ceiling_is_rejected() {
     request::<App, _, _>(|request, _ctx| async move {
         let token = admin_token(&request).await;
         let base = tempfile::tempdir().expect("diretorio temporario");
 
         let created = create_local(&request, &token, "Local Limitado", base.path()).await;
-        let id = created["data"]["id"].as_i64().expect("id");
+        let id = created["id"].as_i64().expect("id");
 
         let response = request
             .get(&format!("/api/storages/{id}/browse?limit=100000"))
             .authorization_bearer(&token)
             .await;
 
-        assert_eq!(response.status_code(), 422);
+        assert_eq!(response.status_code(), 400);
 
         let body: Value = response.json();
-        assert_eq!(body["errors"][0]["field"], "limit");
+        assert!(body["errors"]["limit"].is_array(), "corpo: {body}");
     })
     .await;
 }
@@ -681,7 +671,7 @@ async fn deletes_an_object_from_a_local_destination() {
         std::fs::write(&file, b"dump").expect("arquivo");
 
         let created = create_local(&request, &token, "Local Apagavel", base.path()).await;
-        let id = created["data"]["id"].as_i64().expect("id");
+        let id = created["id"].as_i64().expect("id");
 
         let response = request
             .delete(&format!("/api/storages/{id}/object"))
@@ -710,7 +700,7 @@ async fn refuses_to_delete_the_root_of_a_destination() {
         let base = tempfile::tempdir().expect("diretorio temporario");
 
         let created = create_local(&request, &token, "Local Protegido", base.path()).await;
-        let id = created["data"]["id"].as_i64().expect("id");
+        let id = created["id"].as_i64().expect("id");
 
         for key in ["/", "."] {
             let response = request
@@ -734,7 +724,7 @@ async fn deleting_an_object_requires_both_fields() {
         let base = tempfile::tempdir().expect("diretorio temporario");
 
         let created = create_local(&request, &token, "Local Exigente", base.path()).await;
-        let id = created["data"]["id"].as_i64().expect("id");
+        let id = created["id"].as_i64().expect("id");
 
         let response = request
             .delete(&format!("/api/storages/{id}/object"))
@@ -742,10 +732,10 @@ async fn deleting_an_object_requires_both_fields() {
             .json(&serde_json::json!({ "key": "12/a.gz" }))
             .await;
 
-        assert_eq!(response.status_code(), 422);
+        assert_eq!(response.status_code(), 400);
 
         let body: Value = response.json();
-        assert_eq!(body["errors"][0]["field"], "isDirectory");
+        assert!(body["errors"]["isDirectory"].is_array(), "corpo: {body}");
     })
     .await;
 }
@@ -776,13 +766,7 @@ async fn the_legacy_route_creates_without_a_provider() {
 
         assert_eq!(response.status_code(), 201, "{}", response.text());
 
-        let body: Value = response.json();
-        assert_eq!(
-            body["message"],
-            "Destino de armazenamento criado com sucesso"
-        );
-
-        let data = &body["data"];
+        let data: Value = response.json();
         assert_eq!(data["type"], "s3");
         assert_eq!(data["config"]["secretAccessKey"], "***");
         // A rota legada nao conhece `provider`: inventar um faria a listagem
@@ -813,7 +797,7 @@ async fn the_legacy_list_omits_the_provider_columns() {
             .await
             .json();
 
-        let items = body["data"]["data"].as_array().expect("lista");
+        let items = body["results"].as_array().expect("lista");
         let item = items
             .iter()
             .find(|row| row["name"] == "Local Novo")
@@ -847,7 +831,7 @@ async fn the_legacy_route_still_demands_the_secret_on_update() {
         assert_eq!(created.status_code(), 201, "{}", created.text());
 
         let body: Value = created.json();
-        let id = body["data"]["id"].as_i64().expect("id");
+        let id = body["id"].as_i64().expect("id");
 
         let response = request
             .put(&format!("/api/storage-destinations/{id}"))
@@ -858,16 +842,13 @@ async fn the_legacy_route_still_demands_the_secret_on_update() {
             }))
             .await;
 
-        assert_eq!(response.status_code(), 422);
+        assert_eq!(response.status_code(), 400);
 
         let body: Value = response.json();
-        let fields: Vec<&str> = body["errors"]
-            .as_array()
-            .expect("erros")
-            .iter()
-            .filter_map(|error| error["field"].as_str())
-            .collect();
-        assert!(fields.contains(&"config.secretAccessKey"), "{fields:?}");
+        assert!(
+            body["errors"]["config.secretAccessKey"].is_array(),
+            "corpo: {body}"
+        );
     })
     .await;
 }
@@ -886,7 +867,7 @@ async fn the_legacy_route_deletes_without_checking_references() {
             &serde_json::json!({ "name": "Legado Em Uso", "provider": "local" }),
         )
         .await;
-        let id = created["data"]["id"].as_i64().expect("id");
+        let id = created["id"].as_i64().expect("id");
 
         let connection = request
             .post("/api/connections")
@@ -932,7 +913,7 @@ async fn the_legacy_404_has_its_own_message() {
 
         assert_eq!(response.status_code(), 404);
         assert_eq!(
-            response.json::<Value>()["message"],
+            response.json::<Value>()["description"],
             "Destino de armazenamento não encontrado"
         );
     })
@@ -949,7 +930,7 @@ async fn reports_the_space_of_a_local_destination() {
         let base = tempfile::tempdir().expect("diretorio temporario");
 
         let created = create_local(&request, &token, "Local Com Espaco", base.path()).await;
-        let id = created["data"]["id"].as_i64().expect("id");
+        let id = created["id"].as_i64().expect("id");
 
         let response = request
             .get(&format!("/api/storage-destinations/{id}/space"))
@@ -958,7 +939,7 @@ async fn reports_the_space_of_a_local_destination() {
 
         assert_eq!(response.status_code(), 200, "{}", response.text());
 
-        let data = &response.json::<Value>()["data"];
+        let data = &response.json::<Value>();
         assert_eq!(data["destinationId"], id);
         assert_eq!(data["destinationName"], "Local Com Espaco");
         assert_eq!(data["type"], "local");
@@ -986,7 +967,7 @@ async fn a_remote_destination_reports_a_null_space_with_200() {
             }),
         )
         .await;
-        let id = created["data"]["id"].as_i64().expect("id");
+        let id = created["id"].as_i64().expect("id");
 
         let response = request
             .get(&format!("/api/storage-destinations/{id}/space"))
@@ -995,13 +976,10 @@ async fn a_remote_destination_reports_a_null_space_with_200() {
 
         assert_eq!(response.status_code(), 200, "{}", response.text());
 
-        let body: Value = response.json();
-        assert_eq!(body["success"], true);
-        assert!(body["data"].is_null());
-        assert_eq!(
-            body["message"],
-            "Informações de espaço não disponíveis para este tipo de armazenamento"
-        );
+        // Corpo `null` com 200: a rota existe e a resposta e' "este tipo nao
+        // sabe informar espaco". Um 404 faria a interface tratar o destino como
+        // inexistente.
+        assert!(response.json::<Value>().is_null());
     })
     .await;
 }
@@ -1031,7 +1009,7 @@ async fn the_aggregate_space_route_lists_local_and_remote_alike() {
         assert_eq!(response.status_code(), 200, "{}", response.text());
 
         let body: Value = response.json();
-        let rows = body["data"].as_array().expect("lista de espacos");
+        let rows = body.as_array().expect("lista de espacos");
 
         let local = rows
             .iter()
@@ -1089,7 +1067,7 @@ async fn a_default_local_destination_replaces_the_bare_disk_row() {
             .await
             .json();
 
-        let rows = body["data"].as_array().expect("lista de espacos");
+        let rows = body.as_array().expect("lista de espacos");
         assert!(
             !rows
                 .iter()
@@ -1116,9 +1094,7 @@ async fn the_dashboard_carries_the_same_space_rows() {
             .authorization_bearer(&token)
             .await
             .json();
-        let rows = body["data"]["storageSpaces"]
-            .as_array()
-            .expect("storageSpaces");
+        let rows = body["storageSpaces"].as_array().expect("storageSpaces");
 
         // Ate' a 8.13 este bloco saia vazio.
         assert!(
@@ -1176,7 +1152,7 @@ async fn a_successful_download_keeps_its_bytes_and_its_content_type() {
         let base = tempfile::tempdir().expect("diretorio temporario");
 
         let created = create_local(&request, &token, "Local Do Download", base.path()).await;
-        let destination_id = created["data"]["id"].as_i64().expect("id");
+        let destination_id = created["id"].as_i64().expect("id");
 
         let backup = insert_backup_at(&ctx, destination_id).await;
         let relative = backup.file_path.clone().expect("file_path");
@@ -1226,7 +1202,7 @@ async fn downloading_from_an_unreachable_remote_is_a_404_not_a_500() {
             }),
         )
         .await;
-        let destination_id = created["data"]["id"].as_i64().expect("id");
+        let destination_id = created["id"].as_i64().expect("id");
         let backup = insert_backup_at(&ctx, destination_id).await;
 
         let response = request
@@ -1236,7 +1212,7 @@ async fn downloading_from_an_unreachable_remote_is_a_404_not_a_500() {
 
         assert_eq!(response.status_code(), 404, "{}", response.text());
         assert_eq!(
-            response.json::<Value>()["message"],
+            response.json::<Value>()["description"],
             "Arquivo de backup não encontrado no servidor"
         );
     })
@@ -1262,7 +1238,7 @@ async fn deleting_a_backup_survives_a_remote_that_does_not_answer() {
             }),
         )
         .await;
-        let destination_id = created["data"]["id"].as_i64().expect("id");
+        let destination_id = created["id"].as_i64().expect("id");
         let backup = insert_backup_at(&ctx, destination_id).await;
 
         let response = request
@@ -1304,8 +1280,8 @@ async fn copy_job_transfers_files_and_removes_extraneous_destination_entries() {
         let source = create_local(&request, &token, "Origem de copia", source_dir.path()).await;
         let destination =
             create_local(&request, &token, "Destino de copia", destination_dir.path()).await;
-        let source_id = source["data"]["id"].as_i64().expect("id da origem");
-        let destination_id = destination["data"]["id"].as_i64().expect("id do destino");
+        let source_id = source["id"].as_i64().expect("id da origem");
+        let destination_id = destination["id"].as_i64().expect("id do destino");
 
         let started = request
             .post(&format!("/api/storages/{source_id}/copy"))
@@ -1319,11 +1295,7 @@ async fn copy_job_transfers_files_and_removes_extraneous_destination_entries() {
             .await;
         assert_eq!(started.status_code(), 202, "{}", started.text());
         let started: Value = started.json();
-        assert_eq!(started["message"], "Job de cópia iniciado");
-        let job_id = started["data"]["jobId"]
-            .as_str()
-            .expect("id do job")
-            .to_string();
+        let job_id = started["jobId"].as_str().expect("id do job").to_string();
 
         let mut final_job = None;
         for _ in 0..40 {
@@ -1333,7 +1305,7 @@ async fn copy_job_transfers_files_and_removes_extraneous_destination_entries() {
                 .await;
             assert_eq!(status.status_code(), 200, "{}", status.text());
             let body: Value = status.json();
-            let job = body["data"].clone();
+            let job = body.clone();
             match job["status"].as_str() {
                 Some("completed") | Some("failed") => {
                     final_job = Some(job);
@@ -1377,7 +1349,7 @@ async fn archive_job_streams_a_valid_gzip_tar_for_local_storage() {
             .await
             .expect("grava arquivo");
         let storage = create_local(&request, &token, "Archive local", source_dir.path()).await;
-        let storage_id = storage["data"]["id"].as_i64().expect("id do storage");
+        let storage_id = storage["id"].as_i64().expect("id do storage");
 
         let started = request
             .post(&format!("/api/storages/{storage_id}/archive"))
@@ -1385,7 +1357,7 @@ async fn archive_job_streams_a_valid_gzip_tar_for_local_storage() {
             .json(&serde_json::json!({ "path": "exports" }))
             .await;
         assert_eq!(started.status_code(), 202, "{}", started.text());
-        let job_id = started.json::<Value>()["data"]["id"]
+        let job_id = started.json::<Value>()["id"]
             .as_str()
             .expect("id do archive")
             .to_string();
@@ -1397,7 +1369,7 @@ async fn archive_job_streams_a_valid_gzip_tar_for_local_storage() {
                 .authorization_bearer(&token)
                 .await;
             assert_eq!(status.status_code(), 200, "{}", status.text());
-            let job = status.json::<Value>()["data"].clone();
+            let job = status.json::<Value>().clone();
             match job["status"].as_str() {
                 Some("ready") | Some("failed") => {
                     final_job = Some(job);
@@ -1490,7 +1462,7 @@ async fn minio_and_sftp_adapters_work_against_the_compose_services() {
             (&minio, "integration.txt".to_string(), String::new()),
             (&sftp, format!("{scope}/integration.txt"), scope.clone()),
         ] {
-            let id = storage["data"]["id"].as_i64().expect("id do storage");
+            let id = storage["id"].as_i64().expect("id do storage");
             let test = request
                 .post(&format!("/api/storages/{id}/test"))
                 .authorization_bearer(&token)
@@ -1522,7 +1494,7 @@ async fn minio_and_sftp_adapters_work_against_the_compose_services() {
                 .authorization_bearer(&token)
                 .await;
             assert_eq!(browse.status_code(), 200, "{}", browse.text());
-            let objects = &browse.json::<Value>()["data"]["objects"];
+            let objects = &browse.json::<Value>()["objects"];
             assert!(
                 objects.as_array().is_some_and(|items| items
                     .iter()

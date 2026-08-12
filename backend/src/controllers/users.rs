@@ -5,65 +5,58 @@
 //! **403**, nao 404 nem 401. Esconder o recurso com 404 seria mais discreto,
 //! mas mudaria o que a interface mostra.
 
-use axum::response::{IntoResponse, Response};
+use loco_rs::controller::views::pagination::Pager;
 use loco_rs::prelude::*;
 use serde::Deserialize;
 
-use crate::controllers::Auth;
+use crate::controllers::{page_request, require_admin, Auth, MAX_PAGE_SIZE};
 use crate::models::_entities::users;
-use crate::views::envelope::MessageWithData;
-use crate::views::errors::ApiError;
-use crate::views::pagination::{Page, PageRequest};
 use crate::views::users as view;
 
-type Reply = std::result::Result<Response, ApiError>;
-
 /// Mensagem unica de negacao deste recurso.
-///
-/// Sem acento em "usuarios" e com "Apenas" maiusculo: e' o texto exato do
-/// Adonis, gravado no golden `users/index-forbidden`.
-const ADMIN_ONLY: &str = "Apenas administradores podem gerenciar usuarios.";
+const ADMIN_ONLY: &str = "Apenas administradores podem gerenciar usuários.";
 
-/// `?page=`, `?limit=` e `?active=`.
+/// `?page=`, `?page_size=` e `?active=`.
 ///
-/// Tudo `String` porque vem da query, e o Adonis aceita tanto `active=true`
-/// quanto `active=false` sem reclamar de nada mais — um valor desconhecido
-/// simplesmente nao filtra.
+/// Tudo `String` porque vem da query: um `?active=` vazio e' o que a interface
+/// manda com o filtro desmarcado, e um valor desconhecido simplesmente nao
+/// filtra em vez de virar erro.
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct ListQuery {
     pub page: Option<String>,
-    pub limit: Option<String>,
+    pub page_size: Option<String>,
     pub active: Option<String>,
 }
 
 /// Quantos usuarios por pagina quando o cliente nao pede.
-const DEFAULT_PER_PAGE: u64 = 10;
+const DEFAULT_PAGE_SIZE: u64 = 10;
 
 /// `GET /api/users` — pagina de usuarios, so' para administradores.
-///
-/// Devolve a pagina **crua**, sem o envelope `{success, data}`: o Adonis
-/// serializa o paginador do Lucid direto, e essa e' a unica rota da API assim.
 #[debug_handler]
 pub async fn index(
     State(ctx): State<AppContext>,
     session: Auth,
     Query(query): Query<ListQuery>,
-) -> Reply {
-    crate::controllers::require_admin(&session.user, ADMIN_ONLY)?;
+) -> Result<Response> {
+    require_admin(&session.user, ADMIN_ONLY)?;
 
-    let page = PageRequest::from_query(
+    let page = page_request(
         query.page.as_deref(),
-        query.limit.as_deref(),
-        DEFAULT_PER_PAGE,
-        None,
+        query.page_size.as_deref(),
+        DEFAULT_PAGE_SIZE,
+        MAX_PAGE_SIZE,
     );
 
-    let (rows, total) =
-        users::Model::list_page(&ctx.db, page, parse_active(query.active.as_deref())).await?;
+    let found =
+        users::Model::list_page(&ctx.db, &page, parse_active(query.active.as_deref())).await?;
 
-    let items = rows.into_iter().map(view::UserListItem::from).collect();
+    let items: Vec<_> = found
+        .page
+        .into_iter()
+        .map(view::UserListItem::from)
+        .collect();
 
-    Ok(axum::Json(Page::new(items, total, page)).into_response())
+    format::json(Pager::new(items, found.meta))
 }
 
 /// `PATCH /api/users/:id/status` — inverte o `is_active` de outro usuario.
@@ -72,41 +65,34 @@ pub async fn toggle_status(
     State(ctx): State<AppContext>,
     session: Auth,
     Path(id): Path<i64>,
-) -> Reply {
-    crate::controllers::require_admin(&session.user, ADMIN_ONLY)?;
+) -> Result<Response> {
+    require_admin(&session.user, ADMIN_ONLY)?;
 
     let target = users::Entity::find_by_id(id)
         .one(&ctx.db)
         .await?
-        .ok_or(ApiError::RowNotFound)?;
+        .ok_or(Error::NotFound)?;
 
     // Sem essa trava um administrador se desativa e nao ha' outro caminho de
     // recuperacao pela API — so' mexendo no banco a mao.
     if target.id == session.user.id {
-        return Err(ApiError::bad_request(
+        return Err(crate::controllers::bad_request(
             "Você não pode alterar seu próprio status.",
         ));
     }
 
     let updated = target.toggle_active(&ctx.db).await?;
-    let message = if updated.is_active {
-        "Usuário ativado com sucesso."
-    } else {
-        "Usuário desativado com sucesso."
-    };
 
-    Ok(axum::Json(MessageWithData::new(
-        message,
-        view::ToggledStatus::from(&updated),
-    ))
-    .into_response())
+    // Sem mensagem: `isActive` ja' diz o que aconteceu, e quem monta o texto da
+    // notificacao e' a interface, que fala o idioma do usuario.
+    format::json(view::ToggledStatus::from(&updated))
 }
 
 /// Interpreta `?active=`.
 ///
-/// Só `true` e `false` filtram; qualquer outra coisa devolve a lista inteira,
-/// como no Adonis. Recusar com 422 quebraria um cliente que hoje manda
-/// `active=` vazio e recebe tudo.
+/// Só `true` e `false` filtram; qualquer outra coisa devolve a lista inteira.
+/// Recusar com erro quebraria a tela, que manda `active=` vazio sempre que o
+/// filtro está desmarcado.
 fn parse_active(raw: Option<&str>) -> Option<bool> {
     match raw?.trim() {
         "true" => Some(true),
@@ -115,8 +101,7 @@ fn parse_active(raw: Option<&str>) -> Option<bool> {
     }
 }
 
-/// Rotas de `/api/users`. Sem limitador proprio — no Adonis as duas levam
-/// apenas o `rateLimit` global.
+/// Rotas de `/api/users`. Sem limitador proprio: as duas levam so' o global.
 pub fn routes() -> Routes {
     Routes::new()
         .prefix("/api/users")
@@ -137,18 +122,9 @@ mod tests {
     #[test]
     fn anything_else_returns_the_whole_list() {
         // `active=` vazio e' o que o cliente manda quando o filtro esta'
-        // desmarcado; recusar com 422 quebraria a tela.
+        // desmarcado; recusar com erro quebraria a tela.
         for raw in [Some(""), Some("1"), Some("sim"), Some("TRUE"), None] {
             assert_eq!(parse_active(raw), None, "filtrou com {raw:?}");
         }
-    }
-
-    #[test]
-    fn the_denial_message_is_the_recorded_one() {
-        // Sem acento em "usuarios" — e' o texto do Adonis, e o golden compara.
-        assert_eq!(
-            ADMIN_ONLY,
-            "Apenas administradores podem gerenciar usuarios."
-        );
     }
 }

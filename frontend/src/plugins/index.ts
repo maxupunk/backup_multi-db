@@ -11,12 +11,12 @@ import pinia from '../stores'
 
 // Plugins
 import vuetify from './vuetify'
-import transmit from './transmit'
+import events from './events'
 
 export function registerPlugins (app: App) {
   app
     .use(vuetify)
     .use(router)
     .use(pinia)
-    .use(transmit)
+    .use(events)
 }

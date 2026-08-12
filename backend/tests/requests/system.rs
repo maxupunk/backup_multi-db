@@ -21,7 +21,7 @@ async fn stats_aggregates_the_empty_installation() {
         let response = request.get("/api/stats").authorization_bearer(&token).await;
 
         assert_eq!(response.status_code(), 200, "{}", response.text());
-        let data = &response.json::<Value>()["data"];
+        let data = &response.json::<Value>();
 
         assert_eq!(data["connections"]["total"], 0);
         assert_eq!(data["connections"]["active"], 0);
@@ -50,9 +50,8 @@ async fn the_overview_keeps_the_adonis_shape() {
 
         assert_eq!(response.status_code(), 200, "{}", response.text());
         let body: Value = response.json();
-        assert_eq!(body["success"], true);
 
-        let data = &body["data"];
+        let data = &body;
         for key in [
             "version",
             "hostname",

@@ -18,6 +18,11 @@ use loco_rs::prelude::*;
 use serde::{Deserialize, Serialize};
 
 /// Quantidade e janela de um limitador.
+///
+/// A janela é **deslizante**: `requests` por `duration` significa um balde de
+/// `requests` fichas que repõe uma a cada `duration / requests`. Não há virada
+/// de janela em que o contador zera — ver
+/// [`crate::controllers::middlewares::limiters`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RateLimit {
     pub requests: u32,
@@ -43,13 +48,17 @@ pub struct RateLimits {
 
 impl Default for RateLimits {
     fn default() -> Self {
-        // Os mesmos numeros do Adonis. Ficam como default no codigo, e nao so'
-        // no YAML, para que um arquivo de config incompleto nao afrouxe o
-        // limite silenciosamente — afrouxar um rate limit por engano nao
-        // quebra nada visivelmente, so' abre a porta.
+        // Ficam como default no codigo, e nao so' no YAML, para que um arquivo
+        // de config incompleto nao afrouxe o limite silenciosamente — afrouxar
+        // um rate limit por engano nao quebra nada visivelmente, so' abre a
+        // porta.
+        //
+        // `auth` conta por **IP**, e nao por (IP, e-mail): um escritorio atras
+        // de um NAT divide o orcamento, e por isso 20/min em vez dos 5/min que
+        // faziam sentido quando a chave incluia o endereco.
         Self {
             global: RateLimit::new(600, 60),
-            auth: RateLimit::new(5, 60),
+            auth: RateLimit::new(20, 60),
             strict: RateLimit::new(60, 60),
             backup: RateLimit::new(60, 60),
         }
@@ -219,11 +228,11 @@ mod tests {
     }
 
     #[test]
-    fn defaults_match_the_adonis_limiters() {
+    fn the_defaults_are_the_ones_written_in_code() {
         let settings = Settings::from_json(Some(&json(""))).unwrap();
 
         assert_eq!(settings.rate_limits.global, RateLimit::new(600, 60));
-        assert_eq!(settings.rate_limits.auth, RateLimit::new(5, 60));
+        assert_eq!(settings.rate_limits.auth, RateLimit::new(20, 60));
         assert_eq!(settings.rate_limits.strict, RateLimit::new(60, 60));
         assert_eq!(settings.rate_limits.backup, RateLimit::new(60, 60));
     }
@@ -266,9 +275,9 @@ mod tests {
         let error = Settings::from_json(Some(&value));
 
         // `RateLimits` tem `#[serde(default)]` no struct, entao um bloco
-        // parcial preenche o resto com os defaults do Adonis em vez de falhar.
+        // parcial preenche o resto com os defaults do codigo em vez de falhar.
         let settings = error.unwrap();
         assert_eq!(settings.rate_limits.global, RateLimit::new(10, 1));
-        assert_eq!(settings.rate_limits.auth, RateLimit::new(5, 60));
+        assert_eq!(settings.rate_limits.auth, RateLimit::new(20, 60));
     }
 }

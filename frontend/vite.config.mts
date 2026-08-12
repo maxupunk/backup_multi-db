@@ -122,11 +122,6 @@ export default defineConfig(({ mode }) => {
         changeOrigin: true,
         secure: false,
       },
-      '/__transmit': {
-        target: backendUrl,
-        changeOrigin: true,
-        secure: false,
-      },
     },
   },
   build: {

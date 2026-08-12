@@ -307,7 +307,7 @@ async function loadStorage () {
   loadingStorage.value = true
   try {
     const response = await storagesApi.get(id)
-    storage.value = response.data ?? null
+    storage.value = response
 
     if (storage.value) {
       form.value.name = storage.value.name
@@ -390,7 +390,7 @@ async function confirmDeactivate () {
     loadingReplacements.value = true
     try {
       const response = await storagesApi.list({ status: 'active', limit: 100 })
-      otherActiveStorages.value = (response.data?.data ?? []).filter((s) => s.id !== id)
+      otherActiveStorages.value = (response.results).filter((s) => s.id !== id)
     } catch {
       notify('Erro ao carregar armazenamentos disponíveis', 'error')
       return

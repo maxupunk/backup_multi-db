@@ -12,7 +12,6 @@
     "lint": "eslint . --fix"
   },
   "dependencies": {
-    "@adonisjs/transmit-client": "^1.0.0",
     "@fontsource/roboto": "5.2.7",
     "@mdi/font": "7.4.47",
     "pinia": "^3.0.3",

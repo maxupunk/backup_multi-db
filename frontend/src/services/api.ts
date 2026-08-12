@@ -3,7 +3,8 @@
  */
 
 import type {
-  ApiResponse,
+  ApiErrorBody,
+  MessageResponse,
   ArchiveJob,
   AuditAction,
   AuditEntityType,
@@ -28,7 +29,7 @@ import type {
   DockerHostsResponseData,
   ImportBackupResult,
   LoginPayload,
-  PaginatedResponse,
+  Paginated,
   RegisterPayload,
   ResourceMetricsHistoryResponse,
   RestoreOptions,
@@ -63,34 +64,58 @@ export class ApiError extends Error {
 }
 
 /**
- * Extrai mensagem de erro de diferentes formatos de resposta do backend
+ * Extrai a mensagem exibível de um corpo de erro.
+ *
+ * O backend tem um formato só — `{ error, description }` —, com `errors` no
+ * lugar dos dois quando a falha é de validação. A ordem abaixo é a de utilidade
+ * para quem lê: a mensagem do primeiro campo inválido diz mais do que
+ * "requisição inválida", e `error` sozinho é um identificador de máquina.
  */
 function extractErrorMessage(data: unknown): string {
   if (typeof data !== 'object' || data === null) {
     return 'Erro na requisição'
   }
-  
+
   const obj = data as Record<string, unknown>
-  
-  // Formato: { errors: [{ message: "..." }] }
-  if (Array.isArray(obj.errors) && obj.errors.length > 0) {
-    const firstError = obj.errors[0]
-    if (typeof firstError === 'object' && firstError !== null && 'message' in firstError) {
-      return String(firstError.message)
+
+  if (typeof obj.errors === 'object' && obj.errors !== null) {
+    const first = Object.values(obj.errors as Record<string, unknown>)[0]
+    if (Array.isArray(first) && first.length > 0) {
+      const failure = first[0] as { message?: unknown }
+      if (typeof failure.message === 'string') {
+        return failure.message
+      }
     }
   }
-  
-  // Formato: { message: "..." }
+
+  if (typeof obj.description === 'string') {
+    return obj.description
+  }
+
+  // `message` é o corpo de sucesso das rotas sem recurso; um 4xx dificilmente
+  // chega aqui com ele, mas custa uma linha aceitar.
   if (typeof obj.message === 'string') {
     return obj.message
   }
-  
-  // Formato: { error: "..." }
+
   if (typeof obj.error === 'string') {
     return obj.error
   }
-  
+
   return 'Erro na requisição'
+}
+
+/**
+ * Mensagem do primeiro problema de `field`, num corpo de erro de validação.
+ *
+ * Devolve string vazia quando o campo passou — é o valor que os formulários
+ * atribuem ao slot de erro para limpá-lo, então quem chama não precisa
+ * distinguir "sem erro" de "campo ausente na resposta".
+ */
+export function fieldError (body: unknown, field: string): string {
+  const errors = (body as ApiErrorBody | undefined)?.errors?.[field]
+
+  return errors?.[0]?.message ?? ''
 }
 
 /**
@@ -147,14 +172,14 @@ export const connectionsApi = {
     type?: string
     status?: string
     search?: string
-  }): Promise<PaginatedResponse<Connection>> {
+  }): Promise<Paginated<Connection>> {
     const searchParams = new URLSearchParams()
 
     if (params?.page) {
       searchParams.set('page', params.page.toString())
     }
     if (params?.limit) {
-      searchParams.set('limit', params.limit.toString())
+      searchParams.set('page_size', params.limit.toString())
     }
     if (params?.type) {
       searchParams.set('type', params.type)
@@ -167,7 +192,7 @@ export const connectionsApi = {
     }
 
     const query = searchParams.toString()
-    return request<PaginatedResponse<Connection>>(
+    return request<Paginated<Connection>>(
       `/connections${query ? `?${query}` : ''}`,
     )
   },
@@ -175,8 +200,8 @@ export const connectionsApi = {
   /**
    * Obtém uma conexão específica
    */
-  async get (id: number): Promise<ApiResponse<Connection>> {
-    return request<ApiResponse<Connection>>(`/connections/${id}`)
+  async get (id: number): Promise<Connection> {
+    return request<Connection>(`/connections/${id}`)
   },
 
   /**
@@ -184,8 +209,8 @@ export const connectionsApi = {
    */
   async create (
     payload: CreateConnectionPayload,
-  ): Promise<ApiResponse<Connection>> {
-    return request<ApiResponse<Connection>>('/connections', {
+  ): Promise<Connection> {
+    return request<Connection>('/connections', {
       method: 'POST',
       body: JSON.stringify(payload),
     })
@@ -197,8 +222,8 @@ export const connectionsApi = {
   async update (
     id: number,
     payload: UpdateConnectionPayload,
-  ): Promise<ApiResponse<Connection>> {
-    return request<ApiResponse<Connection>>(`/connections/${id}`, {
+  ): Promise<Connection> {
+    return request<Connection>(`/connections/${id}`, {
       method: 'PUT',
       body: JSON.stringify(payload),
     })
@@ -207,8 +232,8 @@ export const connectionsApi = {
   /**
    * Remove uma conexão
    */
-  async delete (id: number): Promise<ApiResponse> {
-    return request<ApiResponse>(`/connections/${id}`, {
+  async delete (id: number): Promise<MessageResponse> {
+    return request<MessageResponse>(`/connections/${id}`, {
       method: 'DELETE',
     })
   },
@@ -216,8 +241,8 @@ export const connectionsApi = {
   /**
    * Testa a conexão
    */
-  async test (id: number): Promise<ApiResponse<ConnectionTestResult>> {
-    return request<ApiResponse<ConnectionTestResult>>(
+  async test (id: number): Promise<ConnectionTestResult> {
+    return request<ConnectionTestResult>(
       `/connections/${id}/test`,
       {
         method: 'POST',
@@ -228,8 +253,8 @@ export const connectionsApi = {
   /**
    * Inicia um backup manual
    */
-  async backup (id: number): Promise<ApiResponse<BackupResult>> {
-    return request<ApiResponse<BackupResult>>(`/connections/${id}/backup`, {
+  async backup (id: number): Promise<BackupResult> {
+    return request<BackupResult>(`/connections/${id}/backup`, {
       method: 'POST',
     })
   },
@@ -243,15 +268,15 @@ export const connectionsApi = {
     port: number
     username: string
     password?: string
-  }): Promise<ApiResponse<{ databases: string[] }>> {
-    return request<ApiResponse<{ databases: string[] }>>('/connections/discover-databases', {
+  }): Promise<{ databases: string[] }> {
+    return request<{ databases: string[] }>('/connections/discover-databases', {
       method: 'POST',
       body: JSON.stringify(payload),
     })
   },
 
-  async listDockerHosts (): Promise<ApiResponse<DockerHostsResponseData>> {
-    return request<ApiResponse<DockerHostsResponseData>>('/connections/docker-hosts')
+  async listDockerHosts (): Promise<DockerHostsResponseData> {
+    return request<DockerHostsResponseData>('/connections/docker-hosts')
   },
 
   /**
@@ -260,8 +285,8 @@ export const connectionsApi = {
   async createDatabase (
     connectionId: number,
     databaseName: string,
-  ): Promise<ApiResponse<{ databaseName: string }>> {
-    return request<ApiResponse<{ databaseName: string }>>(
+  ): Promise<{ databaseName: string }> {
+    return request<{ databaseName: string }>(
       `/connections/${connectionId}/create-database`,
       {
         method: 'POST',
@@ -278,14 +303,14 @@ export const storageDestinationsApi = {
     type?: string
     status?: string
     search?: string
-  }): Promise<PaginatedResponse<StorageDestination>> {
+  }): Promise<Paginated<StorageDestination>> {
     const searchParams = new URLSearchParams()
 
     if (params?.page) {
       searchParams.set('page', params.page.toString())
     }
     if (params?.limit) {
-      searchParams.set('limit', params.limit.toString())
+      searchParams.set('page_size', params.limit.toString())
     }
     if (params?.type) {
       searchParams.set('type', params.type)
@@ -298,19 +323,19 @@ export const storageDestinationsApi = {
     }
 
     const query = searchParams.toString()
-    return request<PaginatedResponse<StorageDestination>>(
+    return request<Paginated<StorageDestination>>(
       `/storage-destinations${query ? `?${query}` : ''}`,
     )
   },
 
-  async get (id: number): Promise<ApiResponse<StorageDestination>> {
-    return request<ApiResponse<StorageDestination>>(`/storage-destinations/${id}`)
+  async get (id: number): Promise<StorageDestination> {
+    return request<StorageDestination>(`/storage-destinations/${id}`)
   },
 
   async create (
     payload: CreateStorageDestinationPayload,
-  ): Promise<ApiResponse<StorageDestination>> {
-    return request<ApiResponse<StorageDestination>>('/storage-destinations', {
+  ): Promise<StorageDestination> {
+    return request<StorageDestination>('/storage-destinations', {
       method: 'POST',
       body: JSON.stringify(payload),
     })
@@ -319,15 +344,15 @@ export const storageDestinationsApi = {
   async update (
     id: number,
     payload: UpdateStorageDestinationPayload,
-  ): Promise<ApiResponse<StorageDestination>> {
-    return request<ApiResponse<StorageDestination>>(`/storage-destinations/${id}`, {
+  ): Promise<StorageDestination> {
+    return request<StorageDestination>(`/storage-destinations/${id}`, {
       method: 'PUT',
       body: JSON.stringify(payload),
     })
   },
 
-  async delete (id: number): Promise<ApiResponse> {
-    return request<ApiResponse>(`/storage-destinations/${id}`, {
+  async delete (id: number): Promise<MessageResponse> {
+    return request<MessageResponse>(`/storage-destinations/${id}`, {
       method: 'DELETE',
     })
   },
@@ -335,15 +360,15 @@ export const storageDestinationsApi = {
   /**
    * Obtém informações de espaço de todos os destinos
    */
-  async spaceAll (): Promise<ApiResponse<StorageSpaceInfo[]>> {
-    return request<ApiResponse<StorageSpaceInfo[]>>('/storage-destinations-space')
+  async spaceAll (): Promise<StorageSpaceInfo[]> {
+    return request<StorageSpaceInfo[]>('/storage-destinations-space')
   },
 
   /**
    * Obtém informações de espaço de um destino específico
    */
-  async space (id: number): Promise<ApiResponse<StorageSpaceInfo | null>> {
-    return request<ApiResponse<StorageSpaceInfo | null>>(`/storage-destinations/${id}/space`)
+  async space (id: number): Promise<StorageSpaceInfo | null> {
+    return request<StorageSpaceInfo | null>(`/storage-destinations/${id}/space`)
   },
 }
 
@@ -359,14 +384,14 @@ export const backupsApi = {
     limit?: number
     status?: string
     connectionId?: number
-  }): Promise<PaginatedResponse<Backup>> {
+  }): Promise<Paginated<Backup>> {
     const searchParams = new URLSearchParams()
 
     if (params?.page) {
       searchParams.set('page', params.page.toString())
     }
     if (params?.limit) {
-      searchParams.set('limit', params.limit.toString())
+      searchParams.set('page_size', params.limit.toString())
     }
     if (params?.status) {
       searchParams.set('status', params.status)
@@ -376,7 +401,7 @@ export const backupsApi = {
     }
 
     const query = searchParams.toString()
-    return request<PaginatedResponse<Backup>>(
+    return request<Paginated<Backup>>(
       `/backups${query ? `?${query}` : ''}`,
     )
   },
@@ -384,15 +409,15 @@ export const backupsApi = {
   /**
    * Obtém um backup específico
    */
-  async get (id: number): Promise<ApiResponse<Backup>> {
-    return request<ApiResponse<Backup>>(`/backups/${id}`)
+  async get (id: number): Promise<Backup> {
+    return request<Backup>(`/backups/${id}`)
   },
 
   /**
    * Remove um backup
    */
-  async delete (id: number): Promise<ApiResponse> {
-    return request<ApiResponse>(`/backups/${id}`, {
+  async delete (id: number): Promise<MessageResponse> {
+    return request<MessageResponse>(`/backups/${id}`, {
       method: 'DELETE',
     })
   },
@@ -451,8 +476,8 @@ export const backupsApi = {
   /**
    * Restaura um backup para o banco de dados
    */
-  async restore (id: number, options?: RestoreOptions): Promise<ApiResponse<RestoreResult>> {
-    return request<ApiResponse<RestoreResult>>(`/backups/${id}/restore`, {
+  async restore (id: number, options?: RestoreOptions): Promise<RestoreResult> {
+    return request<RestoreResult>(`/backups/${id}/restore`, {
       method: 'POST',
       body: JSON.stringify(options ?? {}),
     })
@@ -462,7 +487,7 @@ export const backupsApi = {
    * Importa um arquivo de backup externo para o sistema.
    * Envia multipart/form-data com o arquivo e metadados.
    */
-  async import (formData: FormData): Promise<ApiResponse<ImportBackupResult>> {
+  async import (formData: FormData): Promise<ImportBackupResult> {
     const url = `${API_BASE}/backups/import`
     const token = localStorage.getItem('token')
 
@@ -482,7 +507,7 @@ export const backupsApi = {
       throw new ApiError(extractErrorMessage(data), response.status, data)
     }
 
-    return data as ApiResponse<ImportBackupResult>
+    return data as ImportBackupResult
   },
 }
 
@@ -493,37 +518,37 @@ export const statsApi = {
   /**
    * Obtém estatísticas do dashboard
    */
-  async get (): Promise<ApiResponse<DashboardStats>> {
-    return request<ApiResponse<DashboardStats>>('/stats')
+  async get (): Promise<DashboardStats> {
+    return request<DashboardStats>('/stats')
   },
 }
 
 export const systemApi = {
-  async status (): Promise<ApiResponse<SystemStatus>> {
-    return request<ApiResponse<SystemStatus>>('/system/status')
+  async status (): Promise<SystemStatus> {
+    return request<SystemStatus>('/system/status')
   },
 
-  async retentionPolicy (): Promise<ApiResponse<BackupRetentionPolicySettings>> {
-    return request<ApiResponse<BackupRetentionPolicySettings>>('/system/backup-retention')
+  async retentionPolicy (): Promise<BackupRetentionPolicySettings> {
+    return request<BackupRetentionPolicySettings>('/system/backup-retention')
   },
 
   async updateRetentionPolicy (
     payload: UpdateBackupRetentionPolicyPayload,
-  ): Promise<ApiResponse<BackupRetentionPolicySettings>> {
-    return request<ApiResponse<BackupRetentionPolicySettings>>('/system/backup-retention', {
+  ): Promise<BackupRetentionPolicySettings> {
+    return request<BackupRetentionPolicySettings>('/system/backup-retention', {
       method: 'PUT',
       body: JSON.stringify(payload),
     })
   },
 
-  async runRetentionNow (): Promise<ApiResponse<BackupRetentionRunResult>> {
-    return request<ApiResponse<BackupRetentionRunResult>>('/system/backup-retention/run', {
+  async runRetentionNow (): Promise<BackupRetentionRunResult> {
+    return request<BackupRetentionRunResult>('/system/backup-retention/run', {
       method: 'POST',
     })
   },
 
-  async diagnostics (): Promise<ApiResponse<DiagnosticsListing>> {
-    return request<ApiResponse<DiagnosticsListing>>('/system/diagnostics')
+  async diagnostics (): Promise<DiagnosticsListing> {
+    return request<DiagnosticsListing>('/system/diagnostics')
   },
 
   /**
@@ -561,18 +586,18 @@ export const systemApi = {
     window.URL.revokeObjectURL(blobUrl)
   },
 
-  async deleteDiagnostic (name: string): Promise<ApiResponse<null>> {
-    return request<ApiResponse<null>>(`/system/diagnostics/${encodeURIComponent(name)}`, {
+  async deleteDiagnostic (name: string): Promise<null> {
+    return request<null>(`/system/diagnostics/${encodeURIComponent(name)}`, {
       method: 'DELETE',
     })
   },
 
-  async containerResources (): Promise<ApiResponse<DockerContainerResourceOverview>> {
-    return request<ApiResponse<DockerContainerResourceOverview>>('/system/containers/resources')
+  async containerResources (): Promise<DockerContainerResourceOverview> {
+    return request<DockerContainerResourceOverview>('/system/containers/resources')
   },
 
-  async resourcesHistory (rangeHours = 24): Promise<ApiResponse<ResourceMetricsHistoryResponse>> {
-    return request<ApiResponse<ResourceMetricsHistoryResponse>>(
+  async resourcesHistory (rangeHours = 24): Promise<ResourceMetricsHistoryResponse> {
+    return request<ResourceMetricsHistoryResponse>(
       `/system/resources/history?rangeHours=${encodeURIComponent(String(rangeHours))}`,
     )
   },
@@ -594,14 +619,14 @@ export const auditLogsApi = {
     status?: AuditStatus
     startDate?: string
     endDate?: string
-  }): Promise<{ success: boolean, data: AuditLog[], meta: { total: number, perPage: number, currentPage: number, lastPage: number } }> {
+  }): Promise<Paginated<AuditLog>> {
     const searchParams = new URLSearchParams()
 
     if (params?.page) {
       searchParams.set('page', params.page.toString())
     }
     if (params?.limit) {
-      searchParams.set('limit', params.limit.toString())
+      searchParams.set('page_size', params.limit.toString())
     }
     if (params?.action) {
       searchParams.set('action', params.action)
@@ -629,15 +654,15 @@ export const auditLogsApi = {
   /**
    * Obtém um log de auditoria específico
    */
-  async get (id: number): Promise<ApiResponse<AuditLog>> {
-    return request<ApiResponse<AuditLog>>(`/audit-logs/${id}`)
+  async get (id: number): Promise<AuditLog> {
+    return request<AuditLog>(`/audit-logs/${id}`)
   },
 
   /**
    * Obtém estatísticas de auditoria
    */
-  async stats (): Promise<ApiResponse<AuditStats>> {
-    return request<ApiResponse<AuditStats>>('/audit-logs/stats')
+  async stats (): Promise<AuditStats> {
+    return request<AuditStats>('/audit-logs/stats')
   },
 }
 
@@ -652,27 +677,27 @@ export const usersApi = {
     page?: number
     limit?: number
     active?: boolean | string
-  }): Promise<PaginatedResponse<User>> {
+  }): Promise<Paginated<User>> {
     const searchParams = new URLSearchParams()
     if (params?.page) {
       searchParams.set('page', params.page.toString())
     }
     if (params?.limit) {
-      searchParams.set('limit', params.limit.toString())
+      searchParams.set('page_size', params.limit.toString())
     }
     if (params?.active !== undefined) {
       searchParams.set('active', String(params.active))
     }
 
     const query = searchParams.toString()
-    return request<PaginatedResponse<User>>(`/users${query ? `?${query}` : ''}`)
+    return request<Paginated<User>>(`/users${query ? `?${query}` : ''}`)
   },
 
   /**
    * Alterna status do usuário (aprovar/desativar)
    */
-  async toggleStatus (id: number): Promise<ApiResponse<any>> {
-    return request<ApiResponse<any>>(`/users/${id}/status`, {
+  async toggleStatus (id: number): Promise<any> {
+    return request<any>(`/users/${id}/status`, {
       method: 'PATCH',
     })
   },
@@ -685,8 +710,8 @@ export const authApi = {
   /**
    * Realiza login
    */
-  async login (payload: LoginPayload): Promise<ApiResponse<AuthResponse>> {
-    return request<ApiResponse<AuthResponse>>('/auth/login', {
+  async login (payload: LoginPayload): Promise<AuthResponse> {
+    return request<AuthResponse>('/auth/login', {
       method: 'POST',
       body: JSON.stringify(payload),
     })
@@ -695,8 +720,15 @@ export const authApi = {
   /**
    * Realiza registro
    */
-  async register (payload: RegisterPayload): Promise<ApiResponse<AuthResponse>> {
-    return request<ApiResponse<AuthResponse>>('/auth/register', {
+  /**
+   * Cadastra uma conta.
+   *
+   * Dois desfechos, ambos 201: o **primeiro** cadastro nasce administrador
+   * ativo e recebe token; os seguintes nascem pendentes e recebem só a
+   * mensagem. Por isso o retorno é uma união — quem chama decide pelo `token`.
+   */
+  async register (payload: RegisterPayload): Promise<AuthResponse | MessageResponse> {
+    return request<AuthResponse | MessageResponse>('/auth/register', {
       method: 'POST',
       body: JSON.stringify(payload),
     })
@@ -705,15 +737,15 @@ export const authApi = {
   /**
    * Obtém usuário atual
    */
-  async me (): Promise<ApiResponse<any>> {
-    return request<ApiResponse<any>>('/auth/me')
+  async me (): Promise<any> {
+    return request<any>('/auth/me')
   },
 
   /**
    * Realiza logout
    */
-  async logout (): Promise<ApiResponse> {
-    return request<ApiResponse>('/auth/logout', {
+  async logout (): Promise<MessageResponse> {
+    return request<MessageResponse>('/auth/logout', {
       method: 'POST',
     })
   },
@@ -721,8 +753,8 @@ export const authApi = {
   /**
    * Verifica se existem usuários cadastrados no sistema
    */
-  async checkStatus (): Promise<ApiResponse<{ hasUsers: boolean, requiresBootstrapToken: boolean }>> {
-    return request<ApiResponse<{ hasUsers: boolean, requiresBootstrapToken: boolean }>>('/auth/status')
+  async checkStatus (): Promise<{ hasUsers: boolean, requiresBootstrapToken: boolean }> {
+    return request<{ hasUsers: boolean, requiresBootstrapToken: boolean }>('/auth/status')
   },
 
   /**
@@ -732,8 +764,8 @@ export const authApi = {
    * não transformar a tela num diretório de quem tem conta. A interface não
    * pode prometer que o e-mail foi enviado.
    */
-  async forgotPassword (email: string): Promise<ApiResponse> {
-    return request<ApiResponse>('/auth/forgot', {
+  async forgotPassword (email: string): Promise<MessageResponse> {
+    return request<MessageResponse>('/auth/forgot', {
       method: 'POST',
       body: JSON.stringify({ email }),
     })
@@ -742,8 +774,8 @@ export const authApi = {
   /**
    * Conclui a redefinição com o token recebido por e-mail.
    */
-  async resetPassword (token: string, password: string): Promise<ApiResponse> {
-    return request<ApiResponse>('/auth/reset', {
+  async resetPassword (token: string, password: string): Promise<MessageResponse> {
+    return request<MessageResponse>('/auth/reset', {
       method: 'POST',
       body: JSON.stringify({ token, password }),
     })
@@ -761,82 +793,82 @@ export const storagesApi = {
     provider?: StorageProvider
     status?: string
     search?: string
-  }): Promise<PaginatedResponse<Storage>> {
+  }): Promise<Paginated<Storage>> {
     const searchParams = new URLSearchParams()
 
     if (params?.page) searchParams.set('page', params.page.toString())
-    if (params?.limit) searchParams.set('limit', params.limit.toString())
+    if (params?.limit) searchParams.set('page_size', params.limit.toString())
     if (params?.type) searchParams.set('type', params.type)
     if (params?.provider) searchParams.set('provider', params.provider)
     if (params?.status) searchParams.set('status', params.status)
     if (params?.search) searchParams.set('search', params.search)
 
     const query = searchParams.toString()
-    return request<PaginatedResponse<Storage>>(
+    return request<Paginated<Storage>>(
       `/storages${query ? `?${query}` : ''}`,
     )
   },
 
-  async get (id: number): Promise<ApiResponse<Storage>> {
-    return request<ApiResponse<Storage>>(`/storages/${id}`)
+  async get (id: number): Promise<Storage> {
+    return request<Storage>(`/storages/${id}`)
   },
 
-  async create (payload: CreateStoragePayload): Promise<ApiResponse<Storage>> {
-    return request<ApiResponse<Storage>>('/storages', {
+  async create (payload: CreateStoragePayload): Promise<Storage> {
+    return request<Storage>('/storages', {
       method: 'POST',
       body: JSON.stringify(payload),
     })
   },
 
-  async update (id: number, payload: UpdateStoragePayload): Promise<ApiResponse<Storage>> {
-    return request<ApiResponse<Storage>>(`/storages/${id}`, {
+  async update (id: number, payload: UpdateStoragePayload): Promise<Storage> {
+    return request<Storage>(`/storages/${id}`, {
       method: 'PUT',
       body: JSON.stringify(payload),
     })
   },
 
-  async delete (id: number): Promise<ApiResponse> {
-    return request<ApiResponse>(`/storages/${id}`, {
+  async delete (id: number): Promise<MessageResponse> {
+    return request<MessageResponse>(`/storages/${id}`, {
       method: 'DELETE',
     })
   },
 
-  async test (id: number): Promise<ApiResponse<{ latencyMs: number }>> {
-    return request<ApiResponse<{ latencyMs: number }>>(`/storages/${id}/test`, {
+  async test (id: number): Promise<{ latencyMs: number }> {
+    return request<{ latencyMs: number }>(`/storages/${id}/test`, {
       method: 'POST',
     })
   },
 
-  async browse (id: number, path?: string, cursor?: string): Promise<ApiResponse<BrowseResult>> {
+  async browse (id: number, path?: string, cursor?: string): Promise<BrowseResult> {
     const searchParams = new URLSearchParams()
     if (path) searchParams.set('path', path)
     if (cursor) searchParams.set('cursor', cursor)
     const query = searchParams.toString()
-    return request<ApiResponse<BrowseResult>>(
+    return request<BrowseResult>(
       `/storages/${id}/browse${query ? `?${query}` : ''}`,
     )
   },
 
-  async deleteObject (id: number, payload: DeleteStorageObjectPayload): Promise<ApiResponse> {
-    return request<ApiResponse>(`/storages/${id}/object`, {
+  async deleteObject (id: number, payload: DeleteStorageObjectPayload): Promise<MessageResponse> {
+    return request<MessageResponse>(`/storages/${id}/object`, {
       method: 'DELETE',
       body: JSON.stringify(payload),
     })
   },
 
-  async startCopy (id: number, payload: CopyStoragePayload): Promise<ApiResponse<{ jobId: string }>> {
-    return request<ApiResponse<{ jobId: string }>>(`/storages/${id}/copy`, {
+  async startCopy (id: number, payload: CopyStoragePayload): Promise<{ jobId: string }> {
+    return request<{ jobId: string }>(`/storages/${id}/copy`, {
       method: 'POST',
       body: JSON.stringify(payload),
     })
   },
 
-  async getCopyJob (jobId: string): Promise<ApiResponse<CopyJob>> {
-    return request<ApiResponse<CopyJob>>(`/storages/copy-jobs/${jobId}`)
+  async getCopyJob (jobId: string): Promise<CopyJob> {
+    return request<CopyJob>(`/storages/copy-jobs/${jobId}`)
   },
 
-  async startArchive (id: number, path?: string): Promise<ApiResponse<{ jobId: string }>> {
-    return request<ApiResponse<{ jobId: string }>>(`/storages/${id}/archive`, {
+  async startArchive (id: number, path?: string): Promise<{ jobId: string }> {
+    return request<{ jobId: string }>(`/storages/${id}/archive`, {
       method: 'POST',
       body: JSON.stringify({ path: path || undefined }),
     })
@@ -883,8 +915,8 @@ export const storagesApi = {
     window.URL.revokeObjectURL(blobUrl)
   },
 
-  async getArchiveJob (jobId: string): Promise<ApiResponse<ArchiveJob>> {
-    return request<ApiResponse<ArchiveJob>>(`/storages/archive-jobs/${jobId}`)
+  async getArchiveJob (jobId: string): Promise<ArchiveJob> {
+    return request<ArchiveJob>(`/storages/archive-jobs/${jobId}`)
   },
 }
 

@@ -37,7 +37,7 @@ async fn create_connection(request: &axum_test::TestServer, token: &str) -> i64 
         .await;
 
     assert_eq!(response.status_code(), 201, "{}", response.text());
-    response.json::<Value>()["data"]["id"]
+    response.json::<Value>()["id"]
         .as_i64()
         .expect("id da conexao")
 }
@@ -101,13 +101,12 @@ async fn lists_backups_with_the_pagination_envelope() {
         assert_eq!(response.status_code(), 200, "{}", response.text());
 
         let body: Value = response.json();
-        assert_eq!(body["success"], true);
         // O golden `backups/index` fixa `data.data` e `data.meta`.
-        assert!(body["data"]["data"].is_array());
-        assert_eq!(body["data"]["meta"]["currentPage"], 1);
-        assert_eq!(body["data"]["meta"]["total"], 1);
+        assert!(body["results"].is_array());
+        assert_eq!(body["pagination"]["page"], 1);
+        assert_eq!(body["pagination"]["total_items"], 1);
 
-        let item = &body["data"]["data"][0];
+        let item = &body["results"][0];
         assert_eq!(item["databaseName"], "app_fixture");
         // ACHADO 3: o registro veio do SQLite, entao os booleanos sao `0`/`1`.
         assert_eq!(item["compressed"], 1);
@@ -137,7 +136,7 @@ async fn filters_by_status_connection_and_database() {
                 }
                 let response = call.await;
                 assert_eq!(response.status_code(), 200, "{}", response.text());
-                response.json::<Value>()["data"]["meta"]["total"]
+                response.json::<Value>()["pagination"]["total_items"]
                     .as_i64()
                     .expect("total")
             }
@@ -170,7 +169,7 @@ async fn a_non_numeric_connection_filter_returns_nothing_instead_of_everything()
             .await;
 
         assert_eq!(response.status_code(), 200, "{}", response.text());
-        assert_eq!(response.json::<Value>()["data"]["meta"]["total"], 0);
+        assert_eq!(response.json::<Value>()["pagination"]["total_items"], 0);
     })
     .await;
 }
@@ -178,17 +177,17 @@ async fn a_non_numeric_connection_filter_returns_nothing_instead_of_everything()
 #[tokio::test]
 #[serial]
 async fn caps_the_page_size() {
-    // `?limit=1000000` seria um jeito barato de derrubar o processo.
+    // `?page_size=1000000` seria um jeito barato de derrubar o processo.
     request::<App, _, _>(|request, _ctx| async move {
         let token = admin_token(&request).await;
 
         let response = request
             .get("/api/backups")
-            .add_query_param("limit", "1000000")
+            .add_query_param("page_size", "1000000")
             .authorization_bearer(&token)
             .await;
 
-        assert_eq!(response.json::<Value>()["data"]["meta"]["perPage"], 100);
+        assert_eq!(response.json::<Value>()["pagination"]["page_size"], 100);
     })
     .await;
 }
@@ -222,9 +221,9 @@ async fn lists_the_backups_of_one_connection_without_nesting_it() {
         assert_eq!(response.status_code(), 200, "{}", response.text());
 
         let body: Value = response.json();
-        assert_eq!(body["data"]["meta"]["total"], 1);
+        assert_eq!(body["pagination"]["total_items"], 1);
         // Sem `preload('connection')`: quem chama ja' esta' na tela da conexao.
-        assert!(body["data"]["data"][0].get("connection").is_none());
+        assert!(body["results"][0].get("connection").is_none());
     })
     .await;
 }
@@ -242,7 +241,7 @@ async fn listing_the_backups_of_a_missing_connection_is_a_404() {
 
         assert_eq!(response.status_code(), 404);
         assert_eq!(
-            response.json::<Value>()["message"],
+            response.json::<Value>()["description"],
             "Conexão não encontrada"
         );
     })
@@ -269,9 +268,9 @@ async fn shows_a_backup_with_its_connection() {
         assert_eq!(response.status_code(), 200, "{}", response.text());
 
         let body: Value = response.json();
-        assert_eq!(body["data"]["id"], backup.id);
-        assert_eq!(body["data"]["status"], "completed");
-        assert_eq!(body["data"]["connection"]["type"], "mysql");
+        assert_eq!(body["id"], backup.id);
+        assert_eq!(body["status"], "completed");
+        assert_eq!(body["connection"]["type"], "mysql");
         // A conexao aninhada nunca carrega a senha.
         assert!(!response.text().contains("passwordEncrypted"));
     })
@@ -292,7 +291,7 @@ async fn an_orphaned_backup_reports_a_null_connection() {
             .await;
 
         assert_eq!(response.status_code(), 200, "{}", response.text());
-        assert!(response.json::<Value>()["data"]["connection"].is_null());
+        assert!(response.json::<Value>()["connection"].is_null());
     })
     .await;
 }
@@ -311,8 +310,7 @@ async fn shows_a_404_for_a_missing_backup() {
         // O golden `backups/show-not-found` fixa a familia dos controllers.
         assert_eq!(response.status_code(), 404);
         let body: Value = response.json();
-        assert_eq!(body["success"], false);
-        assert_eq!(body["message"], "Backup não encontrado");
+        assert_eq!(body["description"], "Backup não encontrado");
         assert!(body.get("errors").is_none());
     })
     .await;
@@ -354,7 +352,7 @@ async fn downloading_a_backup_whose_file_vanished_is_a_404_not_a_500() {
 
         assert_eq!(response.status_code(), 404, "{}", response.text());
         assert_eq!(
-            response.json::<Value>()["message"],
+            response.json::<Value>()["description"],
             "Arquivo de backup não encontrado no servidor"
         );
     })
@@ -429,7 +427,7 @@ async fn refuses_to_delete_a_protected_backup() {
 
         assert_eq!(response.status_code(), 422, "{}", response.text());
         assert_eq!(
-            response.json::<Value>()["message"],
+            response.json::<Value>()["description"],
             "Este backup não pode ser deletado (protegido ou em execução)"
         );
 
@@ -519,7 +517,7 @@ async fn refuses_to_restore_a_backup_that_did_not_finish() {
 
         assert_eq!(response.status_code(), 422, "{}", response.text());
         assert_eq!(
-            response.json::<Value>()["message"],
+            response.json::<Value>()["description"],
             "Apenas backups concluídos podem ser restaurados"
         );
     })
@@ -686,17 +684,16 @@ async fn imports_a_sql_file_and_registers_it() {
         assert_eq!(response.status_code(), 201, "{}", response.text());
 
         let body: Value = response.json();
-        assert_eq!(body["success"], true);
-        assert_eq!(body["data"]["format"], "sql");
-        assert_eq!(body["data"]["backup"]["status"], "completed");
+        assert_eq!(body["format"], "sql");
+        assert_eq!(body["backup"]["status"], "completed");
         // Um arquivo trazido de fora nao pode ser podado pela retencao horaria.
-        assert_eq!(body["data"]["backup"]["retentionType"], "daily");
-        assert_eq!(body["data"]["backup"]["metadata"]["isImported"], true);
+        assert_eq!(body["backup"]["retentionType"], "daily");
+        assert_eq!(body["backup"]["metadata"]["isImported"], true);
         // Sem `verifyIntegrity` a chave existe e vale `null`.
-        assert!(body["data"]["integrity"].is_null());
+        assert!(body["integrity"].is_null());
 
         // O checksum e' de conteudo real, nao um placeholder.
-        let checksum = body["data"]["checksum"].as_str().expect("checksum");
+        let checksum = body["checksum"].as_str().expect("checksum");
         assert_eq!(checksum.len(), 64);
 
         assert_eq!(
@@ -794,7 +791,7 @@ async fn refuses_to_back_up_a_connection_in_error() {
             }))
             .await;
         assert_eq!(created.status_code(), 201, "{}", created.text());
-        let connection_id = created.json::<Value>()["data"]["id"]
+        let connection_id = created.json::<Value>()["id"]
             .as_i64()
             .expect("id da conexao");
 
@@ -811,7 +808,7 @@ async fn refuses_to_back_up_a_connection_in_error() {
 
         assert_eq!(response.status_code(), 422, "{}", response.text());
         assert_eq!(
-            response.json::<Value>()["message"],
+            response.json::<Value>()["description"],
             "Não é possível fazer backup de uma conexão com erro. Teste a conexão primeiro."
         );
     })
@@ -847,7 +844,7 @@ async fn refuses_to_back_up_a_connection_with_no_enabled_database() {
 
         assert_eq!(backup.status_code(), 422, "{}", backup.text());
         assert_eq!(
-            backup.json::<Value>()["message"],
+            backup.json::<Value>()["description"],
             "Nenhum database habilitado para backup nesta conexão."
         );
     })
@@ -888,8 +885,8 @@ async fn backing_up_requires_authentication() {
 #[tokio::test]
 #[serial]
 async fn the_backup_route_advertises_its_own_rate_limit() {
-    // O golden `connections/backup-connection-in-error` gravou
-    // `x-ratelimit-limit: 60` — o limitador `backup`, e nao o global de 600.
+    // O limitador `backup` (60/min), e nao o global — que roda sem cabecalho
+    // justamente para nao sobrescrever este.
     request::<App, _, _>(|request, _ctx| async move {
         let token = admin_token(&request).await;
 

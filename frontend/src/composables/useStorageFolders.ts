@@ -10,7 +10,7 @@ export function useStorageFolders () {
     folders.value = []
     try {
       const response = await storagesApi.browse(storageId, '')
-      const objects = response.data?.objects ?? []
+      const objects = response.objects ?? []
       folders.value = objects
         .filter((o) => o.isDirectory)
         .map((o) => o.key)

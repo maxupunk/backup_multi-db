@@ -229,7 +229,7 @@
 <script lang="ts" setup>
 import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import { useNotifier } from '@/composables/useNotifier'
-import { transmit } from '@/plugins/transmit'
+import { subscribe } from '@/services/events'
 import { dockerDiagnosticsApi } from '@/services/dockerService'
 import type {
   DockerDiagnosticJob,
@@ -258,7 +258,7 @@ const job = ref<DockerDiagnosticJob | null>(null)
 const currentJobId = ref<string | null>(null)
 const logContainer = ref<HTMLElement | null>(null)
 
-let subscription: ReturnType<typeof transmit.subscription> | null = null
+let unsubscribe: (() => void) | null = null
 
 const suggestedTargets = computed(() => props.preset?.suggestedTargets ?? [])
 const selectedSuggestedValue = computed(() => {
@@ -403,36 +403,21 @@ function openCurlFromCurrentJob() {
   tool.value = 'curl'
 }
 
-async function ensureSubscription(jobId: string) {
-  await disposeSubscription()
+function ensureSubscription(jobId: string) {
+  disposeSubscription()
 
-  try {
-    subscription = transmit.subscription(`notifications/docker-diagnostics/${jobId}`)
-    await subscription.create()
-    subscription.onMessage<DockerDiagnosticJob>((data) => {
-      job.value = {
-        ...data,
-        outputLines: [...data.outputLines],
-      }
-    })
-  } catch (error) {
-    console.error('[DockerDiagnosticDialog] Erro SSE:', error)
-    notify('Não foi possível acompanhar o diagnóstico em tempo real.', 'warning')
-  }
+  unsubscribe = subscribe(`notifications/docker-diagnostics/${jobId}`, (data) => {
+    const update = data as DockerDiagnosticJob
+    job.value = {
+      ...update,
+      outputLines: [...update.outputLines],
+    }
+  })
 }
 
-async function disposeSubscription() {
-  if (!subscription) {
-    return
-  }
-
-  try {
-    await subscription.delete()
-  } catch {
-    // ignore
-  }
-
-  subscription = null
+function disposeSubscription() {
+  unsubscribe?.()
+  unsubscribe = null
 }
 
 async function refreshJob() {

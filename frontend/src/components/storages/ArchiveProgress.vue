@@ -78,7 +78,7 @@
 import type { ArchiveJob } from '@/types/api'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { storagesApi } from '@/services/api'
-import { transmit } from '@/plugins/transmit'
+import { subscribe } from '@/services/events'
 import { useNotifier } from '@/composables/useNotifier'
 import { formatDateTimePtBR } from '@/utils/format'
 
@@ -97,7 +97,7 @@ const consecutiveErrors = ref(0)
 
 const TERMINAL_STATUSES = new Set(['ready', 'failed', 'expired'])
 
-let subscription: ReturnType<typeof transmit.subscription> | null = null
+let unsubscribe: (() => void) | null = null
 let pollInterval: ReturnType<typeof setInterval> | null = null
 
 const progressPercent = computed(() => {
@@ -133,8 +133,8 @@ async function fetchJob () {
   loading.value = true
   try {
     const response = await storagesApi.getArchiveJob(props.jobId)
-    if (response.data) {
-      job.value = response.data
+    if (response) {
+      job.value = response
       fetchError.value = false
       consecutiveErrors.value = 0
     }
@@ -191,29 +191,20 @@ onMounted(async () => {
   // Start polling as fallback — stopped when SSE or terminal status confirmed
   startPolling()
 
-  try {
-    subscription = transmit.subscription(`notifications/storage-archive/${props.jobId}`)
-    await subscription.create()
-    subscription.onMessage<Partial<ArchiveJob>>((data) => {
-      if (job.value) {
-        Object.assign(job.value, data)
-        fetchError.value = false
-        if (TERMINAL_STATUSES.has(job.value.status)) {
-          stopPolling()
-        }
+  unsubscribe = subscribe(`notifications/storage-archive/${props.jobId}`, (data) => {
+    if (job.value) {
+      Object.assign(job.value, data as Partial<ArchiveJob>)
+      fetchError.value = false
+      if (TERMINAL_STATUSES.has(job.value.status)) {
+        stopPolling()
       }
-    })
-  } catch (error) {
-    console.error('[ArchiveProgress] Erro SSE:', error)
-    // Polling remains active as fallback
-  }
+    }
+  })
 })
 
-onUnmounted(async () => {
+onUnmounted(() => {
   stopPolling()
-  if (subscription) {
-    try { await subscription.delete() } catch { /* ignore */ }
-    subscription = null
-  }
+  unsubscribe?.()
+  unsubscribe = null
 })
 </script>

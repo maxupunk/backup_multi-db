@@ -29,8 +29,10 @@ declare module 'vue-router/auto-routes' {
     '/docker/images/': RouteRecordInfo<'/docker/images/', '/docker/images', Record<never, never>, Record<never, never>>,
     '/docker/networks/': RouteRecordInfo<'/docker/networks/', '/docker/networks', Record<never, never>, Record<never, never>>,
     '/docker/volumes/': RouteRecordInfo<'/docker/volumes/', '/docker/volumes', Record<never, never>, Record<never, never>>,
+    '/forgot': RouteRecordInfo<'/forgot', '/forgot', Record<never, never>, Record<never, never>>,
     '/login': RouteRecordInfo<'/login', '/login', Record<never, never>, Record<never, never>>,
     '/register': RouteRecordInfo<'/register', '/register', Record<never, never>, Record<never, never>>,
+    '/reset': RouteRecordInfo<'/reset', '/reset', Record<never, never>, Record<never, never>>,
     '/settings/': RouteRecordInfo<'/settings/', '/settings', Record<never, never>, Record<never, never>>,
     '/storages/': RouteRecordInfo<'/storages/', '/storages', Record<never, never>, Record<never, never>>,
     '/storages/[id]/': RouteRecordInfo<'/storages/[id]/', '/storages/:id', { id: ParamValue<true> }, { id: ParamValue<false> }>,
@@ -96,12 +98,20 @@ declare module 'vue-router/auto-routes' {
       routes: '/docker/volumes/'
       views: never
     }
+    'src/pages/forgot.vue': {
+      routes: '/forgot'
+      views: never
+    }
     'src/pages/login.vue': {
       routes: '/login'
       views: never
     }
     'src/pages/register.vue': {
       routes: '/register'
+      views: never
+    }
+    'src/pages/reset.vue': {
+      routes: '/reset'
       views: never
     }
     'src/pages/settings/index.vue': {

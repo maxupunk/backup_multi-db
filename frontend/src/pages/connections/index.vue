@@ -290,7 +290,7 @@ async function loadConnections() {
       type: filters.type || undefined,
       status: filters.status || undefined,
     })
-    connections.value = response.data?.data ?? []
+    connections.value = response.results
   } catch (error) {
     console.error('Erro ao carregar conexões:', error)
     notify('Erro ao carregar conexões', 'error')
@@ -306,7 +306,7 @@ async function testConnection(connection: Connection) {
   try {
     const response = await connectionsApi.test(connection.id)
     notify(
-      `Conexão bem-sucedida! Latência: ${response.data?.latencyMs}ms`,
+      `Conexão bem-sucedida! Latência: ${response.latencyMs}ms`,
       'success',
     )
     loadConnections()

@@ -37,14 +37,11 @@ async fn lists_users_for_an_admin() {
         assert_eq!(response.status_code(), 200);
         let body: Value = response.json();
 
-        // A pagina sai **crua**, sem o envelope `{success, data}`.
-        assert!(body.get("success").is_none());
-        assert_eq!(body["meta"]["total"], 2);
-        assert_eq!(body["meta"]["perPage"], 10);
-        assert_eq!(body["meta"]["currentPage"], 1);
-        assert_eq!(body["meta"]["lastPage"], 1);
-        assert!(body["meta"]["nextPageUrl"].is_null());
-        assert_eq!(body["data"].as_array().map(Vec::len), Some(2));
+        assert_eq!(body["pagination"]["total_items"], 2);
+        assert_eq!(body["pagination"]["page_size"], 10);
+        assert_eq!(body["pagination"]["page"], 1);
+        assert_eq!(body["pagination"]["total_pages"], 1);
+        assert_eq!(body["results"].as_array().map(Vec::len), Some(2));
     })
     .await;
 }
@@ -79,25 +76,25 @@ async fn paginates() {
         let first: Value = request
             .get("/api/users")
             .add_query_param("page", "1")
-            .add_query_param("limit", "1")
+            .add_query_param("page_size", "1")
             .authorization_bearer(&admin_token)
             .await
             .json();
         let second: Value = request
             .get("/api/users")
             .add_query_param("page", "2")
-            .add_query_param("limit", "1")
+            .add_query_param("page_size", "1")
             .authorization_bearer(&admin_token)
             .await
             .json();
 
-        assert_eq!(first["meta"]["perPage"], 1);
-        assert_eq!(first["meta"]["lastPage"], 2);
-        assert_eq!(first["meta"]["nextPageUrl"], "/?page=2");
+        assert_eq!(first["pagination"]["page_size"], 1);
+        assert_eq!(first["pagination"]["total_pages"], 2);
+        assert_eq!(first["pagination"]["page"], 1);
 
         // Um paginador que ignorasse o `page` passaria nas asercoes acima e
         // falharia nesta.
-        assert_ne!(first["data"][0]["id"], second["data"][0]["id"]);
+        assert_ne!(first["results"][0]["id"], second["results"][0]["id"]);
     })
     .await;
 }
@@ -123,10 +120,10 @@ async fn filters_by_active_status() {
             .await
             .json();
 
-        assert_eq!(inactive["meta"]["total"], 1);
-        assert_eq!(inactive["data"][0]["email"], "inativo@contract.test");
-        assert_eq!(active["meta"]["total"], 1);
-        assert_eq!(active["data"][0]["email"], "admin@contract.test");
+        assert_eq!(inactive["pagination"]["total_items"], 1);
+        assert_eq!(inactive["results"][0]["email"], "inativo@contract.test");
+        assert_eq!(active["pagination"]["total_items"], 1);
+        assert_eq!(active["results"][0]["email"], "admin@contract.test");
     })
     .await;
 }
@@ -145,7 +142,7 @@ async fn an_unrecognised_filter_returns_everything() {
             .await
             .json();
 
-        assert_eq!(body["meta"]["total"], 2);
+        assert_eq!(body["pagination"]["total_items"], 2);
     })
     .await;
 }
@@ -165,10 +162,10 @@ async fn denies_a_plain_member_with_403() {
 
         assert_eq!(response.status_code(), 403);
         let body: Value = response.json();
-        assert_eq!(body["success"], false);
+        assert_eq!(body["error"], "forbidden");
         assert_eq!(
-            body["message"],
-            "Apenas administradores podem gerenciar usuarios."
+            body["description"],
+            "Apenas administradores podem gerenciar usuários."
         );
     })
     .await;
@@ -197,19 +194,18 @@ async fn toggle_alternates_instead_of_only_activating() {
             .authorization_bearer(&admin_token)
             .await;
         assert_eq!(activated.status_code(), 200);
+        // Sem mensagem no corpo: `isActive` ja' diz o que aconteceu, e o texto
+        // da notificacao e' da interface.
         let body: Value = activated.json();
-        assert_eq!(body["success"], true);
-        assert_eq!(body["message"], "Usuário ativado com sucesso.");
-        assert_eq!(body["data"]["isActive"], true);
-        assert_eq!(body["data"]["id"], target);
+        assert_eq!(body["isActive"], true);
+        assert_eq!(body["id"], target);
 
         let deactivated: Value = request
             .patch(&format!("/api/users/{target}/status"))
             .authorization_bearer(&admin_token)
             .await
             .json();
-        assert_eq!(deactivated["message"], "Usuário desativado com sucesso.");
-        assert_eq!(deactivated["data"]["isActive"], false);
+        assert_eq!(deactivated["isActive"], false);
     })
     .await;
 }
@@ -230,8 +226,11 @@ async fn an_admin_cannot_change_their_own_status() {
 
         assert_eq!(response.status_code(), 400);
         let body: Value = response.json();
-        assert_eq!(body["success"], false);
-        assert_eq!(body["message"], "Você não pode alterar seu próprio status.");
+        assert_eq!(body["error"], "bad_request");
+        assert_eq!(
+            body["description"],
+            "Você não pode alterar seu próprio status."
+        );
     })
     .await;
 }

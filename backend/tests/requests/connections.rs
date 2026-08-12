@@ -54,13 +54,7 @@ async fn creates_a_connection_with_its_databases() {
         let token = admin_token(&request).await;
         let body = create(&request, &token, "Golden Da Criacao").await;
 
-        assert_eq!(body["success"], true);
-        assert_eq!(
-            body["message"],
-            "Conexão criada com sucesso com 1 database(s)"
-        );
-
-        let data = &body["data"];
+        let data = &body;
         assert_eq!(data["name"], "Golden Da Criacao");
         assert_eq!(data["status"], "active");
         // ACHADO 3: no corpo da criacao o registro ainda esta' na memoria, e
@@ -136,14 +130,13 @@ async fn lists_ordered_by_name_with_the_pagination_envelope() {
             .await
             .json();
 
-        assert_eq!(body["success"], true);
-        assert_eq!(body["data"]["meta"]["total"], 2);
-        assert_eq!(body["data"]["meta"]["perPage"], 20);
-        assert_eq!(body["data"]["data"][0]["name"], "Alfa");
-        assert_eq!(body["data"]["data"][1]["name"], "Zulu");
+        assert_eq!(body["pagination"]["total_items"], 2);
+        assert_eq!(body["pagination"]["page_size"], 20);
+        assert_eq!(body["results"][0]["name"], "Alfa");
+        assert_eq!(body["results"][1]["name"], "Zulu");
         // Na listagem o registro veio do banco: `0`, e nao `false`.
-        assert_eq!(body["data"]["data"][0]["scheduleEnabled"], 0);
-        assert_eq!(body["data"]["data"][0]["backups"], serde_json::json!([]));
+        assert_eq!(body["results"][0]["scheduleEnabled"], 0);
+        assert_eq!(body["results"][0]["backups"], serde_json::json!([]));
     })
     .await;
 }
@@ -163,8 +156,8 @@ async fn filters_by_type_and_search() {
             .await
             .json();
         // A busca do Adonis e' insensivel a caixa, e cobre nome **ou** host.
-        assert_eq!(by_search["data"]["meta"]["total"], 1);
-        assert_eq!(by_search["data"]["data"][0]["name"], "Producao MySQL");
+        assert_eq!(by_search["pagination"]["total_items"], 1);
+        assert_eq!(by_search["results"][0]["name"], "Producao MySQL");
 
         let by_host: Value = request
             .get("/api/connections")
@@ -172,7 +165,7 @@ async fn filters_by_type_and_search() {
             .authorization_bearer(&token)
             .await
             .json();
-        assert_eq!(by_host["data"]["meta"]["total"], 2);
+        assert_eq!(by_host["pagination"]["total_items"], 2);
 
         let by_type: Value = request
             .get("/api/connections")
@@ -180,14 +173,14 @@ async fn filters_by_type_and_search() {
             .authorization_bearer(&token)
             .await
             .json();
-        assert_eq!(by_type["data"]["meta"]["total"], 0);
+        assert_eq!(by_type["pagination"]["total_items"], 0);
     })
     .await;
 }
 
 #[tokio::test]
 #[serial]
-async fn an_invalid_type_is_a_422_with_the_accepted_choices() {
+async fn an_invalid_type_is_refused_with_the_accepted_choices() {
     request::<App, _, _>(|request, _ctx| async move {
         let token = admin_token(&request).await;
 
@@ -200,14 +193,12 @@ async fn an_invalid_type_is_a_422_with_the_accepted_choices() {
             .json(&body)
             .await;
 
-        assert_eq!(response.status_code(), 422);
-        let error = &response.json::<Value>()["errors"][0];
-        assert_eq!(error["field"], "type");
-        assert_eq!(error["rule"], "enum");
-        assert_eq!(error["message"], "The selected type is invalid");
+        assert_eq!(response.status_code(), 400);
+        let error = &response.json::<Value>()["errors"]["type"][0];
+        assert_eq!(error["code"], "enum");
         // A interface remonta o select com esta lista.
         assert_eq!(
-            error["meta"]["choices"],
+            error["params"]["choices"],
             serde_json::json!(["mysql", "mariadb", "postgresql"])
         );
     })
@@ -227,8 +218,8 @@ async fn rejects_an_out_of_range_port_and_an_empty_database_list() {
             .authorization_bearer(&token)
             .json(&invalid_port)
             .await;
-        assert_eq!(response.status_code(), 422);
-        assert_eq!(response.json::<Value>()["errors"][0]["field"], "port");
+        assert_eq!(response.status_code(), 400);
+        assert!(response.json::<Value>()["errors"]["port"].is_array());
 
         let mut no_databases = payload("Sem Databases");
         no_databases["databases"] = serde_json::json!([]);
@@ -237,8 +228,8 @@ async fn rejects_an_out_of_range_port_and_an_empty_database_list() {
             .authorization_bearer(&token)
             .json(&no_databases)
             .await;
-        assert_eq!(response.status_code(), 422);
-        assert_eq!(response.json::<Value>()["errors"][0]["field"], "databases");
+        assert_eq!(response.status_code(), 400);
+        assert!(response.json::<Value>()["errors"]["databases"].is_array());
     })
     .await;
 }
@@ -248,7 +239,7 @@ async fn rejects_an_out_of_range_port_and_an_empty_database_list() {
 async fn shows_one_connection_with_all_its_databases() {
     request::<App, _, _>(|request, _ctx| async move {
         let token = admin_token(&request).await;
-        let id = create(&request, &token, "Detalhe").await["data"]["id"]
+        let id = create(&request, &token, "Detalhe").await["id"]
             .as_i64()
             .expect("id");
 
@@ -258,7 +249,7 @@ async fn shows_one_connection_with_all_its_databases() {
             .await;
 
         assert_eq!(response.status_code(), 200);
-        let data = &response.json::<Value>()["data"];
+        let data = &response.json::<Value>();
         assert_eq!(data["id"], id);
         assert_eq!(data["databases"][0]["databaseName"], "app_fixture");
         assert!(data["backups"].is_array());
@@ -285,8 +276,8 @@ async fn a_missing_connection_is_a_404_in_the_controller_family() {
         ] {
             assert_eq!(response.status_code(), 404);
             let body: Value = response.json();
-            assert_eq!(body["success"], false);
-            assert_eq!(body["message"], "Conexão não encontrada");
+            assert_eq!(body["error"], "not_found");
+            assert_eq!(body["description"], "Conexão não encontrada");
         }
     })
     .await;
@@ -297,7 +288,7 @@ async fn a_missing_connection_is_a_404_in_the_controller_family() {
 async fn updates_only_the_fields_that_were_sent() {
     request::<App, _, _>(|request, _ctx| async move {
         let token = admin_token(&request).await;
-        let id = create(&request, &token, "Antes Do Update").await["data"]["id"]
+        let id = create(&request, &token, "Antes Do Update").await["id"]
             .as_i64()
             .expect("id");
 
@@ -309,9 +300,8 @@ async fn updates_only_the_fields_that_were_sent() {
 
         assert_eq!(response.status_code(), 200, "{}", response.text());
         let body: Value = response.json();
-        assert_eq!(body["message"], "Conexão atualizada com sucesso");
 
-        let data = &body["data"];
+        let data = &body;
         assert_eq!(data["name"], "Depois Do Update");
         assert_eq!(data["port"], 13307);
         // Nao enviados: intactos. Um `update` que zerasse o resto apagaria as
@@ -332,7 +322,7 @@ async fn removing_a_database_disables_it_instead_of_deleting_it() {
     // levaria junto o historico do banco removido.
     request::<App, _, _>(|request, ctx| async move {
         let token = admin_token(&request).await;
-        let id = create(&request, &token, "Sync").await["data"]["id"]
+        let id = create(&request, &token, "Sync").await["id"]
             .as_i64()
             .expect("id");
 
@@ -344,8 +334,8 @@ async fn removing_a_database_disables_it_instead_of_deleting_it() {
             .json();
 
         // A resposta mostra so' os habilitados.
-        assert_eq!(body["data"]["databases"].as_array().map(Vec::len), Some(1));
-        assert_eq!(body["data"]["databases"][0]["databaseName"], "outro_banco");
+        assert_eq!(body["databases"].as_array().map(Vec::len), Some(1));
+        assert_eq!(body["databases"][0]["databaseName"], "outro_banco");
 
         // A linha antiga continua no banco, desabilitada.
         let all = backend::models::connection_databases::Model::all_for(&ctx.db, id)
@@ -368,7 +358,7 @@ async fn re_adding_a_database_reactivates_the_existing_row() {
     // reativacao, o `PUT` falharia com erro de constraint.
     request::<App, _, _>(|request, ctx| async move {
         let token = admin_token(&request).await;
-        let id = create(&request, &token, "Reativa").await["data"]["id"]
+        let id = create(&request, &token, "Reativa").await["id"]
             .as_i64()
             .expect("id");
 
@@ -402,7 +392,7 @@ async fn re_adding_a_database_reactivates_the_existing_row() {
 async fn deletes_the_connection_and_its_databases() {
     request::<App, _, _>(|request, ctx| async move {
         let token = admin_token(&request).await;
-        let id = create(&request, &token, "Para Remover").await["data"]["id"]
+        let id = create(&request, &token, "Para Remover").await["id"]
             .as_i64()
             .expect("id");
 
@@ -431,7 +421,7 @@ async fn deletes_the_connection_and_its_databases() {
 async fn the_crud_writes_the_audit_trail() {
     request::<App, _, _>(|request, _ctx| async move {
         let token = admin_token(&request).await;
-        let id = create(&request, &token, "Auditada").await["data"]["id"]
+        let id = create(&request, &token, "Auditada").await["id"]
             .as_i64()
             .expect("id");
 
@@ -451,7 +441,7 @@ async fn the_crud_writes_the_audit_trail() {
             .await
             .json();
 
-        let actions: Vec<&str> = body["data"]
+        let actions: Vec<&str> = body["results"]
             .as_array()
             .expect("lista")
             .iter()
@@ -484,7 +474,7 @@ async fn testing_an_unreachable_host_records_the_failure() {
             .authorization_bearer(&token)
             .json(&body)
             .await;
-        let id = created.json::<Value>()["data"]["id"].as_i64().expect("id");
+        let id = created.json::<Value>()["id"].as_i64().expect("id");
 
         let response = request
             .post(&format!("/api/connections/{id}/test"))
@@ -493,8 +483,14 @@ async fn testing_an_unreachable_host_records_the_failure() {
 
         assert_eq!(response.status_code(), 422, "{}", response.text());
         let failure: Value = response.json();
-        assert_eq!(failure["success"], false);
-        assert_eq!(failure["message"], "Falha ao conectar ao banco de dados");
+        assert_eq!(failure["error"], "unprocessable_entity");
+        assert!(
+            failure["description"]
+                .as_str()
+                .is_some_and(|text| text.starts_with("Falha ao conectar ao banco de dados")),
+            "descricao: {}",
+            failure["description"]
+        );
         // O motivo do SGBD chega ao usuario; sem ele o botao "Testar" nao
         // ajuda a diagnosticar nada.
         assert!(failure["error"].is_string());
@@ -530,9 +526,13 @@ async fn discovering_against_a_closed_port_is_a_422() {
             .await;
 
         assert_eq!(response.status_code(), 422);
-        assert_eq!(
-            response.json::<Value>()["message"],
-            "Falha ao conectar ao servidor de banco de dados"
+        assert!(
+            response.json::<Value>()["description"]
+                .as_str()
+                .is_some_and(
+                    |text| text.starts_with("Falha ao conectar ao servidor de banco de dados")
+                ),
+            "descricao inesperada"
         );
     })
     .await;
@@ -550,17 +550,11 @@ async fn discovery_validates_before_dialing() {
             .json(&serde_json::json!({ "host": "127.0.0.1" }))
             .await;
 
-        assert_eq!(response.status_code(), 422);
+        assert_eq!(response.status_code(), 400);
         let body: Value = response.json();
-        let fields: Vec<&str> = body["errors"]
-            .as_array()
-            .expect("erros")
-            .iter()
-            .filter_map(|error| error["field"].as_str())
-            .collect();
-        assert!(fields.contains(&"type"));
-        assert!(fields.contains(&"port"));
-        assert!(fields.contains(&"username"));
+        for field in ["type", "port", "username"] {
+            assert!(body["errors"][field].is_array(), "faltou o erro de {field}");
+        }
     })
     .await;
 }
@@ -569,11 +563,11 @@ async fn discovery_validates_before_dialing() {
 #[serial]
 async fn a_hostile_database_name_never_reaches_the_engine() {
     // A validacao e' a primeira das duas barreiras contra injecao em DDL; a
-    // segunda esta' em `database_driver::quote_identifier`. Um 422 aqui prova
+    // segunda esta' em `database_driver::quote_identifier`. A recusa aqui prova
     // que a requisicao nem chega a abrir conexao.
     request::<App, _, _>(|request, _ctx| async move {
         let token = admin_token(&request).await;
-        let id = create(&request, &token, "Alvo").await["data"]["id"]
+        let id = create(&request, &token, "Alvo").await["id"]
             .as_i64()
             .expect("id");
 
@@ -584,11 +578,8 @@ async fn a_hostile_database_name_never_reaches_the_engine() {
                 .json(&serde_json::json!({ "databaseName": hostile }))
                 .await;
 
-            assert_eq!(response.status_code(), 422, "aceitou {hostile:?}");
-            assert_eq!(
-                response.json::<Value>()["errors"][0]["field"],
-                "databaseName"
-            );
+            assert_eq!(response.status_code(), 400, "aceitou {hostile:?}");
+            assert!(response.json::<Value>()["errors"]["databaseName"].is_array());
         }
     })
     .await;
@@ -608,7 +599,7 @@ async fn docker_hosts_answers_200_with_or_without_docker() {
             .await;
 
         assert_eq!(response.status_code(), 200);
-        let data = &response.json::<Value>()["data"];
+        let data = &response.json::<Value>();
         assert!(data["dockerAvailable"].is_boolean());
         assert!(data["hosts"].is_array());
         if data["dockerAvailable"] == true {
@@ -678,7 +669,7 @@ async fn tests_a_real_mysql_server() {
             .authorization_bearer(&token)
             .json(&body)
             .await;
-        let id = created.json::<Value>()["data"]["id"].as_i64().expect("id");
+        let id = created.json::<Value>()["id"].as_i64().expect("id");
 
         let response = request
             .post(&format!("/api/connections/{id}/test"))
@@ -686,7 +677,7 @@ async fn tests_a_real_mysql_server() {
             .await;
 
         assert_eq!(response.status_code(), 200, "{}", response.text());
-        let data = &response.json::<Value>()["data"];
+        let data = &response.json::<Value>();
         assert!(data["latencyMs"].as_i64().is_some_and(|value| value >= 0));
         assert!(
             data["version"].is_string(),
@@ -727,7 +718,7 @@ async fn discovers_databases_on_a_real_server() {
             .await;
 
         assert_eq!(response.status_code(), 200, "{}", response.text());
-        let databases = response.json::<Value>()["data"]["databases"]
+        let databases = response.json::<Value>()["databases"]
             .as_array()
             .expect("lista de databases")
             .clone();

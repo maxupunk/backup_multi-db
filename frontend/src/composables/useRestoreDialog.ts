@@ -148,7 +148,7 @@ export function useRestoreDialog(onSuccess?: () => void) {
 
     try {
       const response = await connectionsApi.get(connectionId)
-      targetDatabases.value = response.data?.databases ?? []
+      targetDatabases.value = response.databases ?? []
     } catch {
       // Sem databases — o campo ficará livre para digitação
     } finally {

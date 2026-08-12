@@ -474,7 +474,7 @@ async function loadBackups() {
       connectionId: filters.connectionId || undefined,
       status: filters.status || undefined,
     })
-    backups.value = (response.data?.data ?? []).map((backup) => ({
+    backups.value = (response.results).map((backup) => ({
       ...backup,
       protected: Boolean((backup as Backup & { protected: unknown }).protected),
     }))
@@ -489,7 +489,7 @@ async function loadBackups() {
 async function loadConnections() {
   try {
     const response = await connectionsApi.list()
-    connections.value = response.data?.data ?? []
+    connections.value = response.results
   } catch (error) {
     console.error('Erro ao carregar conexões:', error)
   }

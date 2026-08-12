@@ -322,15 +322,14 @@ impl Validate for BrowseQuery {
 
         if let Some(raw) = self.limit.as_deref().map(str::trim) {
             match raw.parse::<i64>() {
-                // O teto de 1000 é do `browseStorageValidator`. Sem ele,
-                // `?limit=1000000` numa pasta grande é um jeito barato de
-                // esgotar a memória do processo.
+                // Sem o teto de 1000, `?limit=1000000` numa pasta grande é um
+                // jeito barato de esgotar a memória do processo.
                 Ok(limit) => {
                     validation::number_range(&mut errors, "limit", limit, MAX_LIST_LIMIT as i64);
                 }
                 Err(_) => errors.add(
                     "limit",
-                    validation::rule("number", "The limit field must be a number".to_string()),
+                    validation::rule("number", "`limit` deve ser um número."),
                 ),
             }
         }
@@ -385,10 +384,7 @@ impl Validate for DeleteObjectParams {
         if self.is_directory.is_none() {
             errors.add(
                 "isDirectory",
-                validation::rule(
-                    "required",
-                    "The isDirectory field must be defined".to_string(),
-                ),
+                validation::rule("required", "Informe `isDirectory`."),
             );
         }
 

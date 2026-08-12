@@ -405,7 +405,7 @@ async function loadStats() {
   loading.value = true
   try {
     const response = await statsApi.get()
-    stats.value = response.data ?? null
+    stats.value = response
   } catch (error) {
     console.error('Erro ao carregar estatísticas:', error)
     notify('Erro ao carregar estatísticas', 'error')

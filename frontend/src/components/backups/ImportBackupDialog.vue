@@ -363,7 +363,7 @@ async function submit() {
 
     const response = await backupsApi.import(formData)
 
-    importResult.value = response.data ?? null
+    importResult.value = response
     step.value = 'result'
 
     notify('Backup importado com sucesso', 'success')

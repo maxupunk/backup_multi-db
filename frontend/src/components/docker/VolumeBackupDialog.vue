@@ -115,7 +115,7 @@ async function loadStorages() {
   loadingStorages.value = true
   try {
     const res = await storageDestinationsApi.list({ status: 'active', limit: 100 })
-    storages.value = res.data?.data ?? []
+    storages.value = res.results
     // Auto-select default if available
     const def = storages.value.find((s) => s.isDefault)
     if (def) selectedStorageId.value = def.id

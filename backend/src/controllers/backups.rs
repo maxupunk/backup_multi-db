@@ -15,17 +15,18 @@
 //! caminho. O progresso sai pelo canal de [`progress`](crate::models::progress),
 //! que a Fase 10 liga ao SSE.
 
-use axum::body::{Body, Bytes};
+use axum::body::Body;
 use axum::extract::Multipart;
-use axum::http::{header, StatusCode};
+use axum::http::header;
 use axum::response::{IntoResponse, Response};
+use loco_rs::controller::views::pagination::Pager;
 use loco_rs::prelude::*;
 use tokio::io::AsyncWriteExt;
 
-use crate::controllers::json_body;
-use crate::controllers::middlewares::limiters::{enforce, Limiters};
+use crate::controllers::middlewares::limiters::Limiters;
 use crate::controllers::middlewares::origin::RequestOrigin;
 use crate::controllers::Auth;
+use crate::controllers::{not_found, page_request, unprocessable, MAX_PAGE_SIZE};
 use crate::initializers::settings::Settings;
 use crate::models::_entities::{backups, connections};
 use crate::models::audit_log::AuditAction;
@@ -38,21 +39,12 @@ use crate::models::progress;
 use crate::models::restore::RestoreOptions;
 use crate::models::storage;
 use crate::views::backups as view;
-use crate::views::envelope::{Data, Message, MessageWithData};
-use crate::views::errors::ApiError;
-use crate::views::pagination::{Page, PageRequest};
 use crate::workers::restore::RestoreWorker;
-
-type Reply = std::result::Result<Response, ApiError>;
 
 const NOT_FOUND: &str = "Backup não encontrado";
 const CONNECTION_NOT_FOUND: &str = "Conexão não encontrada";
 
-const DEFAULT_PER_PAGE: u64 = 20;
-/// Teto de itens por pagina. O Adonis nao o tem, mas `?limit=1000000` seria um
-/// jeito barato de derrubar o processo pela memoria — a mesma protecao que
-/// `audit-logs` ja' aplica.
-const MAX_PER_PAGE: u64 = 100;
+const DEFAULT_PAGE_SIZE: u64 = 20;
 
 /// `GET /api/backups`.
 #[debug_handler]
@@ -60,15 +52,16 @@ pub async fn index(
     State(ctx): State<AppContext>,
     _session: Auth,
     Query(query): Query<ListQuery>,
-) -> Reply {
-    let page = PageRequest::from_query(
+) -> Result<Response> {
+    let page = page_request(
         query.page.as_deref(),
-        query.limit.as_deref(),
-        DEFAULT_PER_PAGE,
-        Some(MAX_PER_PAGE),
+        query.page_size.as_deref(),
+        DEFAULT_PAGE_SIZE,
+        MAX_PAGE_SIZE,
     );
 
-    let (rows, total) = Backup::list_page(&ctx.db, &query, page).await?;
+    let found = Backup::list_page(&ctx.db, &query, &page).await?;
+    let rows = found.page;
     // Uma consulta para a pagina inteira, e nao uma por linha.
     let connections = Backup::connections_of(&ctx.db, &rows).await?;
 
@@ -80,49 +73,49 @@ pub async fn index(
         })
         .collect();
 
-    Ok(axum::Json(Data::new(Page::new(items, total, page))).into_response())
+    format::json(Pager::new(items, found.meta))
 }
 
 /// `GET /api/connections/:connectionId/backups`.
 ///
-/// Sem `preload('connection')`: quem chama ja' esta' na tela da conexao, e o
-/// Adonis nao aninha o objeto aqui.
+/// Sem a conexao aninhada: quem chama ja' esta' na tela dela.
 #[debug_handler]
 pub async fn by_connection(
     State(ctx): State<AppContext>,
     _session: Auth,
     Path(connection_id): Path<i64>,
     Query(query): Query<ListQuery>,
-) -> Reply {
+) -> Result<Response> {
     if connections::Model::find_one(&ctx.db, connection_id)
         .await?
         .is_none()
     {
-        return Err(ApiError::not_found(CONNECTION_NOT_FOUND));
+        return Err(not_found(CONNECTION_NOT_FOUND));
     }
 
-    let page = PageRequest::from_query(
+    let page = page_request(
         query.page.as_deref(),
-        query.limit.as_deref(),
-        DEFAULT_PER_PAGE,
-        Some(MAX_PER_PAGE),
+        query.page_size.as_deref(),
+        DEFAULT_PAGE_SIZE,
+        MAX_PAGE_SIZE,
     );
 
-    let (rows, total) = Backup::list_page_for_connection(&ctx.db, connection_id, page).await?;
-    let items: Vec<view::Item> = rows.iter().map(view::Item::new).collect();
+    let found = Backup::list_page_for_connection(&ctx.db, connection_id, &page).await?;
+    let items: Vec<view::Item> = found.page.iter().map(view::Item::new).collect();
 
-    Ok(axum::Json(Data::new(Page::new(items, total, page))).into_response())
+    format::json(Pager::new(items, found.meta))
 }
 
 /// `GET /api/backups/:id`.
 #[debug_handler]
-pub async fn show(State(ctx): State<AppContext>, _session: Auth, Path(id): Path<i64>) -> Reply {
+pub async fn show(
+    State(ctx): State<AppContext>,
+    _session: Auth,
+    Path(id): Path<i64>,
+) -> Result<Response> {
     let (backup, connection) = find_with_connection(&ctx, id).await?;
 
-    Ok(axum::Json(Data::new(
-        view::Item::new(&backup).with_connection(connection.as_ref()),
-    ))
-    .into_response())
+    format::json(view::Item::new(&backup).with_connection(connection.as_ref()))
 }
 
 /// `GET /api/backups/:id/download`.
@@ -136,13 +129,13 @@ pub async fn download(
     _session: Auth,
     origin: RequestOrigin,
     Path(id): Path<i64>,
-) -> Reply {
+) -> Result<Response> {
     let (backup, connection) = find_with_connection(&ctx, id).await?;
 
     let (Some(file_path), Some(file_name)) =
         (backup.file_path.as_deref(), backup.file_name.clone())
     else {
-        return Err(ApiError::not_found("Arquivo de backup não disponível"));
+        return Err(not_found("Arquivo de backup não disponível"));
     };
 
     let (body, content_length) = open_for_download(&ctx, &backup, file_path).await?;
@@ -196,11 +189,11 @@ pub async fn destroy(
     _session: Auth,
     origin: RequestOrigin,
     Path(id): Path<i64>,
-) -> Reply {
+) -> Result<Response> {
     let (backup, connection) = find_with_connection(&ctx, id).await?;
 
     if !backup.can_be_deleted() {
-        return Err(ApiError::unprocessable(
+        return Err(unprocessable(
             "Este backup não pode ser deletado (protegido ou em execução)",
         ));
     }
@@ -224,7 +217,7 @@ pub async fn destroy(
     )
     .await;
 
-    Ok(axum::Json(Message::new("Backup removido com sucesso")).into_response())
+    format::json(data!({ "message": "Backup removido com sucesso" }))
 }
 
 /// `POST /api/backups/:id/restore`.
@@ -233,19 +226,18 @@ pub async fn restore(
     State(ctx): State<AppContext>,
     _session: Auth,
     Path(id): Path<i64>,
-    body: Bytes,
-) -> Reply {
-    let params: RestoreParams = json_body(&body)?;
+    Json(params): Json<RestoreParams>,
+) -> Result<Response> {
     let (backup, connection) = find_with_connection(&ctx, id).await?;
 
     if !matches!(backup.status_enum(), Ok(BackupStatus::Completed)) {
-        return Err(ApiError::unprocessable(
+        return Err(unprocessable(
             "Apenas backups concluídos podem ser restaurados",
         ));
     }
 
     if backup.file_path.is_none() || backup.file_name.is_none() {
-        return Err(ApiError::unprocessable("Arquivo de backup não disponível"));
+        return Err(unprocessable("Arquivo de backup não disponível"));
     }
 
     let target =
@@ -281,17 +273,10 @@ pub async fn restore(
     )
     .await?;
 
-    Ok((
-        StatusCode::ACCEPTED,
-        axum::Json(MessageWithData::new(
-            "Restauração iniciada com sucesso. Acompanhe o progresso em tempo real.",
-            view::RestoreAccepted {
-                restore_id,
-                database_name: target_database,
-            },
-        )),
-    )
-        .into_response())
+    format::render().status(202).json(view::RestoreAccepted {
+        restore_id,
+        database_name: target_database,
+    })
 }
 
 /// `POST /api/backups/import`.
@@ -312,7 +297,7 @@ pub async fn import(
     // erro que nao existe em nenhuma outra rota — a mesma razao de `json_body`
     // nao usar o extractor `Json`.
     multipart: std::result::Result<Multipart, axum::extract::multipart::MultipartRejection>,
-) -> Reply {
+) -> Result<Response> {
     let form = match multipart {
         Ok(multipart) => read_multipart(multipart).await?,
         // Corpo que nao e' multipart nao traz arquivo nenhum — que e' exatamente
@@ -326,19 +311,19 @@ pub async fn import(
     };
 
     let Some(upload) = form.file else {
-        return Err(ApiError::unprocessable(
+        return Err(unprocessable(
             "Nenhum arquivo enviado. Inclua o campo \"file\" no formulário multipart.",
         ));
     };
 
     // A extensao e' conferida **antes** de qualquer byte tocar o disco.
     let format = backup_import::detect_format(&upload.file_name, &upload.header)
-        .map_err(|err| ApiError::unprocessable(err.to_string()))?;
+        .map_err(|err| unprocessable(err.to_string()))?;
 
     let connection = match form.connection_id {
         Some(id) => match connections::Model::find_one(&ctx.db, id).await? {
             Some(row) => Some(row),
-            None => return Err(ApiError::not_found(CONNECTION_NOT_FOUND)),
+            None => return Err(not_found(CONNECTION_NOT_FOUND)),
         },
         None => None,
     };
@@ -349,7 +334,7 @@ pub async fn import(
 
     if let Some(result) = &integrity {
         if !result.valid {
-            return Err(ApiError::unprocessable(format!(
+            return Err(unprocessable(format!(
                 "Falha na verificação de integridade: {}",
                 result.message
             )));
@@ -365,19 +350,19 @@ pub async fn import(
 
     let base = std::path::PathBuf::from(&settings.backup_storage_path);
     let Some(destination) = backup_storage::local_full_path(&base, &relative) else {
-        return Err(ApiError::unprocessable("Nome de arquivo inválido"));
+        return Err(unprocessable("Nome de arquivo inválido"));
     };
 
     let stored = store_upload(&destination, &upload).await.map_err(|err| {
         tracing::error!(error = %err, "falha ao gravar o backup importado");
-        ApiError::unprocessable("Erro ao gravar o arquivo importado")
+        unprocessable("Erro ao gravar o arquivo importado")
     })?;
 
     let checksum = backup_import::checksum_of(&destination)
         .await
         .map_err(|err| {
             tracing::error!(error = %err, "falha ao calcular o checksum do backup importado");
-            ApiError::unprocessable("Erro ao ler o arquivo importado")
+            unprocessable("Erro ao ler o arquivo importado")
         })?;
 
     let file_name = relative.rsplit('/').next().unwrap_or(&relative).to_string();
@@ -417,20 +402,13 @@ pub async fn import(
     )
     .await;
 
-    Ok((
-        StatusCode::CREATED,
-        axum::Json(MessageWithData::new(
-            "Backup importado com sucesso",
-            view::Imported {
-                backup: view::Item::new(&backup),
-                format,
-                checksum,
-                file_size: stored,
-                integrity,
-            },
-        )),
-    )
-        .into_response())
+    format::render().status(201).json(view::Imported {
+        backup: view::Item::new(&backup),
+        format,
+        checksum,
+        file_size: stored,
+        integrity,
+    })
 }
 
 // ============================================================================
@@ -481,7 +459,7 @@ struct Upload {
 /// obrigaria a mover o arquivo, ou a recusar formularios com ordem invertida. O
 /// teto de [`backup_import::MAX_UPLOAD_BYTES`] limita o custo, e a Fase 8 troca
 /// isto por escrita direta no adaptador de storage.
-async fn read_multipart(mut multipart: Multipart) -> std::result::Result<ImportForm, ApiError> {
+async fn read_multipart(mut multipart: Multipart) -> Result<ImportForm> {
     let mut form = ImportForm {
         file: None,
         connection_id: None,
@@ -490,27 +468,25 @@ async fn read_multipart(mut multipart: Multipart) -> std::result::Result<ImportF
     };
 
     while let Some(field) = multipart.next_field().await.map_err(|err| {
-        ApiError::unprocessable("Formulário multipart inválido").with_detail(err.to_string())
+        crate::controllers::with_detail(unprocessable("Formulário multipart inválido"), err)
     })? {
         let name = field.name().unwrap_or_default().to_string();
         let file_name = field.file_name().map(ToString::to_string);
 
         if name == "file" {
             let Some(file_name) = file_name else {
-                return Err(ApiError::unprocessable(
-                    "O campo \"file\" precisa ser um arquivo",
-                ));
+                return Err(unprocessable("O campo \"file\" precisa ser um arquivo"));
             };
 
             let bytes = field.bytes().await.map_err(|err| {
-                ApiError::unprocessable("Falha ao ler o arquivo enviado")
-                    .with_detail(err.to_string())
+                crate::controllers::with_detail(
+                    unprocessable("Falha ao ler o arquivo enviado"),
+                    err,
+                )
             })?;
 
             if bytes.len() as u64 > backup_import::MAX_UPLOAD_BYTES {
-                return Err(ApiError::unprocessable(
-                    "O arquivo excede o limite de 500 MB",
-                ));
+                return Err(unprocessable("O arquivo excede o limite de 500 MB"));
             }
 
             let split = bytes.len().min(backup_import::HEADER_BYTES);
@@ -580,10 +556,7 @@ struct ImportedRecord {
     integrity: Option<backup_import::IntegrityResult>,
 }
 
-async fn insert_imported(
-    ctx: &AppContext,
-    record: &ImportedRecord,
-) -> std::result::Result<backups::Model, ApiError> {
+async fn insert_imported(ctx: &AppContext, record: &ImportedRecord) -> Result<backups::Model> {
     use sea_orm::ActiveValue::Set;
 
     let now = chrono::Utc::now().fixed_offset();
@@ -639,10 +612,10 @@ async fn insert_imported(
 async fn find_with_connection(
     ctx: &AppContext,
     id: i64,
-) -> std::result::Result<(backups::Model, Option<connections::Model>), ApiError> {
+) -> Result<(backups::Model, Option<connections::Model>)> {
     Backup::find_one_with_connection(&ctx.db, id)
         .await?
-        .ok_or_else(|| ApiError::not_found(NOT_FOUND))
+        .ok_or_else(|| not_found(NOT_FOUND))
 }
 
 /// Conexao de destino da restauracao.
@@ -655,15 +628,15 @@ async fn resolve_target_connection(
     backup: &backups::Model,
     origin: Option<connections::Model>,
     requested: Option<i64>,
-) -> std::result::Result<connections::Model, ApiError> {
+) -> Result<connections::Model> {
     if let Some(id) = requested.filter(|id| Some(*id) != backup.connection_id) {
         let Some(specified) = connections::Model::find_one(&ctx.db, id).await? else {
-            return Err(ApiError::not_found("Conexão de destino não encontrada"));
+            return Err(not_found("Conexão de destino não encontrada"));
         };
 
         if let Some(origin) = origin.as_ref() {
             if specified.r#type != origin.r#type {
-                return Err(ApiError::unprocessable(format!(
+                return Err(unprocessable(format!(
                     "O tipo da conexão de destino ({}) deve ser igual ao da conexão \
                      original do backup ({})",
                     specified.r#type, origin.r#type
@@ -675,7 +648,7 @@ async fn resolve_target_connection(
     }
 
     origin.ok_or_else(|| {
-        ApiError::unprocessable(
+        unprocessable(
             "Conexão associada ao backup não encontrada. Selecione uma conexão de \
              destino para restaurar este backup importado.",
         )
@@ -687,7 +660,7 @@ async fn resolve_local_path(
     ctx: &AppContext,
     backup: &backups::Model,
     file_path: &str,
-) -> std::result::Result<std::path::PathBuf, ApiError> {
+) -> Result<std::path::PathBuf> {
     let settings = Settings::from_json(ctx.config.settings.as_ref())?;
     let encryption = backup_runner::encryption_service(&settings)?;
     let destination =
@@ -701,7 +674,7 @@ async fn resolve_local_path(
     );
 
     backup_storage::local_full_path(&base, file_path)
-        .ok_or_else(|| ApiError::not_found("Arquivo de backup não encontrado no servidor"))
+        .ok_or_else(|| not_found("Arquivo de backup não encontrado no servidor"))
 }
 
 /// Abre o arquivo do backup para download, no disco ou no destino remoto.
@@ -714,7 +687,7 @@ async fn open_for_download(
     ctx: &AppContext,
     backup: &backups::Model,
     file_path: &str,
-) -> std::result::Result<(Body, Option<u64>), ApiError> {
+) -> Result<(Body, Option<u64>)> {
     if let Ok(path) = resolve_local_path(ctx, backup, file_path).await {
         if let Ok(file) = tokio::fs::File::open(&path).await {
             let length = file.metadata().await.ok().map(|meta| meta.len());
@@ -735,9 +708,7 @@ async fn open_for_download(
     // O 404 não expõe o caminho absoluto: ele revela a árvore de diretórios do
     // servidor sem ajudar em nada quem consome a API.
     let Some(destination) = destination else {
-        return Err(ApiError::not_found(
-            "Arquivo de backup não encontrado no servidor",
-        ));
+        return Err(not_found("Arquivo de backup não encontrado no servidor"));
     };
 
     let (reader, size) = storage::explorer::open_backup(
@@ -749,7 +720,7 @@ async fn open_for_download(
     .await
     .map_err(|err| {
         tracing::warn!(backup_id = backup.id, error = %err, "falha ao abrir o backup no destino remoto");
-        ApiError::not_found("Arquivo de backup não encontrado no servidor")
+        not_found("Arquivo de backup não encontrado no servidor")
     })?;
 
     Ok((
@@ -847,8 +818,8 @@ async fn audit(ctx: &AppContext, origin: &RequestOrigin, entry: AuditEntry) {
 /// como no `start/routes.ts` do Adonis — os dois numeros aparecem no cabecalho
 /// `x-ratelimit-limit` que a suite de contrato compara.
 pub fn routes(limiters: &Limiters) -> Routes {
-    let strict = axum::middleware::from_fn_with_state(limiters.strict(), enforce);
-    let backup = axum::middleware::from_fn_with_state(limiters.backup(), enforce);
+    let strict = limiters.strict();
+    let backup = limiters.backup();
 
     Routes::new()
         .prefix("/api/backups")

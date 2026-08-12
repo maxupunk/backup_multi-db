@@ -160,7 +160,7 @@ async function loadAvailablePaths () {
   loadingPaths.value = true
   try {
     const response = await storagesApi.browse(id)
-    const objects = response.data?.objects ?? []
+    const objects = response.objects ?? []
     availablePaths.value = objects
       .filter(obj => obj.isDirectory)
       .map(obj => ({ label: obj.name, value: obj.key }))
@@ -175,7 +175,7 @@ async function startArchive () {
   starting.value = true
   try {
     const response:any = await storagesApi.startArchive(id, resolvedPath())
-    const jobId = response.data?.id
+    const jobId = response.id
     if (jobId) {
       activeArchiveIds.value.push(jobId)
       notify('Geração de archive iniciada', 'info')
@@ -191,7 +191,7 @@ async function startArchive () {
 onMounted(async () => {
   try {
     const response = await storagesApi.get(id)
-    const data = response.data as Storage | undefined
+    const data = response as Storage | undefined
     storageName.value = data?.name ?? `#${id}`
   } catch { /* ignore */ }
 

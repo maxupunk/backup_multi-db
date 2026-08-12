@@ -287,10 +287,10 @@
       </v-data-table>
 
       <!-- Pagination -->
-      <div v-if="meta.lastPage > 1" class="d-flex justify-center pa-4">
+      <div v-if="meta.total_pages > 1" class="d-flex justify-center pa-4">
         <v-pagination
           v-model="filters.page"
-          :length="meta.lastPage"
+          :length="meta.total_pages"
           :total-visible="mdAndUp ? 5 : 3"
           @update:model-value="loadLogs"
         />
@@ -400,7 +400,7 @@
   const loading = ref(false)
   const logs = ref<AuditLog[]>([])
   const stats = ref<Partial<AuditStats>>({})
-  const meta = ref({ total: 0, perPage: 20, currentPage: 1, lastPage: 1 })
+  const meta = ref({ page: 1, page_size: 20, total_pages: 1, total_items: 0 })
 
   const filters = reactive({
     page: 1,
@@ -477,8 +477,8 @@
         entityId: filters.entityId || undefined,
         status: filters.status || undefined,
       })
-      logs.value = response.data ?? []
-      meta.value = response.meta ?? { total: 0, perPage: 20, currentPage: 1, lastPage: 1 }
+      logs.value = response.results
+      meta.value = response.pagination
     } catch (error) {
       console.error('Erro ao carregar logs:', error)
     } finally {
@@ -489,7 +489,7 @@
   async function loadStats () {
     try {
       const response = await auditLogsApi.stats()
-      stats.value = response.data ?? {}
+      stats.value = response
     } catch (error) {
       console.error('Erro ao carregar estatísticas:', error)
     }

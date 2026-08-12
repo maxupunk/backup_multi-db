@@ -15,16 +15,13 @@
 //! host que engole pacotes em vez de recusar prenderia o worker ate' o cliente
 //! desistir.
 
-use axum::body::Bytes;
-use axum::http::StatusCode;
-use axum::response::{IntoResponse, Response};
+use loco_rs::controller::views::pagination::Pager;
 use loco_rs::prelude::*;
-use validator::Validate;
 
-use crate::controllers::json_body;
-use crate::controllers::middlewares::limiters::{enforce, Limiters};
+use crate::controllers::middlewares::limiters::Limiters;
 use crate::controllers::middlewares::origin::RequestOrigin;
 use crate::controllers::Auth;
+use crate::controllers::{not_found, page_request, unprocessable, validation_failed};
 use crate::initializers::settings::Settings;
 use crate::models::_entities::{connection_databases, connections};
 use crate::models::audit_log::AuditAction;
@@ -39,18 +36,13 @@ use crate::models::encryption::EncryptionService;
 use crate::models::notifications::{self, NotificationCategory, NotificationType};
 use crate::views::backups as backup_view;
 use crate::views::connections as view;
-use crate::views::envelope::{Data, Message, MessageWithData};
-use crate::views::errors::ApiError;
-use crate::views::pagination::{Page, PageRequest};
-
-type Reply = std::result::Result<Response, ApiError>;
 
 /// Mensagem unica de 404 deste recurso.
 const NOT_FOUND: &str = "Conexão não encontrada";
 
-/// Itens por pagina quando o cliente nao pede, e o teto do `listConnectionsValidator`.
-const DEFAULT_PER_PAGE: u64 = 20;
-const MAX_PER_PAGE: u64 = 100;
+/// Itens por pagina quando o cliente nao pede, e o teto aceito.
+const DEFAULT_PAGE_SIZE: u64 = 20;
+const MAX_PAGE_SIZE: u64 = 100;
 
 /// Quantos backups acompanham `GET /api/connections/:id`.
 const DETAIL_BACKUPS: u64 = 10;
@@ -61,17 +53,18 @@ pub async fn index(
     State(ctx): State<AppContext>,
     _session: Auth,
     Query(query): Query<ListQuery>,
-) -> Reply {
-    Validate::validate(&query).map_err(|errors| ApiError::from_validation_errors(&errors))?;
+) -> Result<Response> {
+    Validate::validate(&query).map_err(validation_failed)?;
 
-    let page = PageRequest::from_query(
+    let page = page_request(
         query.page.as_deref(),
-        query.limit.as_deref(),
-        DEFAULT_PER_PAGE,
-        Some(MAX_PER_PAGE),
+        query.page_size.as_deref(),
+        DEFAULT_PAGE_SIZE,
+        MAX_PAGE_SIZE,
     );
 
-    let (rows, total) = connections::Model::list_page(&ctx.db, &query, page).await?;
+    let found = connections::Model::list_page(&ctx.db, &query, &page).await?;
+    let rows = found.page;
     let ids: Vec<i64> = rows.iter().map(|row| row.id).collect();
 
     // Duas consultas para a pagina inteira, e nao duas por linha.
@@ -95,7 +88,7 @@ pub async fn index(
         ));
     }
 
-    Ok(axum::Json(Data::new(Page::new(items, total, page))).into_response())
+    format::json(Pager::new(items, found.meta))
 }
 
 /// `POST /api/connections`.
@@ -104,10 +97,9 @@ pub async fn store(
     State(ctx): State<AppContext>,
     _session: Auth,
     origin: RequestOrigin,
-    body: Bytes,
-) -> Reply {
-    let params: CreateParams = json_body(&body)?;
-    Validate::validate(&params).map_err(|errors| ApiError::from_validation_errors(&errors))?;
+    Json(params): Json<CreateParams>,
+) -> Result<Response> {
+    Validate::validate(&params).map_err(validation_failed)?;
 
     let encryption = encryption_service(&ctx)?;
     let connection = connections::Model::create(&ctx.db, &params, &encryption).await?;
@@ -126,29 +118,26 @@ pub async fn store(
     )
     .await;
 
-    // Recarregada do banco: e' o `connection.load('databases')` do Adonis, e e'
-    // o que faz `enabled` sair como `1` e nao `true` no corpo da criacao.
+    // Recarregada do banco para que a resposta traga os databases como ficaram
+    // gravados, e nao como chegaram no corpo.
     let databases = connection_databases::Model::all_for(&ctx.db, connection.id).await?;
 
-    Ok((
-        StatusCode::CREATED,
-        axum::Json(MessageWithData::new(
-            format!("Conexão criada com sucesso com {} database(s)", names.len()),
-            view::Created::new(
-                &connection,
-                databases
-                    .into_iter()
-                    .map(view::DatabaseItem::from)
-                    .collect(),
-            ),
-        )),
-    )
-        .into_response())
+    format::render().status(201).json(view::Created::new(
+        &connection,
+        databases
+            .into_iter()
+            .map(view::DatabaseItem::from)
+            .collect(),
+    ))
 }
 
 /// `GET /api/connections/:id`.
 #[debug_handler]
-pub async fn show(State(ctx): State<AppContext>, _session: Auth, Path(id): Path<i64>) -> Reply {
+pub async fn show(
+    State(ctx): State<AppContext>,
+    _session: Auth,
+    Path(id): Path<i64>,
+) -> Result<Response> {
     let connection = find_or_404(&ctx, id).await?;
 
     // Aqui a listagem traz **todos** os databases, habilitados ou nao: e' a
@@ -161,15 +150,14 @@ pub async fn show(State(ctx): State<AppContext>, _session: Auth, Path(id): Path<
     )
     .await?;
 
-    Ok(axum::Json(Data::new(view::Detail::new(
+    format::json(view::Detail::new(
         &connection,
         databases
             .into_iter()
             .map(view::DatabaseItem::from)
             .collect(),
         backups.into_iter().map(view::BackupDetail::from).collect(),
-    )))
-    .into_response())
+    ))
 }
 
 /// `PUT`/`PATCH /api/connections/:id`.
@@ -179,13 +167,11 @@ pub async fn update(
     _session: Auth,
     origin: RequestOrigin,
     Path(id): Path<i64>,
-    body: Bytes,
-) -> Reply {
+    Json(params): Json<UpdateParams>,
+) -> Result<Response> {
+    Validate::validate(&params).map_err(validation_failed)?;
+
     let connection = find_or_404(&ctx, id).await?;
-
-    let params: UpdateParams = json_body(&body)?;
-    Validate::validate(&params).map_err(|errors| ApiError::from_validation_errors(&errors))?;
-
     let encryption = encryption_service(&ctx)?;
     let (connection, mut changes) = connection
         .apply_update(&ctx.db, &params, &encryption)
@@ -213,21 +199,17 @@ pub async fn update(
         .await;
     }
 
-    // So' os habilitados, como no Adonis — a resposta do update reflete o que
-    // vai entrar no proximo backup.
+    // So' os habilitados: a resposta do update reflete o que vai entrar no
+    // proximo backup.
     let databases = connection_databases::Model::enabled_for(&ctx.db, connection.id).await?;
 
-    Ok(axum::Json(MessageWithData::new(
-        "Conexão atualizada com sucesso",
-        view::Updated::new(
-            &connection,
-            databases
-                .into_iter()
-                .map(view::DatabaseItem::from)
-                .collect(),
-        ),
+    format::json(view::Updated::new(
+        &connection,
+        databases
+            .into_iter()
+            .map(view::DatabaseItem::from)
+            .collect(),
     ))
-    .into_response())
 }
 
 /// `DELETE /api/connections/:id`.
@@ -241,7 +223,7 @@ pub async fn destroy(
     _session: Auth,
     origin: RequestOrigin,
     Path(id): Path<i64>,
-) -> Reply {
+) -> Result<Response> {
     let connection = find_or_404(&ctx, id).await?;
     let name = connection.name.clone();
 
@@ -258,7 +240,7 @@ pub async fn destroy(
     )
     .await;
 
-    Ok(axum::Json(Message::new("Conexão removida com sucesso")).into_response())
+    format::json(data!({ "message": "Conexão removida com sucesso" }))
 }
 
 /// `POST /api/connections/:id/test`.
@@ -272,7 +254,7 @@ pub async fn test(
     _session: Auth,
     origin: RequestOrigin,
     Path(id): Path<i64>,
-) -> Reply {
+) -> Result<Response> {
     let connection = find_or_404(&ctx, id).await?;
     let encryption = encryption_service(&ctx)?;
 
@@ -316,14 +298,10 @@ pub async fn test(
             )
             .await;
 
-            Ok(axum::Json(MessageWithData::new(
-                "Conexão testada com sucesso",
-                view::TestResult {
-                    latency_ms: probe.latency_ms,
-                    version: probe.version,
-                },
-            ))
-            .into_response())
+            format::json(view::TestResult {
+                latency_ms: probe.latency_ms,
+                version: probe.version,
+            })
         }
         Err(error) => {
             let message = error.message();
@@ -354,7 +332,10 @@ pub async fn test(
             )
             .await;
 
-            Err(ApiError::unprocessable("Falha ao conectar ao banco de dados").with_detail(message))
+            Err(crate::controllers::with_detail(
+                unprocessable("Falha ao conectar ao banco de dados"),
+                message,
+            ))
         }
     }
 }
@@ -368,25 +349,20 @@ pub async fn test(
 pub async fn discover_databases(
     State(_ctx): State<AppContext>,
     _session: Auth,
-    body: Bytes,
-) -> Reply {
-    let params: DiscoverParams = json_body(&body)?;
-    Validate::validate(&params).map_err(|errors| ApiError::from_validation_errors(&errors))?;
+    Json(params): Json<DiscoverParams>,
+) -> Result<Response> {
+    Validate::validate(&params).map_err(validation_failed)?;
 
     let target = params
         .target()
-        .ok_or_else(|| ApiError::unprocessable("Tipo de banco de dados inválido"))?;
+        .ok_or_else(|| unprocessable("Tipo de banco de dados inválido"))?;
 
     match database_driver::list_databases(&target).await {
-        Ok(databases) => Ok(axum::Json(MessageWithData::new(
-            "Bancos de dados descobertos com sucesso",
-            view::DiscoveredDatabases { databases },
-        ))
-        .into_response()),
-        Err(error) => Err(ApiError::unprocessable(
-            "Falha ao conectar ao servidor de banco de dados",
-        )
-        .with_detail(error.message())),
+        Ok(databases) => format::json(view::DiscoveredDatabases { databases }),
+        Err(error) => Err(crate::controllers::with_detail(
+            unprocessable("Falha ao conectar ao servidor de banco de dados"),
+            error.message(),
+        )),
     }
 }
 
@@ -397,12 +373,11 @@ pub async fn create_database(
     _session: Auth,
     origin: RequestOrigin,
     Path(id): Path<i64>,
-    body: Bytes,
-) -> Reply {
-    let connection = find_or_404(&ctx, id).await?;
+    Json(params): Json<CreateDatabaseParams>,
+) -> Result<Response> {
+    Validate::validate(&params).map_err(validation_failed)?;
 
-    let params: CreateDatabaseParams = json_body(&body)?;
-    Validate::validate(&params).map_err(|errors| ApiError::from_validation_errors(&errors))?;
+    let connection = find_or_404(&ctx, id).await?;
     let database_name = params
         .database_name
         .as_deref()
@@ -418,17 +393,17 @@ pub async fn create_database(
     // texto que diz exatamente isso.
     let exists = database_driver::database_exists(&target, &database_name)
         .await
-        .map_err(|error| ApiError::unprocessable(error.message()))?;
+        .map_err(|error| crate::controllers::unprocessable(error.message()))?;
 
     if exists {
-        return Err(ApiError::unprocessable(format!(
+        return Err(crate::controllers::unprocessable(format!(
             "O banco de dados \"{database_name}\" já existe nesta conexão"
         )));
     }
 
     database_driver::create_database(&target, &database_name)
         .await
-        .map_err(|error| ApiError::unprocessable(error.message()))?;
+        .map_err(|error| crate::controllers::unprocessable(error.message()))?;
 
     audit(
         &ctx,
@@ -444,14 +419,9 @@ pub async fn create_database(
     )
     .await;
 
-    Ok((
-        StatusCode::CREATED,
-        axum::Json(MessageWithData::new(
-            format!("Banco de dados \"{database_name}\" criado com sucesso"),
-            view::CreatedDatabase { database_name },
-        )),
-    )
-        .into_response())
+    format::render()
+        .status(201)
+        .json(view::CreatedDatabase { database_name })
 }
 
 /// `GET /api/connections/docker-hosts`.
@@ -461,7 +431,7 @@ pub async fn create_database(
 /// devolve numa maquina sem Docker, e o contrato exige 200 tambem nesse caso
 /// (a tela de nova conexao trata a ausencia, nao um erro).
 #[debug_handler]
-pub async fn docker_hosts(State(_ctx): State<AppContext>, _session: Auth) -> Reply {
+pub async fn docker_hosts(State(_ctx): State<AppContext>, _session: Auth) -> Result<Response> {
     let environment = crate::models::docker::environment().await;
     let docker_available = environment["dockerAvailable"].as_bool().unwrap_or(false);
     let hosts = if docker_available {
@@ -471,7 +441,7 @@ pub async fn docker_hosts(State(_ctx): State<AppContext>, _session: Auth) -> Rep
     } else {
         Vec::new()
     };
-    Ok(axum::Json(Data::new(view::DockerHosts {
+    format::json(view::DockerHosts {
         docker_available,
         unavailable_reason: environment["unavailableReason"]
             .as_str()
@@ -480,8 +450,7 @@ pub async fn docker_hosts(State(_ctx): State<AppContext>, _session: Auth) -> Rep
             .as_str()
             .map(ToString::to_string),
         hosts,
-    }))
-    .into_response())
+    })
 }
 
 /// `POST /api/connections/:id/backup`.
@@ -502,11 +471,11 @@ pub async fn backup(
     _session: Auth,
     origin: RequestOrigin,
     Path(id): Path<i64>,
-) -> Reply {
+) -> Result<Response> {
     let connection = find_or_404(&ctx, id).await?;
 
     if connection.status.as_deref() == Some(ConnectionStatus::Error.as_str()) {
-        return Err(ApiError::unprocessable(
+        return Err(crate::controllers::unprocessable(
             "Não é possível fazer backup de uma conexão com erro. Teste a conexão primeiro.",
         ));
     }
@@ -514,7 +483,7 @@ pub async fn backup(
     let databases = backup_runner::enabled_databases(&ctx, connection.id).await?;
 
     if databases.is_empty() {
-        return Err(ApiError::unprocessable(
+        return Err(crate::controllers::unprocessable(
             "Nenhum database habilitado para backup nesta conexão.",
         ));
     }
@@ -524,8 +493,7 @@ pub async fn backup(
     let mut failed = 0;
 
     // Um database por vez, e nao em paralelo: `n` dumps simultaneos contra o
-    // mesmo servidor multiplicam a carga nele e o pico de disco aqui. E' o que
-    // o `executeAll` do Adonis faz.
+    // mesmo servidor multiplicam a carga nele e o pico de disco aqui.
     for connection_database in &databases {
         let run = backup_runner::run_backup(
             &ctx,
@@ -613,53 +581,32 @@ pub async fn backup(
     // responde "quando esta conexao foi backupeada", nao "quantas vezes".
     backup_runner::touch_last_backup(&ctx, connection).await?;
 
-    let data = backup_view::ConnectionBackupResult {
+    // **200 mesmo com falha parcial.** A requisicao fez o que foi pedida: rodou
+    // os `n` backups e relata o desfecho de cada um em `backups`, com
+    // `successful`/`failed` no topo. Devolver 4xx aqui obrigaria o cliente a ler
+    // dados uteis de dentro de um corpo de erro — e este era o unico ponto da
+    // API em que isso acontecia.
+    format::json(backup_view::ConnectionBackupResult {
         total_databases: databases.len(),
         successful,
         failed,
         backups: items,
-    };
-
-    if failed == 0 {
-        return Ok(axum::Json(MessageWithData::new(
-            format!("Backup realizado com sucesso para {successful} database(s)"),
-            data,
-        ))
-        .into_response());
-    }
-
-    // Falha parcial responde **422 com corpo de sucesso parcial**: o envelope
-    // traz `success: false` e o mesmo `data`, porque a interface lista quais
-    // databases falharam. E' o unico ponto da API em que um 4xx carrega `data`.
-    Ok((
-        StatusCode::UNPROCESSABLE_ENTITY,
-        axum::Json(serde_json::json!({
-            "success": false,
-            "message": format!("Backup parcialmente concluído: {successful} sucesso, {failed} falha(s)"),
-            "data": data,
-        })),
-    )
-        .into_response())
+    })
 }
 
-async fn find_or_404(
-    ctx: &AppContext,
-    id: i64,
-) -> std::result::Result<connections::Model, ApiError> {
+async fn find_or_404(ctx: &AppContext, id: i64) -> Result<connections::Model> {
     connections::Model::find_one(&ctx.db, id)
         .await?
-        .ok_or_else(|| ApiError::not_found(NOT_FOUND))
+        .ok_or_else(|| not_found(NOT_FOUND))
 }
 
-fn encryption_service(ctx: &AppContext) -> std::result::Result<EncryptionService, ApiError> {
+fn encryption_service(ctx: &AppContext) -> Result<EncryptionService> {
     let settings = Settings::from_json(ctx.config.settings.as_ref())?;
 
     EncryptionService::from_hex_key(&settings.db_encryption_key).map_err(|err| {
         // A mensagem nao pode conter a chave; `EncryptionError` so' descreve o
         // formato, nunca o valor.
-        ApiError::from(Error::Message(format!(
-            "chave de criptografia inválida: {err}"
-        )))
+        Error::Message(format!("chave de criptografia inválida: {err}"))
     })
 }
 
@@ -709,7 +656,7 @@ fn notification_data(
 /// `strict` (60/min): cada uma abre conexao contra um servidor de terceiro, e
 /// sem limite a rota vira um scanner de portas com a nossa origem.
 pub fn routes(limiters: &Limiters) -> Routes {
-    let strict = axum::middleware::from_fn_with_state(limiters.strict(), enforce);
+    let strict = limiters.strict();
 
     Routes::new()
         .prefix("/api/connections")
@@ -730,11 +677,5 @@ pub fn routes(limiters: &Limiters) -> Routes {
         // O limitador `backup` (60/min) e' o mesmo que o Adonis pendura aqui — e'
         // o numero que o golden `connections/backup-connection-in-error` gravou
         // em `x-ratelimit-limit`.
-        .add(
-            "/{id}/backup",
-            post(backup).layer(axum::middleware::from_fn_with_state(
-                limiters.backup(),
-                enforce,
-            )),
-        )
+        .add("/{id}/backup", post(backup).layer(limiters.backup()))
 }

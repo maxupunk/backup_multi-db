@@ -14,16 +14,15 @@
 //! provedor**, e não em 500: um bucket inexistente ou uma credencial expirada
 //! são erro de configuração do usuário, não do servidor.
 
-use axum::body::Bytes;
-use axum::http::{header, StatusCode};
+use axum::http::header;
 use axum::response::{IntoResponse, Response};
+use loco_rs::controller::views::pagination::Pager;
 use loco_rs::prelude::*;
-use validator::Validate;
 
-use crate::controllers::json_body;
-use crate::controllers::middlewares::limiters::{enforce, Limiters};
+use crate::controllers::middlewares::limiters::Limiters;
 use crate::controllers::middlewares::origin::RequestOrigin;
 use crate::controllers::Auth;
+use crate::controllers::{not_found, page_request, validation_failed, MAX_PAGE_SIZE};
 use crate::initializers::settings::Settings;
 use crate::models::audit_log::{AuditAction, AuditEntityType};
 use crate::models::audit_logs::{AuditEntry, Model as AuditLog};
@@ -37,22 +36,16 @@ use crate::models::storage_destinations::{
     self as storages, CreateStorageParams, DestinationUpdate, ListQuery, NewDestination,
     UpdateStorageParams,
 };
-use crate::views::envelope::{Data, Message, MessageWithData};
-use crate::views::errors::ApiError;
-use crate::views::pagination::{Page, PageRequest};
 use crate::views::storages as view;
 use crate::workers::storage_jobs::{ArchiveWorker, CopyWorker};
-
-type Reply = std::result::Result<Response, ApiError>;
 
 /// Mensagem única de 404 deste recurso.
 const NOT_FOUND: &str = "Armazenamento não encontrado";
 
-const DEFAULT_PER_PAGE: u64 = 20;
-const MAX_PER_PAGE: u64 = 100;
+const DEFAULT_PAGE_SIZE: u64 = 20;
 
 #[derive(Debug, Clone, Default, serde::Deserialize)]
-struct StartCopyParams {
+pub struct StartCopyParams {
     #[serde(rename = "destinationId")]
     destination_id: Option<i64>,
     #[serde(rename = "sourcePath")]
@@ -66,7 +59,7 @@ struct StartCopyParams {
 }
 
 #[derive(Debug, Clone, Default, serde::Deserialize)]
-struct StartArchiveParams {
+pub struct StartArchiveParams {
     path: Option<String>,
 }
 
@@ -89,20 +82,20 @@ pub async fn index(
     State(ctx): State<AppContext>,
     _session: Auth,
     Query(query): Query<ListQuery>,
-) -> Reply {
-    Validate::validate(&query).map_err(|errors| ApiError::from_validation_errors(&errors))?;
+) -> Result<Response> {
+    Validate::validate(&query).map_err(validation_failed)?;
 
-    let page = PageRequest::from_query(
+    let page = page_request(
         query.page.as_deref(),
-        query.limit.as_deref(),
-        DEFAULT_PER_PAGE,
-        Some(MAX_PER_PAGE),
+        query.page_size.as_deref(),
+        DEFAULT_PAGE_SIZE,
+        MAX_PAGE_SIZE,
     );
 
-    let (rows, total) = storages::Model::list_page(&ctx.db, &query, page).await?;
-    let items: Vec<view::Item> = rows.iter().map(view::Item::from).collect();
+    let found = storages::Model::list_page(&ctx.db, &query, &page).await?;
+    let items: Vec<view::Item> = found.page.iter().map(view::Item::from).collect();
 
-    Ok(axum::Json(Data::new(Page::new(items, total, page))).into_response())
+    format::json(Pager::new(items, found.meta))
 }
 
 /// `POST /api/storages`.
@@ -111,17 +104,16 @@ pub async fn store(
     State(ctx): State<AppContext>,
     _session: Auth,
     origin: RequestOrigin,
-    body: Bytes,
-) -> Reply {
-    let params: CreateStorageParams = json_body(&body)?;
-    Validate::validate(&params).map_err(|errors| ApiError::from_validation_errors(&errors))?;
+    Json(params): Json<CreateStorageParams>,
+) -> Result<Response> {
+    Validate::validate(&params).map_err(validation_failed)?;
 
     // A validação já garantiu que o provider é um dos sete.
     let provider = params
         .provider
         .as_deref()
         .and_then(|raw| raw.parse().ok())
-        .ok_or_else(|| ApiError::unprocessable("Provider inválido"))?;
+        .ok_or_else(|| crate::controllers::unprocessable("Provider inválido"))?;
 
     let storage_type = storages::StorageProvider::storage_type(provider);
     let config = storages::build_config(storage_type, Some(provider), params.config.as_ref());
@@ -163,23 +155,22 @@ pub async fn store(
 
     let safe = safe_config(&storage, &encryption)?;
 
-    Ok((
-        StatusCode::CREATED,
-        axum::Json(MessageWithData::new(
-            "Armazenamento criado com sucesso",
-            view::Detail::new(&storage, safe),
-        )),
-    )
-        .into_response())
+    format::render()
+        .status(201)
+        .json(view::Detail::new(&storage, safe))
 }
 
 /// `GET /api/storages/:id`.
 #[debug_handler]
-pub async fn show(State(ctx): State<AppContext>, _session: Auth, Path(id): Path<i64>) -> Reply {
+pub async fn show(
+    State(ctx): State<AppContext>,
+    _session: Auth,
+    Path(id): Path<i64>,
+) -> Result<Response> {
     let storage = find_or_404(&ctx, id).await?;
     let safe = safe_config(&storage, &encryption(&ctx)?)?;
 
-    Ok(axum::Json(Data::new(view::Detail::new(&storage, safe))).into_response())
+    format::json(view::Detail::new(&storage, safe))
 }
 
 /// `PUT /api/storages/:id`.
@@ -193,12 +184,11 @@ pub async fn update(
     _session: Auth,
     origin: RequestOrigin,
     Path(id): Path<i64>,
-    body: Bytes,
-) -> Reply {
-    let storage = find_or_404(&ctx, id).await?;
+    Json(params): Json<UpdateStorageParams>,
+) -> Result<Response> {
+    Validate::validate(&params).map_err(validation_failed)?;
 
-    let params: UpdateStorageParams = json_body(&body)?;
-    Validate::validate(&params).map_err(|errors| ApiError::from_validation_errors(&errors))?;
+    let storage = find_or_404(&ctx, id).await?;
 
     let encryption = encryption(&ctx)?;
     let provider: Option<storages::StorageProvider> =
@@ -222,7 +212,7 @@ pub async fn update(
             // Uma decifragem só, reaproveitada aqui e na resposta.
             let existing = storage
                 .decrypt_config(&encryption)
-                .map_err(|err| ApiError::from(Error::Message(err.to_string())))?;
+                .map_err(|err| Error::Message(err.to_string()))?;
             storages::merge_existing_secrets(existing.raw(), &mut merged);
 
             Some(storages::build_config(
@@ -268,11 +258,7 @@ pub async fn update(
 
     let safe = safe_config(&storage, &encryption)?;
 
-    Ok(axum::Json(MessageWithData::new(
-        "Armazenamento atualizado com sucesso",
-        view::Detail::new(&storage, safe),
-    ))
-    .into_response())
+    format::json(view::Detail::new(&storage, safe))
 }
 
 /// `DELETE /api/storages/:id`.
@@ -286,12 +272,12 @@ pub async fn destroy(
     _session: Auth,
     origin: RequestOrigin,
     Path(id): Path<i64>,
-) -> Reply {
+) -> Result<Response> {
     let storage = find_or_404(&ctx, id).await?;
     let usage = storages::Model::usage(&ctx.db, storage.id).await?;
 
     if usage.is_referenced() {
-        return Err(ApiError::unprocessable(format!(
+        return Err(crate::controllers::unprocessable(format!(
             "Não é possível remover: existem {} backup(s) e {} conexão(ões) vinculadas a este armazenamento",
             usage.backups, usage.connections
         )));
@@ -312,18 +298,22 @@ pub async fn destroy(
     )
     .await;
 
-    Ok(axum::Json(Message::new("Armazenamento removido com sucesso")).into_response())
+    format::json(data!({ "message": "Armazenamento removido com sucesso" }))
 }
 
 /// `POST /api/storages/:id/test`.
 #[debug_handler]
-pub async fn test(State(ctx): State<AppContext>, _session: Auth, Path(id): Path<i64>) -> Reply {
+pub async fn test(
+    State(ctx): State<AppContext>,
+    _session: Auth,
+    Path(id): Path<i64>,
+) -> Result<Response> {
     let storage = find_or_404(&ctx, id).await?;
     let (_, adapter) = open(&ctx, &storage).map_err(test_failure)?;
 
     adapter.test_connection().await.map_err(test_failure)?;
 
-    Ok(axum::Json(Message::new("Conexão testada com sucesso")).into_response())
+    format::json(data!({ "message": "Conexão testada com sucesso" }))
 }
 
 /// `GET /api/storages/:id/browse`.
@@ -333,9 +323,10 @@ pub async fn browse(
     _session: Auth,
     Path(id): Path<i64>,
     Query(query): Query<BrowseQuery>,
-) -> Reply {
+) -> Result<Response> {
+    Validate::validate(&query).map_err(validation_failed)?;
+
     let storage = find_or_404(&ctx, id).await?;
-    Validate::validate(&query).map_err(|errors| ApiError::from_validation_errors(&errors))?;
 
     let settings = settings(&ctx)?;
     let (config, adapter) = open(&ctx, &storage).map_err(browse_failure)?;
@@ -354,7 +345,7 @@ pub async fn browse(
     )
     .await?;
 
-    Ok(axum::Json(Data::new(view::BrowseResult::new(page, replicas))).into_response())
+    format::json(view::BrowseResult::new(page, replicas))
 }
 
 /// `DELETE /api/storages/:id/object`.
@@ -364,17 +355,16 @@ pub async fn destroy_object(
     _session: Auth,
     origin: RequestOrigin,
     Path(id): Path<i64>,
-    body: Bytes,
-) -> Reply {
-    let storage = find_or_404(&ctx, id).await?;
+    Json(params): Json<DeleteObjectParams>,
+) -> Result<Response> {
+    Validate::validate(&params).map_err(validation_failed)?;
 
-    let params: DeleteObjectParams = json_body(&body)?;
-    Validate::validate(&params).map_err(|errors| ApiError::from_validation_errors(&errors))?;
+    let storage = find_or_404(&ctx, id).await?;
 
     let is_directory = params.is_directory.unwrap_or(false);
     let noun = if is_directory { "pasta" } else { "arquivo" };
     let failure = |error: StorageError| {
-        ApiError::unprocessable(format!("Erro ao excluir {noun}: {}", error.message()))
+        crate::controllers::unprocessable(format!("Erro ao excluir {noun}: {}", error.message()))
     };
 
     // A raiz é recusada antes de qualquer chamada ao provedor: a interface
@@ -408,12 +398,11 @@ pub async fn destroy_object(
     )
     .await;
 
-    Ok(axum::Json(Message::new(if is_directory {
+    format::json(data!({ "message": if is_directory {
         "Pasta excluída com sucesso"
     } else {
         "Arquivo excluído com sucesso"
-    }))
-    .into_response())
+    } }))
 }
 
 /// `POST /api/storages/:id/copy` inicia a copia e devolve antes da transferencia.
@@ -423,20 +412,20 @@ pub async fn start_copy(
     _session: Auth,
     origin: RequestOrigin,
     Path(id): Path<i64>,
-    body: Bytes,
-) -> Reply {
+    Json(params): Json<StartCopyParams>,
+) -> Result<Response> {
+    Validate::validate(&params).map_err(validation_failed)?;
+
     let source = storages::Model::find_one(&ctx.db, id)
         .await?
-        .ok_or_else(|| ApiError::not_found("Armazenamento de origem não encontrado"))?;
-    let params: StartCopyParams = json_body(&body)?;
-    Validate::validate(&params).map_err(|errors| ApiError::from_validation_errors(&errors))?;
+        .ok_or_else(|| not_found("Armazenamento de origem não encontrado"))?;
     let destination_id = params.destination_id.unwrap_or_default();
     let destination = storages::Model::find_one(&ctx.db, destination_id)
         .await?
-        .ok_or_else(|| ApiError::not_found("Armazenamento de destino não encontrado"))?;
+        .ok_or_else(|| crate::controllers::not_found("Armazenamento de destino não encontrado"))?;
 
     if source.id == destination.id {
-        return Err(ApiError::unprocessable(
+        return Err(crate::controllers::unprocessable(
             "Origem e destino não podem ser o mesmo armazenamento",
         ));
     }
@@ -480,14 +469,9 @@ pub async fn start_copy(
     )
     .await;
 
-    Ok((
-        StatusCode::ACCEPTED,
-        axum::Json(MessageWithData::new(
-            "Job de cópia iniciado",
-            serde_json::json!({ "jobId": job.id }),
-        )),
-    )
-        .into_response())
+    format::render()
+        .status(202)
+        .json(serde_json::json!({ "jobId": job.id }))
 }
 
 /// `GET /api/storages/copy-jobs/:jobId`.
@@ -496,11 +480,11 @@ pub async fn copy_status(
     State(_ctx): State<AppContext>,
     _session: Auth,
     Path(job_id): Path<String>,
-) -> Reply {
+) -> Result<Response> {
     let job = copy::get(&_ctx, &job_id)
         .await?
-        .ok_or_else(|| ApiError::not_found("Job de cópia não encontrado"))?;
-    Ok(axum::Json(Data::new(job)).into_response())
+        .ok_or_else(|| crate::controllers::not_found("Job de cópia não encontrado"))?;
+    format::json(job)
 }
 
 /// `POST /api/storages/:id/archive` cria um `.tar.gz` em disco, sem reter a
@@ -511,10 +495,9 @@ pub async fn start_archive(
     _session: Auth,
     origin: RequestOrigin,
     Path(id): Path<i64>,
-    body: Bytes,
-) -> Reply {
+    Json(params): Json<StartArchiveParams>,
+) -> Result<Response> {
     let storage = find_or_404(&ctx, id).await?;
-    let params: StartArchiveParams = json_body(&body)?;
     let started =
         archive::start(&ctx, storage.clone(), settings(&ctx)?, params.path.clone()).await?;
     ArchiveWorker::perform_later(&ctx, started.args).await?;
@@ -535,11 +518,7 @@ pub async fn start_archive(
     )
     .await;
 
-    Ok((
-        StatusCode::ACCEPTED,
-        axum::Json(MessageWithData::new("Job de archive iniciado", job)),
-    )
-        .into_response())
+    format::render().status(202).json(job)
 }
 
 /// `GET /api/storages/archive-jobs/:jobId`.
@@ -548,11 +527,11 @@ pub async fn archive_status(
     State(ctx): State<AppContext>,
     _session: Auth,
     Path(job_id): Path<String>,
-) -> Reply {
+) -> Result<Response> {
     let job = archive::get(&ctx, &job_id)
         .await?
-        .ok_or_else(|| ApiError::not_found("Job de archive não encontrado"))?;
-    Ok(axum::Json(Data::new(job)).into_response())
+        .ok_or_else(|| crate::controllers::not_found("Job de archive não encontrado"))?;
+    format::json(job)
 }
 
 /// `GET /api/storages/archive-jobs/:jobId/download` transmite o arquivo já
@@ -562,10 +541,10 @@ pub async fn download_archive(
     State(ctx): State<AppContext>,
     _session: Auth,
     Path(job_id): Path<String>,
-) -> Reply {
+) -> Result<Response> {
     let job = archive::get(&ctx, &job_id)
         .await?
-        .ok_or_else(|| ApiError::not_found("Job de archive não encontrado"))?;
+        .ok_or_else(|| crate::controllers::not_found("Job de archive não encontrado"))?;
     if job.status != archive::ArchiveStatus::Ready {
         let message = match job.status {
             archive::ArchiveStatus::Pending => "Archive ainda não foi iniciado".to_string(),
@@ -576,14 +555,14 @@ pub async fn download_archive(
             }
             archive::ArchiveStatus::Ready => "Archive não está disponível".to_string(),
         };
-        return Err(ApiError::unprocessable(message));
+        return Err(crate::controllers::unprocessable(message));
     }
     let path = archive::download_path(&ctx, &job_id)
         .await?
-        .ok_or_else(|| ApiError::unprocessable("Stream de download não disponível"))?;
+        .ok_or_else(|| crate::controllers::unprocessable("Stream de download não disponível"))?;
     let file = tokio::fs::File::open(&path)
         .await
-        .map_err(|_| ApiError::unprocessable("Stream de download não disponível"))?;
+        .map_err(|_| crate::controllers::unprocessable("Stream de download não disponível"))?;
     let length = file.metadata().await.ok().map(|metadata| metadata.len());
     let mut response =
         axum::body::Body::from_stream(tokio_util::io::ReaderStream::new(file)).into_response();
@@ -607,18 +586,18 @@ pub async fn download_archive(
     Ok(response)
 }
 
-async fn find_or_404(ctx: &AppContext, id: i64) -> std::result::Result<storages::Model, ApiError> {
+async fn find_or_404(ctx: &AppContext, id: i64) -> Result<storages::Model> {
     storages::Model::find_one(&ctx.db, id)
         .await?
-        .ok_or_else(|| ApiError::not_found(NOT_FOUND))
+        .ok_or_else(|| crate::controllers::not_found(NOT_FOUND))
 }
 
-fn settings(ctx: &AppContext) -> std::result::Result<Settings, ApiError> {
-    Ok(Settings::from_json(ctx.config.settings.as_ref())?)
+fn settings(ctx: &AppContext) -> Result<Settings> {
+    Settings::from_json(ctx.config.settings.as_ref())
 }
 
-fn encryption(ctx: &AppContext) -> std::result::Result<EncryptionService, ApiError> {
-    Ok(backup_runner::encryption_service(&settings(ctx)?)?)
+fn encryption(ctx: &AppContext) -> Result<EncryptionService> {
+    backup_runner::encryption_service(&settings(ctx)?)
 }
 
 /// Abre o adapter do destino.
@@ -641,18 +620,18 @@ fn open(
 fn safe_config(
     storage: &storages::Model,
     encryption: &EncryptionService,
-) -> std::result::Result<serde_json::Value, ApiError> {
+) -> Result<serde_json::Value> {
     storage
         .safe_config(encryption)
-        .map_err(|err| ApiError::from(Error::Message(err.to_string())))
+        .map_err(|err| Error::Message(err.to_string()))
 }
 
-fn test_failure(error: StorageError) -> ApiError {
-    ApiError::unprocessable(format!("Falha no teste de conexão: {}", error.message()))
+fn test_failure(error: StorageError) -> Error {
+    crate::controllers::unprocessable(format!("Falha no teste de conexão: {}", error.message()))
 }
 
-fn browse_failure(error: StorageError) -> ApiError {
-    ApiError::unprocessable(format!(
+fn browse_failure(error: StorageError) -> Error {
+    crate::controllers::unprocessable(format!(
         "Erro ao explorar armazenamento: {}",
         error.message()
     ))
@@ -673,8 +652,8 @@ async fn audit(ctx: &AppContext, origin: &RequestOrigin, entry: AuditEntry) {
 /// conexão com um serviço externo, e sem limite a rota vira um scanner com a
 /// nossa origem.
 pub fn routes(limiters: &Limiters) -> Routes {
-    let strict = axum::middleware::from_fn_with_state(limiters.strict(), enforce);
-    let backup = axum::middleware::from_fn_with_state(limiters.backup(), enforce);
+    let strict = limiters.strict();
+    let backup = limiters.backup();
 
     Routes::new()
         .prefix("/api/storages")

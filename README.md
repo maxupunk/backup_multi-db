@@ -272,7 +272,14 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 
 - Em producao, o primeiro cadastro administrativo exige `INITIAL_ADMIN_BOOTSTRAP_TOKEN`.
 - O token deve ser informado na tela de cadastro quando o sistema ainda nao possui usuarios.
-- Os bearer tokens expiram conforme `AUTH_ACCESS_TOKEN_EXPIRES_IN` (padrao: `7d`).
+- A sessao e' um JWT assinado com `JWT_SECRET` — **obrigatorio em producao**, e
+  o processo nao sobe sem ele. Precisa ser base64 valido
+  (`openssl rand -base64 48 | tr -d '\n'`).
+- O token expira conforme `JWT_EXPIRATION`, em segundos (padrao: `604800`, 7 dias).
+  Como um JWT nao pode ser revogado, esse e' o unico limite sobre a vida de um
+  token vazado; trocar o `JWT_SECRET` invalida todas as sessoes de uma vez.
+- Quem perdeu a senha usa `Esqueci minha senha` na tela de login: o link chega
+  por e-mail (SMTP do bloco `mailer:`) e vale 4 horas, uma vez so'.
 
 ## 📖 API Endpoints
 

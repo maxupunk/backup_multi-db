@@ -305,31 +305,17 @@ export interface ConnectionSummary {
 }
 
 /**
- * Resposta de sucesso da API
+ * As formas comuns a toda resposta vêm do backend, geradas por `ts-rs`.
+ *
+ * Redigitá-las aqui é o que fazia o frontend divergir em silêncio: um campo
+ * renomeado no Rust virava `undefined` na tela em vez de erro de compilação.
+ * Regerar: `cargo test --lib dtos` no backend.
  */
-export interface ApiResponse<T = unknown> {
-  success: boolean
-  message?: string
-  data?: T
-  error?: string
-}
-
-/**
- * Resposta paginada
- */
-export interface PaginatedResponse<T> {
-  success: boolean
-  data: {
-    meta: {
-      total: number
-      perPage: number
-      currentPage: number
-      lastPage: number
-      firstPage: number
-    }
-    data: T[]
-  }
-}
+export type { ApiErrorBody } from '@/bindings/ApiErrorBody'
+export type { FieldError } from '@/bindings/FieldError'
+export type { MessageResponse } from '@/bindings/MessageResponse'
+export type { PageInfo } from '@/bindings/PageInfo'
+export type { Paginated } from '@/bindings/Paginated' 
 
 /**
  * Informações de espaço de armazenamento

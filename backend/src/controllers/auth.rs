@@ -21,40 +21,32 @@
 //! anything: it acknowledges, and the client drops the token. Shortening
 //! `auth.jwt.expiration` is the lever that bounds a stolen token's life.
 
-use axum::body::Bytes;
-use axum::http::StatusCode;
-use axum::response::{IntoResponse, Response};
 use loco_rs::controller::extractor::auth::get_jwt_from_config;
 use loco_rs::environment::Environment;
 use loco_rs::prelude::*;
 use subtle::ConstantTimeEq;
-use validator::Validate;
 
-use crate::controllers::{json_body, Auth};
+use crate::controllers::{bad_request, forbidden, unauthorized, validation_failed, Auth};
 use crate::initializers::settings::Settings;
 use crate::mailers::auth::AuthMailer;
 use crate::models::_entities::users;
 use crate::models::users::{ForgotParams, LoginParams, NewUser, RegisterParams, ResetParams};
+use crate::models::validation::single_error;
 use crate::views::auth as view;
-use crate::views::envelope::{Data, Message};
-use crate::views::errors::{ApiError, ErrorItem};
-
-type Reply = std::result::Result<Response, ApiError>;
 
 /// `GET /api/auth/status` — public, feeds the first-run screen.
 ///
 /// Reveals nothing beyond "somebody is already registered", which is exactly
 /// what the client needs to choose between the login and the bootstrap screen.
 #[debug_handler]
-pub async fn status(State(ctx): State<AppContext>) -> Reply {
+pub async fn status(State(ctx): State<AppContext>) -> Result<Response> {
     let total = users::Model::count_all(&ctx.db).await?;
     let in_production = ctx.environment == Environment::Production;
 
-    Ok(axum::Json(Data::new(view::SystemStatus {
+    format::json(view::SystemStatus {
         has_users: total > 0,
         requires_bootstrap_token: total == 0 && in_production,
-    }))
-    .into_response())
+    })
 }
 
 /// `POST /api/auth/register`.
@@ -62,9 +54,11 @@ pub async fn status(State(ctx): State<AppContext>) -> Reply {
 /// 201 on both successful outcomes, with different bodies: a token and the user
 /// for the first administrator, only a message for whoever stays pending.
 #[debug_handler]
-pub async fn register(State(ctx): State<AppContext>, body: Bytes) -> Reply {
-    let params: RegisterParams = json_body(&body)?;
-    Validate::validate(&params).map_err(|errors| ApiError::from_validation_errors(&errors))?;
+pub async fn register(
+    State(ctx): State<AppContext>,
+    Json(params): Json<RegisterParams>,
+) -> Result<Response> {
+    Validate::validate(&params).map_err(validation_failed)?;
 
     let email = params.normalized_email();
 
@@ -72,11 +66,11 @@ pub async fn register(State(ctx): State<AppContext>, body: Bytes) -> Reply {
         .await?
         .is_some()
     {
-        return Err(ApiError::Validation(vec![ErrorItem::validation(
-            "email",
-            "database.unique",
-            "The email has already been taken",
-        )]));
+        // Uniqueness is not a field rule the derive can express — it needs the
+        // table — so it is raised by hand, in the same shape as the rest.
+        return Err(Error::Validation(
+            single_error("email", "unique", "Este e-mail já está cadastrado.").into(),
+        ));
     }
 
     let settings = Settings::from_json(ctx.config.settings.as_ref())?;
@@ -90,10 +84,10 @@ pub async fn register(State(ctx): State<AppContext>, body: Bytes) -> Reply {
             in_production,
         )
     {
-        return Err(ApiError::forbidden(if in_production {
-            "Token de bootstrap invalido ou ausente para criar o administrador inicial."
+        return Err(forbidden(if in_production {
+            "Token de bootstrap inválido ou ausente para criar o administrador inicial."
         } else {
-            "Nao foi possivel validar o bootstrap inicial."
+            "Não foi possível validar o bootstrap inicial."
         }));
     }
 
@@ -112,32 +106,28 @@ pub async fn register(State(ctx): State<AppContext>, body: Bytes) -> Reply {
     .await?;
 
     if !user.is_active {
-        return Ok((
-            StatusCode::CREATED,
-            axum::Json(Message::new(
-                "Cadastro realizado. Aguarde aprovação de um administrador.",
-            )),
-        )
-            .into_response());
+        return format::render().status(201).json(data!({
+            "message": "Cadastro realizado. Aguarde aprovação de um administrador.",
+        }));
     }
 
     let token = issue_token(&ctx, &user)?;
 
-    Ok((
-        StatusCode::CREATED,
-        axum::Json(Data::new(view::Session::new(token, &user))),
-    )
-        .into_response())
+    format::render()
+        .status(201)
+        .json(view::Session::new(token, &user))
 }
 
 /// `POST /api/auth/login`.
 ///
-/// Three outcomes with three statuses: 422 for an invalid payload, **400** for
+/// Three outcomes with three statuses: 400 for an invalid payload, **401** for
 /// wrong credentials, and 401 for an account still awaiting approval.
 #[debug_handler]
-pub async fn login(State(ctx): State<AppContext>, body: Bytes) -> Reply {
-    let params: LoginParams = json_body(&body)?;
-    Validate::validate(&params).map_err(|errors| ApiError::from_validation_errors(&errors))?;
+pub async fn login(
+    State(ctx): State<AppContext>,
+    Json(params): Json<LoginParams>,
+) -> Result<Response> {
+    Validate::validate(&params).map_err(validation_failed)?;
 
     let user = users::Model::authenticate(
         &ctx.db,
@@ -145,17 +135,17 @@ pub async fn login(State(ctx): State<AppContext>, body: Bytes) -> Reply {
         params.password.as_deref().unwrap_or_default(),
     )
     .await?
-    .ok_or(ApiError::InvalidCredentials)?;
+    .ok_or_else(|| unauthorized("E-mail ou senha inválidos."))?;
 
     // After the password, never before: answering "account pending" to someone
     // who typed the wrong password would confirm the e-mail exists.
     if !user.is_active {
-        return Err(ApiError::unauthorized("Sua conta aguarda aprovação."));
+        return Err(unauthorized("Sua conta aguarda aprovação."));
     }
 
     let token = issue_token(&ctx, &user)?;
 
-    Ok(axum::Json(Data::new(view::Session::new(token, &user))).into_response())
+    format::json(view::Session::new(token, &user))
 }
 
 /// `GET /api/auth/me` — the user behind the current token.
@@ -164,8 +154,8 @@ pub async fn login(State(ctx): State<AppContext>, body: Bytes) -> Reply {
 /// deactivating a user takes effect on the next token instead. `is_active` rides
 /// along in the body so the client can act on it.
 #[debug_handler]
-pub async fn me(State(_ctx): State<AppContext>, auth: Auth) -> Reply {
-    Ok(axum::Json(Data::new(view::CurrentUser::from(&auth.user))).into_response())
+pub async fn me(State(_ctx): State<AppContext>, auth: Auth) -> Result<Response> {
+    format::json(view::CurrentUser::from(&auth.user))
 }
 
 /// `POST /api/auth/logout`.
@@ -173,8 +163,8 @@ pub async fn me(State(_ctx): State<AppContext>, auth: Auth) -> Reply {
 /// Acknowledges; there is nothing on the server to delete. The client drops the
 /// token, which is what ends the session.
 #[debug_handler]
-pub async fn logout(State(_ctx): State<AppContext>, _auth: Auth) -> Reply {
-    Ok(axum::Json(Message::new("Logged out successfully")).into_response())
+pub async fn logout(State(_ctx): State<AppContext>, _auth: Auth) -> Result<Response> {
+    format::json(data!({ "message": "Sessão encerrada." }))
 }
 
 /// `POST /api/auth/forgot` — starts the recovery flow.
@@ -186,9 +176,11 @@ pub async fn logout(State(_ctx): State<AppContext>, _auth: Auth) -> Reply {
 /// A failure to send is logged and swallowed for the same reason: an SMTP error
 /// surfacing only for real addresses would leak the same fact.
 #[debug_handler]
-pub async fn forgot(State(ctx): State<AppContext>, body: Bytes) -> Reply {
-    let params: ForgotParams = json_body(&body)?;
-    Validate::validate(&params).map_err(|errors| ApiError::from_validation_errors(&errors))?;
+pub async fn forgot(
+    State(ctx): State<AppContext>,
+    Json(params): Json<ForgotParams>,
+) -> Result<Response> {
+    Validate::validate(&params).map_err(validation_failed)?;
 
     if let Some(user) = users::Model::find_by_email(&ctx.db, &params.normalized_email()).await? {
         let user = user.start_password_reset(&ctx.db).await?;
@@ -198,10 +190,9 @@ pub async fn forgot(State(ctx): State<AppContext>, body: Bytes) -> Reply {
         }
     }
 
-    Ok(axum::Json(Message::new(
-        "Se o e-mail estiver cadastrado, você receberá as instruções de redefinição.",
-    ))
-    .into_response())
+    format::json(data!({
+        "message": "Se o e-mail estiver cadastrado, você receberá as instruções de redefinição.",
+    }))
 }
 
 /// `POST /api/auth/reset` — finishes the recovery flow.
@@ -209,27 +200,29 @@ pub async fn forgot(State(ctx): State<AppContext>, body: Bytes) -> Reply {
 /// An unknown or expired token is a flat 400 with no detail: saying which of the
 /// two it was would let an attacker mine valid tokens.
 #[debug_handler]
-pub async fn reset(State(ctx): State<AppContext>, body: Bytes) -> Reply {
-    let params: ResetParams = json_body(&body)?;
-    Validate::validate(&params).map_err(|errors| ApiError::from_validation_errors(&errors))?;
+pub async fn reset(
+    State(ctx): State<AppContext>,
+    Json(params): Json<ResetParams>,
+) -> Result<Response> {
+    Validate::validate(&params).map_err(validation_failed)?;
 
     let token = params.token.clone().unwrap_or_default();
     let password = params.password.clone().unwrap_or_default();
 
     let user = users::Model::find_by_reset_token(&ctx.db, &token)
         .await?
-        .ok_or_else(|| ApiError::bad_request("Token de redefinição inválido ou expirado."))?;
+        .ok_or_else(|| bad_request("Token de redefinição inválido ou expirado."))?;
 
     user.finish_password_reset(&ctx.db, &password).await?;
 
-    Ok(axum::Json(Message::new("Senha redefinida com sucesso.")).into_response())
+    format::json(data!({ "message": "Senha redefinida com sucesso." }))
 }
 
 /// Signs a JWT for `user` using the configured secret and lifetime.
-fn issue_token(ctx: &AppContext, user: &users::Model) -> std::result::Result<String, ApiError> {
+fn issue_token(ctx: &AppContext, user: &users::Model) -> Result<String> {
     let jwt = get_jwt_from_config(ctx)?;
 
-    Ok(user.generate_jwt(&jwt.secret, jwt.expiration)?)
+    user.generate_jwt(&jwt.secret, jwt.expiration)
 }
 
 /// Checks the bootstrap token of the first administrator.
@@ -266,10 +259,7 @@ fn bootstrap_token_is_valid(
 /// opening screen polls, and five per minute would lock out a whole office
 /// behind one address.
 pub fn routes(limiters: &crate::controllers::middlewares::limiters::Limiters) -> Routes {
-    let auth_limit = axum::middleware::from_fn_with_state(
-        limiters.auth(),
-        crate::controllers::middlewares::limiters::enforce,
-    );
+    let auth_limit = limiters.auth();
 
     Routes::new()
         .prefix("/api/auth")

@@ -7,7 +7,7 @@ pub const DOCKER_CONTAINER_RESOURCES: &str = "notifications/docker-container-res
 
 /// Coleta e emite métricas do host apenas quando há assinantes no canal de sistema.
 pub async fn emit_if_subscribed(ctx: &AppContext) -> Result<bool> {
-    if !crate::models::sse::has_subscribers(ctx, SYSTEM_RESOURCES).await? {
+    if !crate::models::sse::has_listeners(ctx, SYSTEM_RESOURCES)? {
         return Ok(false);
     }
 
@@ -37,7 +37,7 @@ pub async fn emit_containers_if_subscribed(
     ctx: &AppContext,
     overview: &crate::models::docker_container_monitoring::ContainerMetricsOverview,
 ) -> Result<bool> {
-    if !crate::models::sse::has_subscribers(ctx, DOCKER_CONTAINER_RESOURCES).await? {
+    if !crate::models::sse::has_listeners(ctx, DOCKER_CONTAINER_RESOURCES)? {
         return Ok(false);
     }
 

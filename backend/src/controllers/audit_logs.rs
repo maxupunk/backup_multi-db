@@ -1,10 +1,8 @@
-//! `/api/audit-logs` — listagem, detalhe e estatisticas (tarefa 5.4).
+//! `/api/audit-logs` — listagem, detalhe e estatisticas.
 //!
-//! Diferente de `users`, estas rotas **nao** exigem administrador no Adonis:
-//! qualquer sessao valida le' a trilha inteira. Nao acrescentei a restricao,
-//! ainda que ela fizesse sentido — seria uma mudanca de comportamento
-//! escondida dentro de um porte, e quem decide isso e' o produto. Fica
-//! registrado aqui.
+//! Diferente de `users`, estas rotas **nao** exigem administrador: qualquer
+//! sessao valida le' a trilha inteira. Fica registrado aqui porque a restricao
+//! faria sentido, mas acrescenta-la e' decisao de produto, nao de porte.
 //!
 //! ## A ordem das rotas importa
 //!
@@ -12,28 +10,23 @@
 //! `/stats` com o parametro dinamico, tenta ler `"stats"` como `i64` e a rota
 //! de estatisticas responde 400 sem que ninguem entenda por que.
 
-use axum::response::{IntoResponse, Response};
+use loco_rs::controller::views::pagination::Pager;
 use loco_rs::prelude::*;
 use serde::Deserialize;
 
-use crate::controllers::Auth;
+use crate::controllers::{not_found, page_request, Auth};
 use crate::models::audit_logs::{AuditFilters, Model as AuditLog};
 use crate::views::audit_logs as view;
-use crate::views::envelope::Data;
-use crate::views::errors::ApiError;
-use crate::views::pagination::{PageMeta, PageRequest};
 
-type Reply = std::result::Result<Response, ApiError>;
-
-/// Default e teto de itens por pagina, iguais aos do Adonis.
-const DEFAULT_PER_PAGE: u64 = 50;
-const MAX_PER_PAGE: u64 = 100;
+/// Default e teto de itens por pagina.
+const DEFAULT_PAGE_SIZE: u64 = 50;
+const MAX_PAGE_SIZE: u64 = 100;
 
 /// Filtros aceitos na query string.
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct ListQuery {
     pub page: Option<String>,
-    pub limit: Option<String>,
+    pub page_size: Option<String>,
     pub action: Option<String>,
     #[serde(rename = "entityType")]
     pub entity_type: Option<String>,
@@ -51,8 +44,8 @@ impl ListQuery {
         AuditFilters {
             action: non_empty(self.action.as_deref()),
             entity_type: non_empty(self.entity_type.as_deref()),
-            // `entityId=abc` nao filtra, em vez de virar erro: e' o que o
-            // `where('entityId', undefined)` do Adonis faz.
+            // `entityId=abc` nao filtra, em vez de virar erro: a tela monta a
+            // query com o campo em branco e esperaria a lista inteira.
             entity_id: self
                 .entity_id
                 .as_deref()
@@ -66,19 +59,10 @@ impl ListQuery {
 
 /// Um parametro presente mas vazio (`?action=`) nao filtra nada.
 ///
-/// E' o que o Adonis faz: `if (action)` e' falso para string vazia. Sem isto,
-/// a tela com o filtro em branco devolveria zero linhas.
+/// Sem isto, a tela com o filtro em branco devolveria zero linhas.
 fn non_empty(value: Option<&str>) -> Option<String> {
     let trimmed = value?.trim();
     (!trimmed.is_empty()).then(|| trimmed.to_string())
-}
-
-/// Corpo de `GET /api/audit-logs`: envelope, lista e `meta` no mesmo nivel.
-#[derive(Debug, serde::Serialize)]
-struct ListResponse {
-    success: bool,
-    data: Vec<view::AuditLogItem>,
-    meta: PageMeta,
 }
 
 /// `GET /api/audit-logs`.
@@ -87,49 +71,50 @@ pub async fn index(
     State(ctx): State<AppContext>,
     _session: Auth,
     Query(query): Query<ListQuery>,
-) -> Reply {
-    let page = PageRequest::from_query(
+) -> Result<Response> {
+    let page = page_request(
         query.page.as_deref(),
-        query.limit.as_deref(),
-        DEFAULT_PER_PAGE,
-        Some(MAX_PER_PAGE),
+        query.page_size.as_deref(),
+        DEFAULT_PAGE_SIZE,
+        MAX_PAGE_SIZE,
     );
 
-    let (rows, total) = AuditLog::list_page(&ctx.db, &query.to_filters(), page).await?;
+    let found = AuditLog::list_page(&ctx.db, &query.to_filters(), &page).await?;
+    let items: Vec<_> = found
+        .page
+        .into_iter()
+        .map(view::AuditLogItem::from)
+        .collect();
 
-    Ok(axum::Json(ListResponse {
-        success: true,
-        data: rows.into_iter().map(view::AuditLogItem::from).collect(),
-        meta: PageMeta::new(total, page),
-    })
-    .into_response())
+    format::json(Pager::new(items, found.meta))
 }
 
 /// `GET /api/audit-logs/stats`.
 #[debug_handler]
-pub async fn stats(State(ctx): State<AppContext>, _session: Auth) -> Reply {
+pub async fn stats(State(ctx): State<AppContext>, _session: Auth) -> Result<Response> {
     // Local time: "today" is the operator's day. Cutting the day in UTC would
     // push its first hours out of the count.
     let now = chrono::Local::now().fixed_offset();
     let stats = AuditLog::stats(&ctx.db, now).await?;
 
-    Ok(axum::Json(Data::new(view::AuditStats::from(stats))).into_response())
+    format::json(view::AuditStats::from(stats))
 }
 
 /// `GET /api/audit-logs/:id`.
-///
-/// 404 na familia dos controllers, e nao a do framework: aqui o Adonis usa
-/// `find` e trata o `null` a mao, com mensagem propria.
 #[debug_handler]
-pub async fn show(State(ctx): State<AppContext>, _session: Auth, Path(id): Path<i64>) -> Reply {
+pub async fn show(
+    State(ctx): State<AppContext>,
+    _session: Auth,
+    Path(id): Path<i64>,
+) -> Result<Response> {
     let log = AuditLog::find_one(&ctx.db, id)
         .await?
-        .ok_or_else(|| ApiError::not_found("Log de auditoria não encontrado"))?;
+        .ok_or_else(|| not_found("Log de auditoria não encontrado"))?;
 
-    Ok(axum::Json(Data::new(view::AuditLogDetail::from(log))).into_response())
+    format::json(view::AuditLogDetail::from(log))
 }
 
-/// Rotas de `/api/audit-logs`. So' o limitador global, como no Adonis.
+/// Rotas de `/api/audit-logs`. So' o limitador global.
 pub fn routes() -> Routes {
     Routes::new()
         .prefix("/api/audit-logs")
@@ -188,16 +173,14 @@ mod tests {
 
     #[test]
     fn the_page_size_is_capped_at_a_hundred() {
-        // O teste de contrato manda `?limit=5000`.
-        let page =
-            PageRequest::from_query(None, Some("5000"), DEFAULT_PER_PAGE, Some(MAX_PER_PAGE));
-        assert_eq!(page.per_page, MAX_PER_PAGE);
+        let page = page_request(None, Some("5000"), DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE);
+        assert_eq!(page.page_size, MAX_PAGE_SIZE);
     }
 
     #[test]
     fn the_default_page_size_is_fifty() {
-        let page = PageRequest::from_query(None, None, DEFAULT_PER_PAGE, Some(MAX_PER_PAGE));
-        assert_eq!(page.per_page, 50);
+        let page = page_request(None, None, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE);
+        assert_eq!(page.page_size, 50);
         assert_eq!(page.page, 1);
     }
 }

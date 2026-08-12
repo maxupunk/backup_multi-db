@@ -1,36 +1,31 @@
-//! Ligacao dos middlewares globais ao router do Axum.
+//! Ligação das camadas globais ao router do Axum.
 //!
-//! O Loco expoe `Hooks::after_routes`, que recebe o `AxumRouter` ja' montado —
-//! e' onde as camadas globais entram, sem precisar de um `MiddlewareLayer`
-//! configuravel por YAML para cada uma.
+//! O Loco expõe `Hooks::after_routes`, que recebe o `AxumRouter` já montado —
+//! é onde entra o que vale para **toda** requisição. Os middlewares que o
+//! próprio Loco traz (`catch_panic`, `timeout_request`, `limit_payload`,
+//! `secure_headers`, `request_id`, `compression`) são ligados pelo bloco
+//! `server.middlewares` do YAML, e não aqui.
 //!
-//! O que esta' ligado aqui e' o que vale para **toda** requisicao: o
-//! `force_json` (3.7) e o limitador global de 600 req/min por IP. Os
-//! limitadores `auth`, `strict` e `backup` sao por rota e entram em
-//! `controllers::<recurso>::routes`, com o mesmo [`enforce`] — ver
-//! [`super::limiters`].
+//! Sobra o limitador global de requisições por IP, que o Loco não cobre.
 
 use axum::Router as AxumRouter;
 use loco_rs::prelude::*;
 
-use crate::controllers::middlewares::force_json::force_json;
-use crate::controllers::middlewares::limiters::{enforce, Limiters};
+use crate::controllers::middlewares::limiters::Limiters;
 
 /// Registra as camadas globais no router.
 ///
-/// A ordem importa duas vezes:
+/// O limitador global fica por **fora** dos limitadores de rota. Como o
+/// `tower-governor` escreve os `x-ratelimit-*` na volta, quem escreve por
+/// último vence — e é o global, o mais frouxo, que sobra na resposta. É o
+/// oposto do que interessa a quem lê o cabeçalho numa rota com limite próprio,
+/// e por isso o limitador de rota também escreve `retry-after` no 429, que o
+/// global não sobrescreve.
 ///
-/// - `force_json` fica por **fora**, para ver tambem a resposta 429 que o
-///   limitador gera e garantir o content-type nela;
-/// - o limitador global fica por fora dos limitadores de rota, e por isso so'
-///   escreve os cabecalhos `X-RateLimit-*` que a rota nao escreveu.
+/// # Errors
+/// Falha quando o bloco `settings:` não pode ser lido.
 pub fn apply(router: AxumRouter, ctx: &AppContext) -> Result<AxumRouter> {
     let limiters = Limiters::shared(ctx)?;
 
-    Ok(router
-        .layer(axum::middleware::from_fn_with_state(
-            limiters.global(),
-            enforce,
-        ))
-        .layer(axum::middleware::from_fn(force_json)))
+    Ok(router.layer(limiters.global()))
 }

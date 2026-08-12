@@ -1,6 +1,6 @@
 import type { MemoryMetricsSource } from '@/types/api'
 import { onMounted, onUnmounted, ref, type Ref } from 'vue'
-import { transmit } from '@/plugins/transmit'
+import { subscribe } from '@/services/events'
 
 /**
  * Evento de recursos do sistema recebido via SSE
@@ -43,33 +43,21 @@ export function useSystemResources(): {
   const systemResources = ref<SystemResourcesEvent | null>(null)
   const isConnected = ref(false)
 
-  let subscription: ReturnType<typeof transmit.subscription> | null = null
+  let unsubscribe: (() => void) | null = null
 
-  onMounted(async () => {
-    try {
-      subscription = transmit.subscription(CHANNEL)
-      await subscription.create()
+  onMounted(() => {
+    unsubscribe = subscribe(CHANNEL, (data) => {
+      systemResources.value = data as SystemResourcesEvent
+      // Só depois do primeiro evento: o backend só coleta métricas quando há
+      // alguém ouvindo, então "inscrito" e "recebendo" não são a mesma coisa.
       isConnected.value = true
-
-      subscription.onMessage<SystemResourcesEvent>((data) => {
-        systemResources.value = data
-      })
-    } catch (error) {
-      console.error('[useSystemResources] Erro ao se inscrever no canal SSE:', error)
-    }
+    })
   })
 
-  onUnmounted(async () => {
-    if (subscription) {
-      try {
-        await subscription.delete()
-      } catch (error) {
-        console.error('[useSystemResources] Erro ao cancelar inscrição SSE:', error)
-      } finally {
-        subscription = null
-        isConnected.value = false
-      }
-    }
+  onUnmounted(() => {
+    unsubscribe?.()
+    unsubscribe = null
+    isConnected.value = false
   })
 
   return { systemResources, isConnected }

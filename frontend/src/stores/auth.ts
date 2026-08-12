@@ -15,7 +15,7 @@ export const useAuthStore = defineStore('auth', () => {
     if (token.value) {
       try {
         const response = await authApi.me()
-        user.value = response.data
+        user.value = response
       } catch {
         // Se falhar (token inválido/expirado), limpa tudo
         logout()

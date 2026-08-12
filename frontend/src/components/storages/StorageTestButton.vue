@@ -45,7 +45,7 @@ async function runTest () {
 
   try {
     const result = await storagesApi.test(props.storageId)
-    latency.value = result.data?.latencyMs ?? 0
+    latency.value = result.latencyMs ?? 0
     status.value = 'success'
     emit('result', true, latency.value)
   } catch (error) {
