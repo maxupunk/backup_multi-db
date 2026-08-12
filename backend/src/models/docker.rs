@@ -193,7 +193,8 @@ pub async fn list_containers() -> Result<Value, DockerError> {
 }
 
 /// Descobre containers de banco em execucao para a tela de conexoes.
-pub async fn discover_database_hosts() -> Result<Vec<Value>, DockerError> {
+pub async fn discover_database_hosts(
+) -> Result<Vec<crate::models::docker_connection_suggestion::HostSuggestion>, DockerError> {
     use crate::models::docker_connection_suggestion as suggestion;
 
     let client = client()?;
@@ -227,11 +228,10 @@ pub async fn discover_database_hosts() -> Result<Vec<Value>, DockerError> {
         }
     }
 
-    let suggestions = suggestion::ConnectionSuggestionMapper::map(&descriptors, &context);
-    Ok(suggestions
-        .iter()
-        .map(suggestion::suggestion_to_value)
-        .collect())
+    Ok(suggestion::ConnectionSuggestionMapper::map(
+        &descriptors,
+        &context,
+    ))
 }
 
 pub async fn inspect_container(id: &str) -> Result<Value, DockerError> {

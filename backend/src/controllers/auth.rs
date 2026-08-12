@@ -27,12 +27,13 @@ use loco_rs::prelude::*;
 use subtle::ConstantTimeEq;
 
 use crate::controllers::{bad_request, forbidden, unauthorized, validation_failed, Auth};
+use crate::dtos::auth as dto;
+use crate::dtos::users::User;
 use crate::initializers::settings::Settings;
 use crate::mailers::auth::AuthMailer;
 use crate::models::_entities::users;
 use crate::models::users::{ForgotParams, LoginParams, NewUser, RegisterParams, ResetParams};
 use crate::models::validation::single_error;
-use crate::views::auth as view;
 
 /// `GET /api/auth/status` — public, feeds the first-run screen.
 ///
@@ -43,7 +44,7 @@ pub async fn status(State(ctx): State<AppContext>) -> Result<Response> {
     let total = users::Model::count_all(&ctx.db).await?;
     let in_production = ctx.environment == Environment::Production;
 
-    format::json(view::SystemStatus {
+    format::json(dto::SystemStatus {
         has_users: total > 0,
         requires_bootstrap_token: total == 0 && in_production,
     })
@@ -115,7 +116,7 @@ pub async fn register(
 
     format::render()
         .status(201)
-        .json(view::Session::new(token, &user))
+        .json(dto::Session::new(token, &user))
 }
 
 /// `POST /api/auth/login`.
@@ -145,7 +146,7 @@ pub async fn login(
 
     let token = issue_token(&ctx, &user)?;
 
-    format::json(view::Session::new(token, &user))
+    format::json(dto::Session::new(token, &user))
 }
 
 /// `GET /api/auth/me` — the user behind the current token.
@@ -155,7 +156,7 @@ pub async fn login(
 /// along in the body so the client can act on it.
 #[debug_handler]
 pub async fn me(State(_ctx): State<AppContext>, auth: Auth) -> Result<Response> {
-    format::json(view::CurrentUser::from(&auth.user))
+    format::json(User::from(&auth.user))
 }
 
 /// `POST /api/auth/logout`.

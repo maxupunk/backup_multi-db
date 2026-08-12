@@ -1,18 +1,10 @@
-//! Respostas de `/api/stats` e `/api/system/status` (tarefa 5.5).
+//! Respostas de `/api/stats`, `/api/system/status` e da política de retenção.
 //!
-//! O golden `system/stats` marca `data.system`, `data.storageSpaces` e
-//! `data.recentBackups` como nao-comparados, e `system/status` ignora `data`
-//! inteiro — sao numeros que dependem da maquina. **O formato continua sendo
-//! contrato**: e' o que o painel do frontend le'.
-//!
-//! Dois campos ainda nao tem origem real e saem vazios de proposito, com o
-//! motivo registrado aqui:
-//!
-//! - `storageSpaces` depende do `StorageSpaceService`, da Fase 8;
-//! - `recentBackups` traz os backups de verdade, mas o formato do item so' e'
-//!   fixado pelo lote 2.4, na Fase 7.
+//! Os números de CPU, memória e disco dependem da máquina; o **formato** é que
+//! é contrato, porque é o que o painel do frontend lê.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
 use crate::models::_entities::backups;
 use crate::models::system_monitor;
@@ -21,61 +13,73 @@ use crate::models::system_monitor;
 ///
 /// `runtimeVersion` identifica o runtime que esta' respondendo — a versao do
 /// Rust com que o binario foi compilado.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "../../frontend/src/bindings/")]
 pub struct SystemOverview {
-    pub version: &'static str,
+    pub version: String,
     pub hostname: String,
     pub platform: String,
-    pub architecture: &'static str,
+    pub architecture: String,
     pub runtime_version: String,
+    #[ts(type = "number")]
     pub uptime_seconds: u64,
     pub resources: Resources,
     pub jobs: Jobs,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../frontend/src/bindings/")]
 pub struct Resources {
     pub cpu: Cpu,
     pub memory: Memory,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "../../frontend/src/bindings/")]
 pub struct Cpu {
     pub usage_percent: f64,
+    #[ts(type = "number")]
     pub cores: usize,
     pub model: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "../../frontend/src/bindings/")]
 pub struct Memory {
+    #[ts(type = "number")]
     pub total_bytes: u64,
+    #[ts(type = "number")]
     pub used_bytes: u64,
+    #[ts(type = "number")]
     pub free_bytes: u64,
     pub usage_percent: f64,
     pub source: system_monitor::MemorySource,
     pub container_limited: bool,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "../../frontend/src/bindings/")]
 pub struct Jobs {
     pub is_running: bool,
+    #[ts(type = "number")]
     pub active_jobs: u32,
-    /// `"ok"` ou `"down"`, derivado de `is_running` — nunca gravado a parte, ou
-    /// os dois campos poderiam discordar.
-    pub status: &'static str,
+    /// Derivado de `is_running` — nunca gravado à parte, ou os dois campos
+    /// poderiam discordar.
+    #[ts(type = "\"ok\" | \"down\"")]
+    pub status: String,
 }
 
 impl From<system_monitor::SystemOverview> for SystemOverview {
     fn from(overview: system_monitor::SystemOverview) -> Self {
         Self {
-            version: overview.version,
+            version: overview.version.to_string(),
             hostname: overview.hostname,
             platform: overview.platform,
-            architecture: overview.architecture,
+            architecture: overview.architecture.to_string(),
             runtime_version: overview.runtime_version,
             uptime_seconds: overview.uptime_seconds,
             resources: Resources {
@@ -100,35 +104,46 @@ impl From<system_monitor::SystemOverview> for SystemOverview {
                     "ok"
                 } else {
                     "down"
-                },
+                }
+                .to_string(),
             },
         }
     }
 }
 
 /// Contadores de um recurso.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../frontend/src/bindings/")]
 pub struct ConnectionCounts {
+    #[ts(type = "number")]
     pub total: u64,
+    #[ts(type = "number")]
     pub active: u64,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../frontend/src/bindings/")]
 pub struct BackupCounts {
+    #[ts(type = "number")]
     pub total: u64,
+    #[ts(type = "number")]
     pub today: u64,
 }
 
 /// Item de `recentBackups`.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "../../frontend/src/bindings/")]
 pub struct RecentBackup {
+    #[ts(type = "number")]
     pub id: i64,
-    /// `"N/A"` quando a conexao foi apagada — a FK e' `SET NULL`, e o Adonis
-    /// usa exatamente esse literal.
+    /// `"N/A"` quando a conexão foi apagada: a FK é `SET NULL`, e o painel
+    /// mostra o nome sem ter para onde navegar.
     pub connection_name: String,
     pub status: String,
+    #[ts(type = "number | null")]
     pub file_size: Option<i64>,
+    #[ts(type = "string")]
     pub created_at: chrono::DateTime<chrono::FixedOffset>,
 }
 
@@ -145,27 +160,32 @@ impl RecentBackup {
 }
 
 /// Corpo de `GET /api/stats`.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "../../frontend/src/bindings/")]
 pub struct Stats {
     pub connections: ConnectionCounts,
     pub backups: BackupCounts,
     pub recent_backups: Vec<RecentBackup>,
-    /// Preenchido desde a tarefa 8.13 — ver [`crate::models::storage::space`].
-    pub storage_spaces: Vec<crate::views::storages::SpaceItem>,
+    pub storage_spaces: Vec<crate::dtos::storages::StorageSpace>,
     pub system: SystemOverview,
 }
 
 /// Resposta de `GET|PUT /api/system/backup-retention`.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "../../frontend/src/bindings/")]
 pub struct BackupRetentionPolicy {
+    #[ts(type = "number")]
     pub daily: u32,
+    #[ts(type = "number")]
     pub weekly: u32,
+    #[ts(type = "number")]
     pub monthly: u32,
+    #[ts(type = "number")]
     pub yearly: u32,
     pub prune_cron: String,
-    pub default_prune_cron: &'static str,
+    pub default_prune_cron: String,
 }
 
 impl From<crate::models::backup_retention_policy::BackupRetentionPolicy> for BackupRetentionPolicy {
@@ -176,7 +196,7 @@ impl From<crate::models::backup_retention_policy::BackupRetentionPolicy> for Bac
             monthly: policy.monthly,
             yearly: policy.yearly,
             prune_cron: policy.prune_cron,
-            default_prune_cron: "0 2 * * *",
+            default_prune_cron: "0 2 * * *".to_string(),
         }
     }
 }

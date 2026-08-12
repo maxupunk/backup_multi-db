@@ -61,8 +61,8 @@ async fn lists_the_entries_with_the_derived_fields() {
         assert_eq!(first["actionDescription"], "Backup falhou");
         assert_eq!(first["statusColor"], "error");
         assert_eq!(first["errorMessage"], "ECONNREFUSED");
-        // `userAgent` so' aparece no detalhe.
-        assert!(first.get("userAgent").is_none());
+        // Na listagem o agente nao e' carregado; a chave existe e vale `null`.
+        assert!(first["userAgent"].is_null());
     })
     .await;
 }
@@ -204,9 +204,9 @@ async fn stats_never_collide_with_the_id_route() {
 
 #[tokio::test]
 #[serial]
-async fn an_unknown_action_omits_the_derived_keys() {
+async fn an_unknown_action_leaves_the_derived_fields_null() {
     // O schema afrouxou os enums de proposito; um valor fora da lista precisa
-    // sair sem `actionDescription`, e nao com `null`.
+    // sair com `actionDescription` nulo, e nao sem a chave.
     request::<App, _, _>(|request, ctx| async move {
         let admin = session::create_admin(&request, "admin@contract.test").await;
         let token = admin.token.expect("token");
@@ -231,8 +231,8 @@ async fn an_unknown_action_omits_the_derived_keys() {
 
         let entry = &body["results"][0];
         assert_eq!(entry["action"], "plugin.executed");
-        assert!(entry.get("actionDescription").is_none());
-        assert!(entry.get("actionIcon").is_none());
+        assert!(entry["actionDescription"].is_null());
+        assert!(entry["actionIcon"].is_null());
     })
     .await;
 }

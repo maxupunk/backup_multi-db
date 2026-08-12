@@ -1,99 +1,54 @@
 //! Respostas de `/api/auth/*`.
 //!
-//! Sao tres formas de usuario, e a diferenca entre elas e' deliberada:
+//! O usuário sai daqui na mesma forma que sai de `/api/users`: [`User`], de
+//! [`crate::dtos::users`]. Havia três recortes diferentes do mesmo registro —
+//! um com `createdAt`, outro sem, outro com tudo —, e a diferença não
+//! correspondia a nenhuma regra: era só o que cada rota tinha à mão. Um tipo só
+//! dá ao frontend um `User` que serve em qualquer tela.
 //!
-//! - [`SessionUser`] — o que sai junto do token em `register` e `login`. **Sem
-//!   `createdAt`**, porque a tela que recebe o token nao o usa.
-//! - [`CurrentUser`] — o de `GET /api/auth/me`, **com `createdAt`**.
-//! - `UserListItem` (em [`crate::views::users`]) — o da listagem
-//!   administrativa, com todas as colunas serializaveis.
-//!
-//! Nenhuma delas expoe `password`, `api_key`, `pid` ou os campos de
-//! recuperacao. Unificar as tres numa so' resolveria pouco e acrescentaria
-//! campo sensivel em resposta que hoje nao tem.
+//! Nenhuma resposta expõe `password`, `api_key`, `pid` ou os campos de
+//! recuperação de senha.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
+use crate::dtos::users::User;
 use crate::models::_entities::users;
 
 /// Estado do sistema para a tela de primeiro acesso.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "../../frontend/src/bindings/")]
 pub struct SystemStatus {
     pub has_users: bool,
-    /// `true` so' quando **nao ha' nenhum usuario** e o ambiente e' producao.
+    /// `true` só quando **não há nenhum usuário** e o ambiente é produção.
     ///
-    /// E' o que faz a tela de cadastro pedir o token de bootstrap. Fora de
-    /// producao o primeiro admin e' criado sem token, para nao travar o
+    /// É o que faz a tela de cadastro pedir o token de bootstrap. Fora de
+    /// produção o primeiro administrador é criado sem token, para não travar o
     /// desenvolvimento.
     pub requires_bootstrap_token: bool,
 }
 
-/// Usuario que acompanha um token recem-emitido.
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SessionUser {
-    pub id: i64,
-    pub email: String,
-    pub full_name: Option<String>,
-    pub is_active: bool,
-    pub is_admin: bool,
-}
-
-impl From<&users::Model> for SessionUser {
-    fn from(user: &users::Model) -> Self {
-        Self {
-            id: user.id,
-            email: user.email.clone(),
-            full_name: user.full_name.clone(),
-            is_active: user.is_active,
-            is_admin: user.is_admin,
-        }
-    }
-}
-
 /// Corpo de `register` e `login` bem-sucedidos.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../frontend/src/bindings/")]
 pub struct Session {
-    /// Sempre `"bearer"`. Literal no contrato, e nao um enum, porque o cliente
-    /// so' o repassa no cabecalho `Authorization`.
+    /// Sempre `"bearer"` — o cliente só repassa o valor no cabeçalho
+    /// `Authorization`. Vai ao TypeScript como tipo literal, e não como
+    /// `string`, para que um `Authorization: ${type}` errado não compile.
     #[serde(rename = "type")]
-    pub token_type: &'static str,
+    #[ts(rename = "type", type = "\"bearer\"")]
+    pub token_type: String,
     pub token: String,
-    pub user: SessionUser,
+    pub user: User,
 }
 
 impl Session {
     pub fn new(token: String, user: &users::Model) -> Self {
         Self {
-            token_type: "bearer",
+            token_type: "bearer".to_string(),
             token,
-            user: SessionUser::from(user),
-        }
-    }
-}
-
-/// Corpo de `GET /api/auth/me`.
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CurrentUser {
-    pub id: i64,
-    pub email: String,
-    pub full_name: Option<String>,
-    pub is_active: bool,
-    pub is_admin: bool,
-    pub created_at: chrono::DateTime<chrono::FixedOffset>,
-}
-
-impl From<&users::Model> for CurrentUser {
-    fn from(user: &users::Model) -> Self {
-        Self {
-            id: user.id,
-            email: user.email.clone(),
-            full_name: user.full_name.clone(),
-            is_active: user.is_active,
-            is_admin: user.is_admin,
-            created_at: user.created_at,
+            user: User::from(user),
         }
     }
 }
@@ -129,43 +84,42 @@ mod tests {
     }
 
     #[test]
-    fn the_session_user_has_no_created_at() {
-        let json = serde_json::to_value(SessionUser::from(&user())).expect("serializa");
+    fn the_session_carries_the_same_user_shape_as_the_listing() {
+        let json = serde_json::to_value(Session::new("a.jwt.token".to_string(), &user()))
+            .expect("serializa");
 
         assert_eq!(
-            json,
-            serde_json::json!({
-                "id": 7,
-                "email": "admin@contract.test",
-                "fullName": "Contract Admin",
-                "isActive": true,
-                "isAdmin": true
-            })
+            json["user"],
+            serde_json::to_value(User::from(&user())).expect("serializa")
         );
     }
 
     #[test]
-    fn the_current_user_has_created_at_in_rfc_3339() {
-        // With the offset: the value the browser gets is an instant, not a wall
-        // clock it has to guess a zone for.
-        let json = serde_json::to_value(CurrentUser::from(&user())).expect("serializa");
+    fn the_timestamp_is_an_instant_not_a_wall_clock() {
+        // Com o deslocamento: o navegador recebe um instante, e não uma hora
+        // local para a qual ele teria de adivinhar o fuso.
+        let json = serde_json::to_value(User::from(&user())).expect("serializa");
 
         assert_eq!(json["createdAt"], "2026-08-05T08:09:51Z");
-        assert_eq!(json.as_object().map(serde_json::Map::len), Some(6));
     }
 
     #[test]
-    fn no_view_ever_carries_a_secret() {
-        // The columns exist on the `Model`; a `#[derive(Serialize)]` on the
-        // entity would carry them along. The views are what stops that.
-        for json in [
-            serde_json::to_value(SessionUser::from(&user())).expect("serializa"),
-            serde_json::to_value(CurrentUser::from(&user())).expect("serializa"),
+    fn no_response_ever_carries_a_secret() {
+        // As colunas existem no `Model`; um `#[derive(Serialize)]` na entidade
+        // as levaria junto. Os DTOs são o que impede isso.
+        let rendered = serde_json::to_value(Session::new("a.jwt.token".to_string(), &user()))
+            .expect("serializa")
+            .to_string();
+
+        for secret in [
+            "password",
+            "$argon2",
+            "apiKey",
+            "api_key",
+            "resetToken",
+            "pid",
         ] {
-            let rendered = json.to_string();
-            for secret in ["password", "$argon2", "apiKey", "api_key", "resetToken"] {
-                assert!(!rendered.contains(secret), "vazou {secret}: {rendered}");
-            }
+            assert!(!rendered.contains(secret), "vazou {secret}: {rendered}");
         }
     }
 
@@ -179,11 +133,11 @@ mod tests {
     }
 
     #[test]
-    fn a_user_without_a_name_serializes_null() {
+    fn a_user_without_a_name_serialises_null() {
         let mut model = user();
         model.full_name = None;
 
-        let json = serde_json::to_value(SessionUser::from(&model)).expect("serializa");
+        let json = serde_json::to_value(User::from(&model)).expect("serializa");
         assert!(json["fullName"].is_null());
     }
 }

@@ -1,40 +1,36 @@
-//! Respostas de `/api/backups` (tarefas 7.1 e 7.7).
+//! Respostas de `/api/backups`.
 //!
-//! ## O item de backup carrega todas as colunas
+//! ## A conexão aninhada é sempre uma chave, às vezes nula
 //!
-//! O `BackupsController` do Adonis serializa o model inteiro — nao ha' `fields`
-//! nem `pick`. Recortar aqui seria uma chave a menos na resposta, e o matcher da
-//! suite de contrato compara o conjunto de chaves nos dois sentidos.
-//!
-//! A **conexao** aninhada e' a excecao: ela vem com cinco campos escolhidos a
-//! mao (`id`, `name`, `type`, `host`, `database`), e `database` **nao** e' uma
-//! coluna de `connections` — o model do Adonis nao a tem, e o Lucid omite o que
-//! nao existe. Por isso ela nao aparece em [`ConnectionSummary`].
-//!
-//! ## Os booleanos vem do banco
-//!
-//! Toda rota deste recurso le' o registro do SQLite, entao `compressed` e
-//! `protected` saem como `0`/`1` — nunca `true`/`false`. E' o mesmo ACHADO 3 que
-//! [`crate::views::connections`] documenta; aqui nao ha' o caso "em memoria",
-//! porque nenhuma resposta devolve um backup recem-construido sem recarregar.
+//! `connection` vale `null` quando o backup ficou órfão — a FK é `SET NULL`,
+//! então apagar uma conexão preserva o histórico dela. A chave existe em todas
+//! as rotas: o frontend lê `backup.connection?.name`, e uma chave que aparece
+//! numa listagem e some noutra obrigaria cada tela a saber de qual endpoint
+//! aquele objeto veio.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
 use crate::models::_entities::{backups, connections};
 use crate::models::backup_import::{ImportedFormat, IntegrityResult};
-use crate::views::connections::WireBool;
 
-/// Conexao aninhada num item de backup.
-#[derive(Debug, Clone, Serialize)]
+/// Conexão aninhada num item de backup.
+///
+/// Quatro campos, e não o registro inteiro: é o que a lista de backups mostra
+/// em cada linha, e trazer as credenciais junto exporia dado sensível numa
+/// resposta que nem a tela usa.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
-pub struct ConnectionSummary {
+#[ts(export, export_to = "../../frontend/src/bindings/")]
+pub struct BackupConnection {
+    #[ts(type = "number")]
     pub id: i64,
     pub name: String,
     pub r#type: String,
     pub host: String,
 }
 
-impl From<&connections::Model> for ConnectionSummary {
+impl From<&connections::Model> for BackupConnection {
     fn from(row: &connections::Model) -> Self {
         Self {
             id: row.id,
@@ -46,48 +42,53 @@ impl From<&connections::Model> for ConnectionSummary {
 }
 
 /// Um backup como a API o devolve.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
-pub struct Item {
+#[ts(export, export_to = "../../frontend/src/bindings/")]
+pub struct Backup {
+    #[ts(type = "number")]
     pub id: i64,
+    #[ts(type = "number | null")]
     pub connection_id: Option<i64>,
+    #[ts(type = "number | null")]
     pub connection_database_id: Option<i64>,
     pub database_name: String,
+    #[ts(type = "number | null")]
     pub storage_destination_id: Option<i64>,
     pub status: String,
     pub file_path: Option<String>,
     pub file_name: Option<String>,
+    #[ts(type = "number | null")]
     pub file_size: Option<i64>,
     pub checksum: Option<String>,
-    pub compressed: WireBool,
+    pub compressed: bool,
     pub retention_type: String,
-    pub protected: WireBool,
+    /// Um backup protegido não é apagado pela retenção nem pela rota de delete.
+    pub protected: bool,
+    #[ts(type = "string | null")]
     pub started_at: Option<chrono::DateTime<chrono::FixedOffset>>,
+    #[ts(type = "string | null")]
     pub finished_at: Option<chrono::DateTime<chrono::FixedOffset>>,
+    #[ts(type = "number | null")]
     pub duration_seconds: Option<i64>,
     pub error_message: Option<String>,
+    #[ts(type = "number | null")]
     pub exit_code: Option<i64>,
-    /// JSON ja' decodificado. A coluna guarda texto, mas o `consume` do Lucid
-    /// entrega um objeto — emitir a string crua faria o frontend precisar de um
-    /// `JSON.parse` que ele nao faz.
+    /// JSON já decodificado — a coluna guarda texto, e devolver a string crua
+    /// obrigaria o frontend a um `JSON.parse` que ele não faz.
+    #[ts(type = "Record<string, unknown>")]
     pub metadata: serde_json::Value,
     pub trigger: String,
+    #[ts(type = "string")]
     pub created_at: chrono::DateTime<chrono::FixedOffset>,
+    #[ts(type = "string")]
     pub updated_at: chrono::DateTime<chrono::FixedOffset>,
-    /// Tres estados, e nao dois.
-    ///
-    /// A chave **falta** onde o controller nao faz `preload('connection')`
-    /// (`GET /api/connections/:id/backups`); vale `null` onde ha' preload e o
-    /// backup ficou orfao pelo `SET NULL` da FK; e traz o objeto no caso comum.
-    /// Um `Option` simples colapsaria os dois primeiros, e o matcher da suite de
-    /// contrato reprova tanto chave a mais quanto chave a menos.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub connection: Option<Option<ConnectionSummary>>,
+    /// `null` quando o backup ficou órfão pelo `SET NULL` da chave estrangeira.
+    pub connection: Option<BackupConnection>,
 }
 
-impl Item {
-    /// Item sem a conexao aninhada — o shape de
-    /// `GET /api/connections/:id/backups`.
+impl Backup {
+    /// Item sem a conexão carregada — sai como `"connection": null`.
     #[must_use]
     pub fn new(row: &backups::Model) -> Self {
         Self {
@@ -101,9 +102,9 @@ impl Item {
             file_name: row.file_name.clone(),
             file_size: row.file_size,
             checksum: row.checksum.clone(),
-            compressed: WireBool::from_database(row.compressed.unwrap_or(false)),
+            compressed: row.compressed.unwrap_or(false),
             retention_type: row.retention_type.clone(),
-            protected: WireBool::from_database(row.protected.unwrap_or(false)),
+            protected: row.protected.unwrap_or(false),
             started_at: row.started_at,
             finished_at: row.finished_at,
             duration_seconds: row.duration_seconds,
@@ -117,75 +118,78 @@ impl Item {
         }
     }
 
-    /// O mesmo item com a relacao **carregada**.
-    ///
-    /// Chamar com `None` emite `"connection": null`, e nao a chave ausente: o
-    /// Lucid inclui a relacao carregada mesmo quando ela nao existe, e o
-    /// frontend testa `backup.connection?.name`.
+    /// O mesmo item com a conexão anexada.
     #[must_use]
     pub fn with_connection(mut self, connection: Option<&connections::Model>) -> Self {
-        self.connection = Some(connection.map(ConnectionSummary::from));
+        self.connection = connection.map(BackupConnection::from);
         self
     }
 }
 
-/// `data` de `POST /api/backups/:id/restore`.
-#[derive(Debug, Clone, Serialize)]
+/// Corpo de `POST /api/backups/:id/restore`.
+///
+/// A restauração é assíncrona: a resposta confirma o aceite e devolve o
+/// identificador pelo qual o progresso chega no fluxo de eventos.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "../../frontend/src/bindings/")]
 pub struct RestoreAccepted {
     pub restore_id: String,
     pub database_name: String,
 }
 
-/// `data` de `POST /api/backups/import`.
-#[derive(Debug, Clone, Serialize)]
+/// Corpo de `POST /api/backups/import`.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
-pub struct Imported {
-    pub backup: Item,
+#[ts(export, export_to = "../../frontend/src/bindings/")]
+pub struct ImportedBackup {
+    pub backup: Backup,
     pub format: ImportedFormat,
     pub checksum: String,
+    #[ts(type = "number")]
     pub file_size: i64,
-    /// `null` quando a verificacao nao foi pedida — o Adonis emite a chave.
+    /// `null` quando a verificação de integridade não foi pedida.
     pub integrity: Option<IntegrityResult>,
 }
 
-/// Um backup dentro da resposta de `POST /api/connections/:id/backup`.
+/// Resultado do backup de **um** database dentro de
+/// `POST /api/connections/:id/backup`.
 ///
-/// Duas formas, e nao uma: o caminho de sucesso traz o tamanho e a duracao
-/// **formatados** para exibicao, e o de falha parcial troca os dois pelo motivo
-/// da falha. Um shape unico com campos opcionais emitiria `null` onde o Adonis
-/// omite a chave.
-#[derive(Debug, Clone, Serialize)]
-#[serde(untagged)]
-pub enum ConnectionBackupItem {
-    Succeeded {
-        #[serde(rename = "databaseName")]
-        database_name: String,
-        #[serde(rename = "backupId")]
-        backup_id: i64,
-        #[serde(rename = "fileName")]
-        file_name: Option<String>,
-        /// Texto legivel (`1.50 MB`), nao o numero — e' o que o Adonis devolve.
-        #[serde(rename = "fileSize")]
-        file_size: String,
-        duration: String,
-    },
-    Failed {
-        #[serde(rename = "databaseName")]
-        database_name: String,
-        #[serde(rename = "backupId")]
-        backup_id: i64,
-        success: bool,
-        error: Option<String>,
-    },
+/// Uma forma só para sucesso e falha, com `success` dizendo qual é. Havia duas
+/// formas que não compartilhavam chave nenhuma, e o cliente precisava descobrir
+/// qual recebera testando a presença de campos — num contrato tipado isso vira
+/// uma união que não estreita.
+///
+/// `fileSize` e `durationSeconds` saem em bytes e segundos. Formatar (`1.50 MB`)
+/// é decisão de apresentação, e o mesmo nome de campo não pode ser número numa
+/// resposta e texto noutra.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "../../frontend/src/bindings/")]
+pub struct ConnectionBackupItem {
+    pub database_name: String,
+    #[ts(type = "number")]
+    pub backup_id: i64,
+    pub success: bool,
+    pub file_name: Option<String>,
+    #[ts(type = "number | null")]
+    pub file_size: Option<i64>,
+    #[ts(type = "number | null")]
+    pub duration_seconds: Option<i64>,
+    /// Preenchido só quando `success` é `false`.
+    pub error: Option<String>,
 }
 
-/// `data` de `POST /api/connections/:id/backup`.
-#[derive(Debug, Clone, Serialize)]
+/// Corpo de `POST /api/connections/:id/backup`.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "../../frontend/src/bindings/")]
 pub struct ConnectionBackupResult {
+    #[ts(type = "number")]
     pub total_databases: usize,
+    #[ts(type = "number")]
     pub successful: usize,
+    #[ts(type = "number")]
     pub failed: usize,
     pub backups: Vec<ConnectionBackupItem>,
 }
@@ -244,93 +248,82 @@ mod tests {
     }
 
     #[test]
-    fn the_booleans_come_from_the_database_as_numbers() {
-        // Toda rota deste recurso le' o registro do SQLite; `true` aqui
-        // quebraria todo cliente que compare com `===` (ACHADO 3).
-        let json = serde_json::to_value(Item::new(&row())).expect("serializa");
+    fn the_booleans_are_booleans() {
+        let json = serde_json::to_value(Backup::new(&row())).expect("serializa");
 
-        assert_eq!(json["compressed"], 1);
-        assert_eq!(json["protected"], 0);
+        assert_eq!(json["compressed"], serde_json::Value::Bool(true));
+        assert_eq!(json["protected"], serde_json::Value::Bool(false));
     }
 
     #[test]
     fn the_metadata_is_decoded_not_a_raw_string() {
-        // A coluna guarda texto; o `consume` do Lucid entrega objeto, e o
-        // frontend nao faz `JSON.parse`.
-        let json = serde_json::to_value(Item::new(&row())).expect("serializa");
+        let json = serde_json::to_value(Backup::new(&row())).expect("serializa");
 
         assert_eq!(json["metadata"]["isImported"], true);
     }
 
     #[test]
-    fn the_connection_is_absent_unless_it_was_preloaded() {
-        let plain = serde_json::to_value(Item::new(&row())).expect("serializa");
-        assert!(plain.get("connection").is_none());
+    fn the_connection_key_exists_in_both_shapes() {
+        // Uma chave que aparece numa listagem e some noutra obrigaria cada tela
+        // a saber de qual endpoint aquele objeto veio.
+        let plain = serde_json::to_value(Backup::new(&row())).expect("serializa");
+        assert!(plain["connection"].is_null());
+        assert!(plain
+            .as_object()
+            .is_some_and(|map| map.contains_key("connection")));
 
-        let with = serde_json::to_value(Item::new(&row()).with_connection(Some(&connection())))
+        let with = serde_json::to_value(Backup::new(&row()).with_connection(Some(&connection())))
             .expect("serializa");
         assert_eq!(with["connection"]["name"], "Producao");
         assert_eq!(with["connection"]["host"], "db.local");
     }
 
     #[test]
-    fn an_orphaned_backup_reports_a_null_connection_not_a_missing_key() {
-        // O `SET NULL` da FK deixa backups sem conexao. Onde houve preload, o
-        // Lucid emite `null`; omitir a chave seria uma diferenca de shape, e
-        // inventar um objeto com id 0 faria a interface exibir um link morto.
-        let json =
-            serde_json::to_value(Item::new(&row()).with_connection(None)).expect("serializa");
+    fn the_nested_connection_never_carries_credentials() {
+        let json = serde_json::to_value(BackupConnection::from(&connection())).expect("serializa");
 
-        assert!(json["connection"].is_null());
-        assert!(json
-            .as_object()
-            .is_some_and(|map| map.contains_key("connection")));
-    }
-
-    #[test]
-    fn the_nested_connection_has_only_the_selected_fields() {
-        // `database` nao entra: nao e' coluna de `connections`, e o Lucid omite
-        // o campo inexistente.
-        let json = serde_json::to_value(ConnectionSummary::from(&connection())).expect("serializa");
-
-        assert_eq!(
-            json.as_object().map(serde_json::Map::len),
-            Some(4),
-            "campo a mais ou a menos na conexao aninhada: {json}"
-        );
+        assert_eq!(json.as_object().map(serde_json::Map::len), Some(4));
         assert!(json.get("password").is_none());
         assert!(json.get("passwordEncrypted").is_none());
+        assert!(json.get("username").is_none());
     }
 
     #[test]
-    fn a_successful_backup_item_reports_formatted_size_and_duration() {
-        let json = serde_json::to_value(ConnectionBackupItem::Succeeded {
+    fn a_backup_item_reports_bytes_and_seconds_not_formatted_text() {
+        let json = serde_json::to_value(ConnectionBackupItem {
             database_name: "vendas".to_string(),
             backup_id: 7,
+            success: true,
             file_name: Some("vendas.sql.gz".to_string()),
-            file_size: "1.50 MB".to_string(),
-            duration: "12s".to_string(),
+            file_size: Some(1_572_864),
+            duration_seconds: Some(12),
+            error: None,
         })
         .expect("serializa");
 
-        // Texto, nao numero: e' o `getFormattedSize()` do Adonis.
-        assert_eq!(json["fileSize"], "1.50 MB");
-        assert!(json.get("success").is_none());
+        assert_eq!(json["fileSize"], 1_572_864);
+        assert_eq!(json["durationSeconds"], 12);
+        assert!(json["error"].is_null());
     }
 
     #[test]
-    fn a_failed_backup_item_reports_the_reason_instead() {
-        let json = serde_json::to_value(ConnectionBackupItem::Failed {
+    fn success_and_failure_share_one_shape() {
+        // O cliente le' `success`, e nao a presenca de campos.
+        let failed = serde_json::to_value(ConnectionBackupItem {
             database_name: "vendas".to_string(),
             backup_id: 7,
             success: false,
+            file_name: None,
+            file_size: None,
+            duration_seconds: None,
             error: Some("Access denied".to_string()),
         })
         .expect("serializa");
 
-        assert_eq!(json["error"], "Access denied");
-        // As duas formas nao compartilham chaves de exibicao.
-        assert!(json.get("fileSize").is_none());
-        assert!(json.get("duration").is_none());
+        assert_eq!(failed["success"], serde_json::Value::Bool(false));
+        assert_eq!(failed["error"], "Access denied");
+        assert!(failed
+            .as_object()
+            .is_some_and(|map| map.contains_key("fileSize")));
     }
 }

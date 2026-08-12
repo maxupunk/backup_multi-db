@@ -22,6 +22,8 @@ use crate::controllers::middlewares::limiters::Limiters;
 use crate::controllers::middlewares::origin::RequestOrigin;
 use crate::controllers::Auth;
 use crate::controllers::{not_found, page_request, unprocessable, validation_failed};
+use crate::dtos::backups as backup_dto;
+use crate::dtos::connections as dto;
 use crate::initializers::settings::Settings;
 use crate::models::_entities::{connection_databases, connections};
 use crate::models::audit_log::AuditAction;
@@ -34,8 +36,6 @@ use crate::models::connections::{
 use crate::models::database_driver;
 use crate::models::encryption::EncryptionService;
 use crate::models::notifications::{self, NotificationCategory, NotificationType};
-use crate::views::backups as backup_view;
-use crate::views::connections as view;
 
 /// Mensagem unica de 404 deste recurso.
 const NOT_FOUND: &str = "Conexão não encontrada";
@@ -75,17 +75,19 @@ pub async fn index(
         let databases = connection_databases::Model::enabled_for(&ctx.db, row.id).await?;
         let backups = latest
             .remove(&row.id)
-            .map(view::BackupSummary::from)
+            .map(dto::ConnectionBackupSummary::from)
             .map_or_else(Vec::new, |backup| vec![backup]);
 
-        items.push(view::ListItem::new(
-            row,
-            databases
-                .into_iter()
-                .map(view::DatabaseItem::from)
-                .collect(),
+        items.push(dto::ConnectionListItem {
+            connection: dto::Connection::new(
+                row,
+                databases
+                    .into_iter()
+                    .map(dto::ConnectionDatabase::from)
+                    .collect(),
+            ),
             backups,
-        ));
+        });
     }
 
     format::json(Pager::new(items, found.meta))
@@ -122,11 +124,11 @@ pub async fn store(
     // gravados, e nao como chegaram no corpo.
     let databases = connection_databases::Model::all_for(&ctx.db, connection.id).await?;
 
-    format::render().status(201).json(view::Created::new(
+    format::render().status(201).json(dto::Connection::new(
         &connection,
         databases
             .into_iter()
-            .map(view::DatabaseItem::from)
+            .map(dto::ConnectionDatabase::from)
             .collect(),
     ))
 }
@@ -150,14 +152,19 @@ pub async fn show(
     )
     .await?;
 
-    format::json(view::Detail::new(
-        &connection,
-        databases
+    format::json(dto::ConnectionDetail {
+        connection: dto::Connection::new(
+            &connection,
+            databases
+                .into_iter()
+                .map(dto::ConnectionDatabase::from)
+                .collect(),
+        ),
+        backups: backups
             .into_iter()
-            .map(view::DatabaseItem::from)
+            .map(dto::ConnectionBackupDetail::from)
             .collect(),
-        backups.into_iter().map(view::BackupDetail::from).collect(),
-    ))
+    })
 }
 
 /// `PUT`/`PATCH /api/connections/:id`.
@@ -203,11 +210,11 @@ pub async fn update(
     // proximo backup.
     let databases = connection_databases::Model::enabled_for(&ctx.db, connection.id).await?;
 
-    format::json(view::Updated::new(
+    format::json(dto::Connection::new(
         &connection,
         databases
             .into_iter()
-            .map(view::DatabaseItem::from)
+            .map(dto::ConnectionDatabase::from)
             .collect(),
     ))
 }
@@ -298,7 +305,7 @@ pub async fn test(
             )
             .await;
 
-            format::json(view::TestResult {
+            format::json(dto::ConnectionTestResult {
                 latency_ms: probe.latency_ms,
                 version: probe.version,
             })
@@ -358,7 +365,7 @@ pub async fn discover_databases(
         .ok_or_else(|| unprocessable("Tipo de banco de dados inválido"))?;
 
     match database_driver::list_databases(&target).await {
-        Ok(databases) => format::json(view::DiscoveredDatabases { databases }),
+        Ok(databases) => format::json(dto::DiscoveredDatabases { databases }),
         Err(error) => Err(crate::controllers::with_detail(
             unprocessable("Falha ao conectar ao servidor de banco de dados"),
             error.message(),
@@ -421,7 +428,7 @@ pub async fn create_database(
 
     format::render()
         .status(201)
-        .json(view::CreatedDatabase { database_name })
+        .json(dto::CreatedDatabase { database_name })
 }
 
 /// `GET /api/connections/docker-hosts`.
@@ -441,7 +448,7 @@ pub async fn docker_hosts(State(_ctx): State<AppContext>, _session: Auth) -> Res
     } else {
         Vec::new()
     };
-    format::json(view::DockerHosts {
+    format::json(dto::DockerHosts {
         docker_available,
         unavailable_reason: environment["unavailableReason"]
             .as_str()
@@ -542,12 +549,14 @@ pub async fn backup(
             )
             .await;
 
-            items.push(backup_view::ConnectionBackupItem::Succeeded {
+            items.push(backup_dto::ConnectionBackupItem {
                 database_name: connection_database.database_name.clone(),
                 backup_id: run.backup.id,
+                success: true,
                 file_name: run.backup.file_name.clone(),
-                file_size: run.backup.formatted_size(),
-                duration: run.backup.formatted_duration(),
+                file_size: run.backup.file_size,
+                duration_seconds: run.backup.duration_seconds,
+                error: None,
             });
         } else {
             failed += 1;
@@ -568,10 +577,13 @@ pub async fn backup(
             )
             .await;
 
-            items.push(backup_view::ConnectionBackupItem::Failed {
+            items.push(backup_dto::ConnectionBackupItem {
                 database_name: connection_database.database_name.clone(),
                 backup_id: run.backup.id,
                 success: false,
+                file_name: None,
+                file_size: None,
+                duration_seconds: None,
                 error: Some(error),
             });
         }
@@ -586,7 +598,7 @@ pub async fn backup(
     // `successful`/`failed` no topo. Devolver 4xx aqui obrigaria o cliente a ler
     // dados uteis de dentro de um corpo de erro — e este era o unico ponto da
     // API em que isso acontecia.
-    format::json(backup_view::ConnectionBackupResult {
+    format::json(backup_dto::ConnectionBackupResult {
         total_databases: databases.len(),
         successful,
         failed,

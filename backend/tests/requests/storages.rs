@@ -601,7 +601,7 @@ async fn browses_one_level_of_a_local_destination() {
         assert_eq!(objects[0]["size"], 4);
         // Sem backup gravado apontando para o arquivo, nao ha' replica — e o
         // campo e' omitido, e nao emitido vazio.
-        assert!(objects[0].get("replicas").is_none());
+        assert_eq!(objects[0]["replicas"], serde_json::json!([]));
     })
     .await;
 }

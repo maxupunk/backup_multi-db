@@ -23,6 +23,7 @@ use crate::controllers::middlewares::limiters::Limiters;
 use crate::controllers::middlewares::origin::RequestOrigin;
 use crate::controllers::Auth;
 use crate::controllers::{not_found, page_request, validation_failed, MAX_PAGE_SIZE};
+use crate::dtos::storages as dto;
 use crate::initializers::settings::Settings;
 use crate::models::audit_log::{AuditAction, AuditEntityType};
 use crate::models::audit_logs::{AuditEntry, Model as AuditLog};
@@ -36,7 +37,6 @@ use crate::models::storage_destinations::{
     self as storages, CreateStorageParams, DestinationUpdate, ListQuery, NewDestination,
     UpdateStorageParams,
 };
-use crate::views::storages as view;
 use crate::workers::storage_jobs::{ArchiveWorker, CopyWorker};
 
 /// Mensagem única de 404 deste recurso.
@@ -93,7 +93,7 @@ pub async fn index(
     );
 
     let found = storages::Model::list_page(&ctx.db, &query, &page).await?;
-    let items: Vec<view::Item> = found.page.iter().map(view::Item::from).collect();
+    let items: Vec<dto::Storage> = found.page.iter().map(dto::Storage::from).collect();
 
     format::json(Pager::new(items, found.meta))
 }
@@ -157,7 +157,7 @@ pub async fn store(
 
     format::render()
         .status(201)
-        .json(view::Detail::new(&storage, safe))
+        .json(dto::StorageDetail::new(&storage, safe))
 }
 
 /// `GET /api/storages/:id`.
@@ -170,7 +170,7 @@ pub async fn show(
     let storage = find_or_404(&ctx, id).await?;
     let safe = safe_config(&storage, &encryption(&ctx)?)?;
 
-    format::json(view::Detail::new(&storage, safe))
+    format::json(dto::StorageDetail::new(&storage, safe))
 }
 
 /// `PUT /api/storages/:id`.
@@ -258,7 +258,7 @@ pub async fn update(
 
     let safe = safe_config(&storage, &encryption)?;
 
-    format::json(view::Detail::new(&storage, safe))
+    format::json(dto::StorageDetail::new(&storage, safe))
 }
 
 /// `DELETE /api/storages/:id`.
@@ -345,7 +345,7 @@ pub async fn browse(
     )
     .await?;
 
-    format::json(view::BrowseResult::new(page, replicas))
+    format::json(dto::BrowseResult::new(page, replicas))
 }
 
 /// `DELETE /api/storages/:id/object`.

@@ -15,8 +15,8 @@ use loco_rs::prelude::*;
 use serde::Deserialize;
 
 use crate::controllers::{not_found, page_request, Auth};
+use crate::dtos::audit_logs as dto;
 use crate::models::audit_logs::{AuditFilters, Model as AuditLog};
-use crate::views::audit_logs as view;
 
 /// Default e teto de itens por pagina.
 const DEFAULT_PAGE_SIZE: u64 = 50;
@@ -80,11 +80,7 @@ pub async fn index(
     );
 
     let found = AuditLog::list_page(&ctx.db, &query.to_filters(), &page).await?;
-    let items: Vec<_> = found
-        .page
-        .into_iter()
-        .map(view::AuditLogItem::from)
-        .collect();
+    let items: Vec<_> = found.page.into_iter().map(dto::AuditLog::from).collect();
 
     format::json(Pager::new(items, found.meta))
 }
@@ -97,7 +93,7 @@ pub async fn stats(State(ctx): State<AppContext>, _session: Auth) -> Result<Resp
     let now = chrono::Local::now().fixed_offset();
     let stats = AuditLog::stats(&ctx.db, now).await?;
 
-    format::json(view::AuditStats::from(stats))
+    format::json(dto::AuditStats::from(stats))
 }
 
 /// `GET /api/audit-logs/:id`.
@@ -111,7 +107,9 @@ pub async fn show(
         .await?
         .ok_or_else(|| not_found("Log de auditoria não encontrado"))?;
 
-    format::json(view::AuditLogDetail::from(log))
+    let user_agent = log.user_agent.clone();
+
+    format::json(dto::AuditLog::from(log).with_user_agent(user_agent))
 }
 
 /// Rotas de `/api/audit-logs`. So' o limitador global.

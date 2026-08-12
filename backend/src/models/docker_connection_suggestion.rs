@@ -6,8 +6,8 @@
 //! de rede do backend, sugerir o host e a porta corretos para conectar em um
 //! banco rodando dentro de um container.
 
-use serde::Serialize;
-use serde_json::{json, Value};
+use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
 /// Tipo de banco inferido a partir do nome/imagem/ports do container.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -35,8 +35,9 @@ impl DatabaseTypeHint {
 }
 
 /// Origem do host sugerido.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "../../frontend/src/bindings/")]
 pub enum HostResolutionSource {
     DockerDns,
     HostIp,
@@ -74,10 +75,13 @@ pub struct ContainerDescriptor {
 }
 
 /// Opcao de porta apresentada na UI.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "../../frontend/src/bindings/")]
 pub struct PortOption {
+    #[ts(type = "number")]
     pub container_port: u16,
+    #[ts(type = "number")]
     pub host_port: u16,
     pub protocol: String,
     pub display: String,
@@ -85,8 +89,15 @@ pub struct PortOption {
 }
 
 /// Sugestao final para um container.
-#[derive(Debug, Clone, Serialize)]
+///
+/// Serializa direto para o payload de `GET /api/connections/docker-hosts`: o
+/// `rename_all` ja' produz o camelCase que o frontend espera, e o binding
+/// `ts-rs` e' gerado a partir desta struct. Havia uma funcao que remontava o
+/// mesmo objeto campo a campo com `json!` — duas descricoes do mesmo formato,
+/// e nada obrigando as duas a concordarem.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "../../frontend/src/bindings/")]
 pub struct HostSuggestion {
     pub container_id: String,
     pub container_name: String,
@@ -96,6 +107,7 @@ pub struct HostSuggestion {
     pub host_resolution_source: HostResolutionSource,
     pub network_names: Vec<String>,
     pub port_options: Vec<PortOption>,
+    #[ts(type = "number | null")]
     pub recommended_port: Option<u16>,
     pub has_external_port: bool,
     pub connectivity_warning: Option<String>,
@@ -488,23 +500,6 @@ pub fn descriptor_from_bollard(
         database_type_hint,
         networks,
         ports,
-    })
-}
-
-/// Converte uma sugestao para o payload JSON usado pelo controller.
-pub fn suggestion_to_value(suggestion: &HostSuggestion) -> Value {
-    json!({
-        "containerId": suggestion.container_id,
-        "containerName": suggestion.container_name,
-        "databaseTypeHint": suggestion.database_type_hint,
-        "sameNetwork": suggestion.same_network,
-        "suggestedHost": suggestion.suggested_host,
-        "hostResolutionSource": suggestion.host_resolution_source,
-        "networkNames": suggestion.network_names,
-        "portOptions": suggestion.port_options,
-        "recommendedPort": suggestion.recommended_port,
-        "hasExternalPort": suggestion.has_external_port,
-        "connectivityWarning": suggestion.connectivity_warning,
     })
 }
 

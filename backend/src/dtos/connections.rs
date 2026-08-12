@@ -1,89 +1,68 @@
-//! Respostas de `/api/connections` (tarefa 6.1).
+//! Respostas de `/api/connections`.
 //!
-//! ## O contrato tem tres formas de conexao, nao uma
+//! ## Uma conexão, três respostas
 //!
-//! O Lucid serializa o objeto que estiver na memoria, e o que esta' na memoria
-//! depende de como ele chegou la'. Os golden files da Fase 2 registram a
-//! diferenca:
+//! [`Connection`] é o registro e os databases que ele acompanha — é o corpo de
+//! `POST`, `PUT` e `PATCH`. As duas listagens acrescentam backups, e diferem
+//! só no recorte de cada um: a lista traz o **último** backup em forma resumida
+//! ([`ConnectionListItem`]), e o detalhe traz os dez mais recentes com os
+//! campos que a tela de histórico exibe ([`ConnectionDetail`]).
 //!
-//! | Rota | `scheduleEnabled` | `lastError`/`lastTestedAt`/`lastBackupAt` | `backups` |
-//! |---|---|---|---|
-//! | `POST` (store) | `false` — booleano | **ausentes** | ausente |
-//! | `PUT` (update) | `0` — numero | presentes | ausente |
-//! | `GET` (index/show) | `0` — numero | presentes | presente |
+//! O `#[serde(flatten)]` faz as duas serem *a* conexão mais os backups, em vez
+//! de uma cópia dos dezesseis campos. No TypeScript isso vira uma interseção,
+//! então o frontend continua enxergando um objeto só.
 //!
-//! No `store` o registro nunca voltou do banco: os tres campos de teste jamais
-//! foram atribuidos, e `JSON.stringify` **omite** `undefined`. Nas outras rotas
-//! o registro veio do SQLite, onde booleano e' `0`/`1`, e o model de
-//! `connections` — diferente do de `users` — nao tem `consume` convertendo de
-//! volta.
+//! ## A senha nunca sai
 //!
-//! E' o ACHADO 3 da Fase 2. Emitir `true` onde o contrato diz `1` quebraria
-//! todo cliente que compare com `===`, e o matcher de shape da suite reprova a
-//! troca de tipo.
+//! `password_encrypted` não está em nenhuma destas structs, e não pode estar.
+//! Não é só o texto claro que importa: o ciphertext com o IV ao lado é material
+//! para um ataque offline, e não há tela que precise dele.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
 use crate::models::_entities::{backups, connection_databases, connections};
 
-/// Um booleano com o tipo JSON que o contrato exige naquele ponto.
-///
-/// Existe para que a escolha seja **explicita** em cada view. Um `bool` puro
-/// emitiria `true`/`false` em toda parte, e a divergencia so' apareceria na
-/// suite de contrato — ou, pior, no cliente.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(untagged)]
-pub enum WireBool {
-    /// `0`/`1` — o valor como o SQLite devolve.
-    FromDatabase(u8),
-    /// `true`/`false` — o valor que ainda esta' na memoria da aplicacao.
-    InMemory(bool),
-}
-
-impl WireBool {
-    pub const fn from_database(value: bool) -> Self {
-        Self::FromDatabase(value as u8)
-    }
-
-    pub const fn in_memory(value: bool) -> Self {
-        Self::InMemory(value)
-    }
-}
-
-/// Item de `databases`, com os tres campos que o controller seleciona.
-#[derive(Debug, Clone, Serialize)]
+/// Um database que a conexão acompanha.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
-pub struct DatabaseItem {
+#[ts(export, export_to = "../../frontend/src/bindings/")]
+pub struct ConnectionDatabase {
+    #[ts(type = "number")]
     pub id: i64,
     pub database_name: String,
-    /// Sempre `0`/`1`: o controller recarrega a relacao do banco em **todas**
-    /// as rotas, inclusive na de criacao.
-    pub enabled: WireBool,
+    /// Um database desabilitado continua na tabela e sai do próximo backup.
+    pub enabled: bool,
 }
 
-impl From<connection_databases::Model> for DatabaseItem {
+impl From<connection_databases::Model> for ConnectionDatabase {
     fn from(row: connection_databases::Model) -> Self {
         Self {
             id: row.id,
             database_name: row.database_name,
-            enabled: WireBool::from_database(row.enabled.unwrap_or(false)),
+            enabled: row.enabled.unwrap_or(false),
         }
     }
 }
 
-/// Backup resumido, como aparece em `GET /api/connections`.
-#[derive(Debug, Clone, Serialize)]
+/// Backup resumido, como aparece na listagem de conexões.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
-pub struct BackupSummary {
+#[ts(export, export_to = "../../frontend/src/bindings/")]
+pub struct ConnectionBackupSummary {
+    #[ts(type = "number")]
     pub id: i64,
     pub status: String,
+    #[ts(type = "number | null")]
     pub file_size: Option<i64>,
     pub database_name: String,
+    #[ts(type = "string")]
     pub created_at: chrono::DateTime<chrono::FixedOffset>,
+    #[ts(type = "string | null")]
     pub finished_at: Option<chrono::DateTime<chrono::FixedOffset>>,
 }
 
-impl From<backups::Model> for BackupSummary {
+impl From<backups::Model> for ConnectionBackupSummary {
     fn from(row: backups::Model) -> Self {
         Self {
             id: row.id,
@@ -96,23 +75,29 @@ impl From<backups::Model> for BackupSummary {
     }
 }
 
-/// Backup detalhado, como aparece em `GET /api/connections/:id`.
-#[derive(Debug, Clone, Serialize)]
+/// Backup como a tela de histórico de uma conexão o mostra.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
-pub struct BackupDetail {
+#[ts(export, export_to = "../../frontend/src/bindings/")]
+pub struct ConnectionBackupDetail {
+    #[ts(type = "number")]
     pub id: i64,
     pub status: String,
     pub file_name: Option<String>,
+    #[ts(type = "number | null")]
     pub file_size: Option<i64>,
     pub database_name: String,
     pub retention_type: String,
     pub trigger: String,
+    #[ts(type = "string")]
     pub created_at: chrono::DateTime<chrono::FixedOffset>,
+    #[ts(type = "string | null")]
     pub finished_at: Option<chrono::DateTime<chrono::FixedOffset>>,
+    #[ts(type = "number | null")]
     pub duration_seconds: Option<i64>,
 }
 
-impl From<backups::Model> for BackupDetail {
+impl From<backups::Model> for ConnectionBackupDetail {
     fn from(row: backups::Model) -> Self {
         Self {
             id: row.id,
@@ -129,31 +114,43 @@ impl From<backups::Model> for BackupDetail {
     }
 }
 
-/// Os campos comuns as tres formas.
-///
-/// `password_encrypted` **nao** esta' aqui, e nunca pode estar: a coluna leva
-/// `serializeAs: null` no Lucid, e o ciphertext de uma senha de producao nao
-/// tem por que sair da aplicacao.
-#[derive(Debug, Clone, Serialize)]
+/// Uma conexão e os databases que ela acompanha.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
-struct Core {
-    id: i64,
-    name: String,
-    r#type: String,
-    host: String,
-    port: i64,
-    username: String,
-    schedule_frequency: Option<String>,
-    schedule_enabled: WireBool,
-    status: Option<String>,
-    storage_destination_id: Option<i64>,
-    options: Option<serde_json::Value>,
-    created_at: chrono::DateTime<chrono::FixedOffset>,
-    updated_at: chrono::DateTime<chrono::FixedOffset>,
+#[ts(export, export_to = "../../frontend/src/bindings/")]
+pub struct Connection {
+    #[ts(type = "number")]
+    pub id: i64,
+    pub name: String,
+    pub r#type: String,
+    pub host: String,
+    #[ts(type = "number")]
+    pub port: i64,
+    pub username: String,
+    pub schedule_frequency: Option<String>,
+    pub schedule_enabled: bool,
+    pub status: Option<String>,
+    /// Motivo da última falha de teste. `null` quando o último teste passou.
+    pub last_error: Option<String>,
+    #[ts(type = "string | null")]
+    pub last_tested_at: Option<chrono::DateTime<chrono::FixedOffset>>,
+    #[ts(type = "string | null")]
+    pub last_backup_at: Option<chrono::DateTime<chrono::FixedOffset>>,
+    #[ts(type = "number | null")]
+    pub storage_destination_id: Option<i64>,
+    /// A coluna é JSON livre; estas são as duas chaves que a validação aceita.
+    #[ts(type = "{ ssl?: boolean; charset?: string } | null")]
+    pub options: Option<serde_json::Value>,
+    #[ts(type = "string")]
+    pub created_at: chrono::DateTime<chrono::FixedOffset>,
+    #[ts(type = "string")]
+    pub updated_at: chrono::DateTime<chrono::FixedOffset>,
+    pub databases: Vec<ConnectionDatabase>,
 }
 
-impl Core {
-    fn new(row: &connections::Model, schedule_enabled: WireBool) -> Self {
+impl Connection {
+    #[must_use]
+    pub fn new(row: &connections::Model, databases: Vec<ConnectionDatabase>) -> Self {
         Self {
             id: row.id,
             name: row.name.clone(),
@@ -162,170 +159,84 @@ impl Core {
             port: row.port,
             username: row.username.clone(),
             schedule_frequency: row.schedule_frequency.clone(),
-            schedule_enabled,
+            schedule_enabled: row.schedule_enabled.unwrap_or(false),
             status: row.status.clone(),
+            last_error: row.last_error.clone(),
+            last_tested_at: row.last_tested_at,
+            last_backup_at: row.last_backup_at,
             storage_destination_id: row.storage_destination_id,
             options: parse_options(row.options.as_deref()),
             created_at: row.created_at,
             updated_at: row.updated_at,
-        }
-    }
-}
-
-/// Os tres campos que so' existem quando o registro veio do banco.
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct TestState {
-    last_error: Option<String>,
-    last_tested_at: Option<chrono::DateTime<chrono::FixedOffset>>,
-    last_backup_at: Option<chrono::DateTime<chrono::FixedOffset>>,
-}
-
-impl From<&connections::Model> for TestState {
-    fn from(row: &connections::Model) -> Self {
-        Self {
-            last_error: row.last_error.clone(),
-            last_tested_at: row.last_tested_at,
-            last_backup_at: row.last_backup_at,
-        }
-    }
-}
-
-/// Corpo de `POST /api/connections` — o registro como ele esta' na memoria.
-#[derive(Debug, Clone, Serialize)]
-pub struct Created {
-    #[serde(flatten)]
-    core: Core,
-    pub databases: Vec<DatabaseItem>,
-}
-
-impl Created {
-    pub fn new(row: &connections::Model, databases: Vec<DatabaseItem>) -> Self {
-        Self {
-            // Booleano de verdade: o valor nunca passou pelo SQLite nesta rota.
-            core: Core::new(
-                row,
-                WireBool::in_memory(row.schedule_enabled.unwrap_or(false)),
-            ),
-            databases,
-        }
-    }
-}
-
-/// Corpo de `PUT`/`PATCH /api/connections/:id`.
-#[derive(Debug, Clone, Serialize)]
-pub struct Updated {
-    #[serde(flatten)]
-    core: Core,
-    #[serde(flatten)]
-    test_state: TestState,
-    pub databases: Vec<DatabaseItem>,
-}
-
-impl Updated {
-    pub fn new(row: &connections::Model, databases: Vec<DatabaseItem>) -> Self {
-        Self {
-            core: Core::new(
-                row,
-                WireBool::from_database(row.schedule_enabled.unwrap_or(false)),
-            ),
-            test_state: TestState::from(row),
             databases,
         }
     }
 }
 
 /// Item de `GET /api/connections`.
-#[derive(Debug, Clone, Serialize)]
-pub struct ListItem {
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../frontend/src/bindings/")]
+pub struct ConnectionListItem {
     #[serde(flatten)]
-    core: Core,
-    #[serde(flatten)]
-    test_state: TestState,
-    pub databases: Vec<DatabaseItem>,
-    /// So' o backup mais recente — e' o `groupLimit(1)` do Adonis.
-    pub backups: Vec<BackupSummary>,
-}
-
-impl ListItem {
-    pub fn new(
-        row: &connections::Model,
-        databases: Vec<DatabaseItem>,
-        backups: Vec<BackupSummary>,
-    ) -> Self {
-        Self {
-            core: Core::new(
-                row,
-                WireBool::from_database(row.schedule_enabled.unwrap_or(false)),
-            ),
-            test_state: TestState::from(row),
-            databases,
-            backups,
-        }
-    }
+    #[ts(flatten)]
+    pub connection: Connection,
+    /// Só o backup mais recente — a listagem mostra "último backup", e trazer o
+    /// histórico inteiro de cada linha multiplicaria a resposta pelo número de
+    /// backups já feitos.
+    pub backups: Vec<ConnectionBackupSummary>,
 }
 
 /// Corpo de `GET /api/connections/:id`.
-#[derive(Debug, Clone, Serialize)]
-pub struct Detail {
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../frontend/src/bindings/")]
+pub struct ConnectionDetail {
     #[serde(flatten)]
-    core: Core,
-    #[serde(flatten)]
-    test_state: TestState,
-    pub databases: Vec<DatabaseItem>,
-    pub backups: Vec<BackupDetail>,
+    #[ts(flatten)]
+    pub connection: Connection,
+    pub backups: Vec<ConnectionBackupDetail>,
 }
 
-impl Detail {
-    pub fn new(
-        row: &connections::Model,
-        databases: Vec<DatabaseItem>,
-        backups: Vec<BackupDetail>,
-    ) -> Self {
-        Self {
-            core: Core::new(
-                row,
-                WireBool::from_database(row.schedule_enabled.unwrap_or(false)),
-            ),
-            test_state: TestState::from(row),
-            databases,
-            backups,
-        }
-    }
-}
-
-/// `data` de `POST /api/connections/:id/test` bem-sucedido.
-#[derive(Debug, Clone, Serialize)]
+/// Corpo de `POST /api/connections/:id/test` bem-sucedido.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
-pub struct TestResult {
+#[ts(export, export_to = "../../frontend/src/bindings/")]
+pub struct ConnectionTestResult {
+    #[ts(type = "number")]
     pub latency_ms: i64,
     pub version: Option<String>,
 }
 
-/// `data` de `POST /api/connections/discover-databases`.
-#[derive(Debug, Clone, Serialize)]
+/// Corpo de `POST /api/connections/discover-databases`.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../frontend/src/bindings/")]
 pub struct DiscoveredDatabases {
     pub databases: Vec<String>,
 }
 
-/// `data` de `POST /api/connections/:id/create-database`.
-#[derive(Debug, Clone, Serialize)]
+/// Corpo de `POST /api/connections/:id/create-database`.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "../../frontend/src/bindings/")]
 pub struct CreatedDatabase {
     pub database_name: String,
 }
 
-/// `data` de `GET /api/connections/docker-hosts`.
-#[derive(Debug, Clone, Serialize)]
+/// Corpo de `GET /api/connections/docker-hosts`.
+///
+/// Responde 200 mesmo sem Docker: a tela de nova conexão trata a ausência
+/// mostrando o formulário manual, e um erro a faria exibir uma falha onde não
+/// há nenhuma.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "../../frontend/src/bindings/")]
 pub struct DockerHosts {
     pub docker_available: bool,
     pub unavailable_reason: Option<String>,
     pub backend_container_id: Option<String>,
-    pub hosts: Vec<serde_json::Value>,
+    pub hosts: Vec<crate::models::docker_connection_suggestion::HostSuggestion>,
 }
 
-/// Le' a coluna `options`, que guarda JSON como texto.
+/// Lê a coluna `options`, que guarda JSON como texto.
 fn parse_options(raw: Option<&str>) -> Option<serde_json::Value> {
     let raw = raw?;
     if raw.is_empty() {
@@ -368,8 +279,8 @@ mod tests {
         }
     }
 
-    fn databases() -> Vec<DatabaseItem> {
-        vec![DatabaseItem::from(connection_databases::Model {
+    fn databases() -> Vec<ConnectionDatabase> {
+        vec![ConnectionDatabase::from(connection_databases::Model {
             id: 2,
             connection_id: 4,
             database_name: "app_fixture".to_string(),
@@ -380,75 +291,78 @@ mod tests {
     }
 
     #[test]
-    fn the_created_body_omits_the_test_state_and_uses_a_real_boolean() {
-        // No `store` o registro nunca voltou do banco: os tres campos jamais
-        // foram atribuidos, e `JSON.stringify` omite `undefined`.
+    fn the_booleans_are_booleans() {
         let json =
-            serde_json::to_value(Created::new(&connection(), databases())).expect("serializa");
+            serde_json::to_value(Connection::new(&connection(), databases())).expect("serializa");
 
-        assert!(json.get("lastError").is_none());
-        assert!(json.get("lastTestedAt").is_none());
-        assert!(json.get("lastBackupAt").is_none());
-        assert!(json.get("backups").is_none());
         assert_eq!(json["scheduleEnabled"], serde_json::Value::Bool(false));
-        assert_eq!(json.as_object().map(serde_json::Map::len), Some(14));
-    }
-
-    #[test]
-    fn the_updated_body_carries_the_test_state_and_a_numeric_boolean() {
-        let json =
-            serde_json::to_value(Updated::new(&connection(), databases())).expect("serializa");
-
-        assert!(json.get("lastError").is_some());
-        assert!(json.get("backups").is_none());
-        // ACHADO 3: `0`, e nao `false`.
-        assert_eq!(json["scheduleEnabled"], serde_json::json!(0));
-        assert_eq!(json.as_object().map(serde_json::Map::len), Some(17));
-    }
-
-    #[test]
-    fn the_list_item_adds_the_backups() {
-        let json = serde_json::to_value(ListItem::new(&connection(), databases(), Vec::new()))
-            .expect("serializa");
-
-        assert_eq!(json["backups"], serde_json::json!([]));
-        assert_eq!(json.as_object().map(serde_json::Map::len), Some(18));
-    }
-
-    #[test]
-    fn the_database_item_is_always_numeric() {
-        // O controller recarrega a relacao do banco em todas as rotas.
-        let json = serde_json::to_value(&databases()[0]).expect("serializa");
-
         assert_eq!(
-            json,
-            serde_json::json!({ "id": 2, "databaseName": "app_fixture", "enabled": 1 })
+            json["databases"][0]["enabled"],
+            serde_json::Value::Bool(true)
         );
     }
 
     #[test]
-    fn a_disabled_database_serialises_as_zero() {
-        let item = DatabaseItem::from(connection_databases::Model {
-            id: 3,
-            connection_id: 4,
-            database_name: "desativado".to_string(),
-            enabled: Some(false),
-            created_at: at("2026-08-05 08:09:51"),
-            updated_at: at("2026-08-05 08:09:51"),
-        });
+    fn carries_the_seventeen_columns_the_screen_reads() {
+        let json =
+            serde_json::to_value(Connection::new(&connection(), databases())).expect("serializa");
 
-        assert_eq!(serde_json::to_value(item).expect("serializa")["enabled"], 0);
+        assert_eq!(json.as_object().map(serde_json::Map::len), Some(17));
+        for key in [
+            "id",
+            "name",
+            "type",
+            "host",
+            "port",
+            "username",
+            "scheduleFrequency",
+            "scheduleEnabled",
+            "status",
+            "lastError",
+            "lastTestedAt",
+            "lastBackupAt",
+            "storageDestinationId",
+            "options",
+            "createdAt",
+            "updatedAt",
+            "databases",
+        ] {
+            assert!(json.get(key).is_some(), "faltou `{key}`");
+        }
     }
 
     #[test]
-    fn no_view_ever_leaks_the_encrypted_password() {
+    fn the_list_item_is_the_connection_plus_the_backups() {
+        // O `flatten` precisa produzir um objeto so'; um objeto aninhado
+        // quebraria toda leitura de `connection.name` no frontend.
+        let json = serde_json::to_value(ConnectionListItem {
+            connection: Connection::new(&connection(), databases()),
+            backups: Vec::new(),
+        })
+        .expect("serializa");
+
+        assert_eq!(json["name"], "Contract MySQL");
+        assert_eq!(json["backups"], serde_json::json!([]));
+        assert!(json.get("connection").is_none());
+        assert_eq!(json.as_object().map(serde_json::Map::len), Some(18));
+    }
+
+    #[test]
+    fn no_response_ever_leaks_the_encrypted_password() {
+        // O ciphertext com o IV ao lado e' material para ataque offline; nao ha'
+        // tela que precise dele.
         for rendered in [
-            serde_json::to_string(&Created::new(&connection(), databases())).expect("ok"),
-            serde_json::to_string(&Updated::new(&connection(), databases())).expect("ok"),
-            serde_json::to_string(&ListItem::new(&connection(), databases(), Vec::new()))
-                .expect("ok"),
-            serde_json::to_string(&Detail::new(&connection(), databases(), Vec::new()))
-                .expect("ok"),
+            serde_json::to_string(&Connection::new(&connection(), databases())).expect("ok"),
+            serde_json::to_string(&ConnectionListItem {
+                connection: Connection::new(&connection(), databases()),
+                backups: Vec::new(),
+            })
+            .expect("ok"),
+            serde_json::to_string(&ConnectionDetail {
+                connection: Connection::new(&connection(), databases()),
+                backups: Vec::new(),
+            })
+            .expect("ok"),
         ] {
             assert!(!rendered.contains("password"), "vazou a chave: {rendered}");
             assert!(!rendered.contains("aWl2"), "vazou o ciphertext: {rendered}");
@@ -460,15 +374,21 @@ mod tests {
         let mut row = connection();
         row.options = Some(r#"{"ssl":true,"charset":"utf8mb4"}"#.to_string());
 
-        let json = serde_json::to_value(Updated::new(&row, databases())).expect("serializa");
+        let json = serde_json::to_value(Connection::new(&row, databases())).expect("serializa");
         assert_eq!(json["options"]["ssl"], true);
     }
 
     #[test]
     fn an_absent_options_column_is_null_not_missing() {
+        // O frontend le' `connection.options?.ssl`; a chave ausente e o `null`
+        // se comportam igual la', mas o binding declara o campo, e omiti-lo
+        // faria a resposta divergir do tipo gerado.
         let json =
-            serde_json::to_value(Updated::new(&connection(), databases())).expect("serializa");
+            serde_json::to_value(Connection::new(&connection(), databases())).expect("serializa");
 
         assert!(json["options"].is_null());
+        assert!(json
+            .as_object()
+            .is_some_and(|map| map.contains_key("options")));
     }
 }

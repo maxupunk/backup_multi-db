@@ -27,6 +27,7 @@ use crate::controllers::middlewares::limiters::Limiters;
 use crate::controllers::middlewares::origin::RequestOrigin;
 use crate::controllers::Auth;
 use crate::controllers::{not_found, page_request, unprocessable, MAX_PAGE_SIZE};
+use crate::dtos::backups as dto;
 use crate::initializers::settings::Settings;
 use crate::models::_entities::{backups, connections};
 use crate::models::audit_log::AuditAction;
@@ -38,7 +39,6 @@ use crate::models::backups::{BackupStatus, ListQuery, Model as Backup};
 use crate::models::progress;
 use crate::models::restore::RestoreOptions;
 use crate::models::storage;
-use crate::views::backups as view;
 use crate::workers::restore::RestoreWorker;
 
 const NOT_FOUND: &str = "Backup não encontrado";
@@ -65,10 +65,10 @@ pub async fn index(
     // Uma consulta para a pagina inteira, e nao uma por linha.
     let connections = Backup::connections_of(&ctx.db, &rows).await?;
 
-    let items: Vec<view::Item> = rows
+    let items: Vec<dto::Backup> = rows
         .iter()
         .map(|row| {
-            view::Item::new(row)
+            dto::Backup::new(row)
                 .with_connection(row.connection_id.and_then(|id| connections.get(&id)))
         })
         .collect();
@@ -101,7 +101,7 @@ pub async fn by_connection(
     );
 
     let found = Backup::list_page_for_connection(&ctx.db, connection_id, &page).await?;
-    let items: Vec<view::Item> = found.page.iter().map(view::Item::new).collect();
+    let items: Vec<dto::Backup> = found.page.iter().map(dto::Backup::new).collect();
 
     format::json(Pager::new(items, found.meta))
 }
@@ -115,7 +115,7 @@ pub async fn show(
 ) -> Result<Response> {
     let (backup, connection) = find_with_connection(&ctx, id).await?;
 
-    format::json(view::Item::new(&backup).with_connection(connection.as_ref()))
+    format::json(dto::Backup::new(&backup).with_connection(connection.as_ref()))
 }
 
 /// `GET /api/backups/:id/download`.
@@ -273,7 +273,7 @@ pub async fn restore(
     )
     .await?;
 
-    format::render().status(202).json(view::RestoreAccepted {
+    format::render().status(202).json(dto::RestoreAccepted {
         restore_id,
         database_name: target_database,
     })
@@ -402,8 +402,8 @@ pub async fn import(
     )
     .await;
 
-    format::render().status(201).json(view::Imported {
-        backup: view::Item::new(&backup),
+    format::render().status(201).json(dto::ImportedBackup {
+        backup: dto::Backup::new(&backup),
         format,
         checksum,
         file_size: stored,

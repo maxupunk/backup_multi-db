@@ -20,13 +20,14 @@
 
 use std::path::Path;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tokio::io::AsyncReadExt;
 
 /// Formatos aceitos, ja' canonizados.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "lowercase")]
+#[ts(export, export_to = "../../frontend/src/bindings/")]
 pub enum ImportedFormat {
     Sql,
     #[serde(rename = "sql.gz")]
@@ -87,13 +88,13 @@ pub enum ImportError {
 }
 
 /// Resultado de uma verificacao de integridade.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "../../frontend/src/bindings/")]
 pub struct IntegrityResult {
     pub valid: bool,
     pub message: String,
-    /// Omitido quando nao ha' aviso — o Adonis nao emite a chave vazia.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    /// `null` quando a verificacao nao produziu aviso.
     pub warnings: Option<Vec<String>>,
 }
 

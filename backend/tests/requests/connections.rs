@@ -57,17 +57,15 @@ async fn creates_a_connection_with_its_databases() {
         let data = &body;
         assert_eq!(data["name"], "Golden Da Criacao");
         assert_eq!(data["status"], "active");
-        // ACHADO 3: no corpo da criacao o registro ainda esta' na memoria, e
-        // `scheduleEnabled` sai como booleano de verdade...
         assert_eq!(data["scheduleEnabled"], Value::Bool(false));
-        // ...enquanto os databases, que foram recarregados do banco, saem `1`.
-        assert_eq!(data["databases"][0]["enabled"], 1);
+        assert_eq!(data["databases"][0]["enabled"], true);
         assert_eq!(data["databases"][0]["databaseName"], "app_fixture");
-        // Os tres campos de teste nunca foram atribuidos: `JSON.stringify`
-        // omite `undefined`, e o contrato registra a ausencia.
-        assert!(data.get("lastError").is_none());
-        assert!(data.get("lastTestedAt").is_none());
-        assert!(data.get("lastBackupAt").is_none());
+        // Uma conexao recem-criada nunca foi testada: as tres chaves existem e
+        // valem `null`. O binding TypeScript as declara, e uma resposta sem
+        // elas divergiria do tipo gerado.
+        assert!(data["lastError"].is_null());
+        assert!(data["lastTestedAt"].is_null());
+        assert!(data["lastBackupAt"].is_null());
     })
     .await;
 }
@@ -135,7 +133,7 @@ async fn lists_ordered_by_name_with_the_pagination_envelope() {
         assert_eq!(body["results"][0]["name"], "Alfa");
         assert_eq!(body["results"][1]["name"], "Zulu");
         // Na listagem o registro veio do banco: `0`, e nao `false`.
-        assert_eq!(body["results"][0]["scheduleEnabled"], 0);
+        assert_eq!(body["results"][0]["scheduleEnabled"], false);
         assert_eq!(body["results"][0]["backups"], serde_json::json!([]));
     })
     .await;
@@ -310,7 +308,7 @@ async fn updates_only_the_fields_that_were_sent() {
         assert_eq!(data["username"], "tester");
         assert_eq!(data["databases"][0]["databaseName"], "app_fixture");
         // Registro vindo do banco: `0`, e nao `false`.
-        assert_eq!(data["scheduleEnabled"], 0);
+        assert_eq!(data["scheduleEnabled"], false);
     })
     .await;
 }

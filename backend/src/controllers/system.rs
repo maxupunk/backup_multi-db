@@ -13,6 +13,7 @@ use serde::Deserialize;
 
 use crate::controllers::middlewares::origin::RequestOrigin;
 use crate::controllers::Auth;
+use crate::dtos::system as dto;
 use crate::initializers::settings::Settings;
 use crate::models::_entities::{backups, connections};
 use crate::models::audit_log::{AuditAction, AuditEntityType};
@@ -21,7 +22,6 @@ use crate::models::backup_retention_policy::UpdateBackupRetentionPolicy;
 use crate::models::backup_runner;
 use crate::models::storage::space;
 use crate::models::system_monitor;
-use crate::views::system as view;
 
 /// Quantos backups recentes o painel mostra. Igual ao `limit(5)` do Adonis.
 const RECENT_BACKUPS: u64 = 5;
@@ -49,24 +49,24 @@ pub async fn stats(State(ctx): State<AppContext>, _session: Auth) -> Result<Resp
     let storage_spaces =
         space::all_destinations_space(&ctx.db, &encryption, &settings.backup_storage_path).await?;
 
-    format::json(view::Stats {
-        connections: view::ConnectionCounts {
+    format::json(dto::Stats {
+        connections: dto::ConnectionCounts {
             total: connections_total,
             active: connections_active,
         },
-        backups: view::BackupCounts {
+        backups: dto::BackupCounts {
             total: backups_total,
             today: backups_today,
         },
         recent_backups: recent
             .into_iter()
-            .map(|(backup, name)| view::RecentBackup::new(backup, name))
+            .map(|(backup, name)| dto::RecentBackup::new(backup, name))
             .collect(),
         storage_spaces: storage_spaces
             .into_iter()
-            .map(crate::views::storages::SpaceItem::from)
+            .map(crate::dtos::storages::StorageSpace::from)
             .collect(),
-        system: view::SystemOverview::from(overview),
+        system: dto::SystemOverview::from(overview),
     })
 }
 
@@ -75,7 +75,7 @@ pub async fn stats(State(ctx): State<AppContext>, _session: Auth) -> Result<Resp
 pub async fn status(State(ctx): State<AppContext>, _session: Auth) -> Result<Response> {
     let overview = system_monitor::SystemOverview::collect(&ctx).await;
 
-    format::json(view::SystemOverview::from(overview))
+    format::json(dto::SystemOverview::from(overview))
 }
 
 /// `GET /api/system/containers/resources` — metricas de containers Docker.
@@ -116,7 +116,7 @@ pub async fn backup_retention_policy(
     _session: Auth,
 ) -> Result<Response> {
     let policy = crate::models::backup_retention_policy::get_policy(&ctx).await?;
-    format::json(view::BackupRetentionPolicy::from(policy))
+    format::json(dto::BackupRetentionPolicy::from(policy))
 }
 
 /// `PUT /api/system/backup-retention` — atualiza a politica GFS.
@@ -154,7 +154,7 @@ pub async fn update_backup_retention_policy(
         .await;
     }
 
-    format::json(view::BackupRetentionPolicy::from(policy))
+    format::json(dto::BackupRetentionPolicy::from(policy))
 }
 
 /// `POST /api/system/backup-retention/run` — executa o prune de retencao.

@@ -40,12 +40,13 @@ static CACHE: Mutex<Option<(Instant, SystemOverview)>> = Mutex::new(None);
 
 /// De onde veio o numero de memoria.
 ///
-/// Dentro de um container, `os.totalmem()` reporta a memoria do **host**, nao o
+/// Dentro de um container o total de memoria do sistema e' o do **host**, nao o
 /// limite do container — um painel lendo isso mostraria 3% de uso enquanto o
-/// processo e' morto por OOM. O Adonis sonda o cgroup por isso, e a origem sai
-/// na resposta para que a diferenca seja visivel.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+/// processo e' morto por OOM. Por isso a leitura prefere o cgroup, e a origem
+/// sai na resposta para que a diferenca seja visivel na tela.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, ts_rs::TS)]
 #[serde(rename_all = "lowercase")]
+#[ts(export, export_to = "../../frontend/src/bindings/")]
 pub enum MemorySource {
     Cgroup,
     Os,

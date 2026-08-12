@@ -10,8 +10,8 @@ use loco_rs::prelude::*;
 use serde::Deserialize;
 
 use crate::controllers::{page_request, require_admin, Auth, MAX_PAGE_SIZE};
+use crate::dtos::users as dto;
 use crate::models::_entities::users;
-use crate::views::users as view;
 
 /// Mensagem unica de negacao deste recurso.
 const ADMIN_ONLY: &str = "Apenas administradores podem gerenciar usuários.";
@@ -50,11 +50,7 @@ pub async fn index(
     let found =
         users::Model::list_page(&ctx.db, &page, parse_active(query.active.as_deref())).await?;
 
-    let items: Vec<_> = found
-        .page
-        .into_iter()
-        .map(view::UserListItem::from)
-        .collect();
+    let items: Vec<_> = found.page.into_iter().map(dto::User::from).collect();
 
     format::json(Pager::new(items, found.meta))
 }
@@ -85,7 +81,7 @@ pub async fn toggle_status(
 
     // Sem mensagem: `isActive` ja' diz o que aconteceu, e quem monta o texto da
     // notificacao e' a interface, que fala o idioma do usuario.
-    format::json(view::ToggledStatus::from(&updated))
+    format::json(dto::UserStatus::from(&updated))
 }
 
 /// Interpreta `?active=`.

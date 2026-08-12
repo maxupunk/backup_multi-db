@@ -1,4 +1,4 @@
-//! Respostas de `/api/storages` e `/api/storage-destinations` (Fase 8).
+//! Respostas de `/api/storages` e `/api/storage-destinations`.
 //!
 //! ## Dois recursos sobre a mesma tabela
 //!
@@ -11,14 +11,21 @@
 //!
 //! ## `provider` sai cru, `providerLabel` sai derivado
 //!
-//! O golden `storages/index` traz uma linha com `"provider": null` e
-//! `"providerLabel": "Local"`. Não é inconsistência: a coluna é anterior à
-//! migration que criou `provider`, e o rótulo cai no `type`. Emitir o provider
-//! **efetivo** no campo `provider` preencheria uma coluna que o banco tem vazia,
-//! e a interface usa esse campo para saber se o destino já foi migrado.
+//! Uma linha anterior à migration que criou a coluna tem `provider: null` e
+//! ainda assim um rótulo — que cai no `type`. Preencher `provider` com o valor
+//! efetivo esconderia a diferença, e é justamente por esse campo que a
+//! interface sabe se o destino já foi migrado.
+//!
+//! ## A configuração nunca sai crua
+//!
+//! O `config` das duas rotas de detalhe já passou pelo mascaramento do model:
+//! chave de acesso, senha e chave privada saem trocadas por marcador. É a
+//! mesma linha do banco que guarda o segredo cifrado, e uma tela de edição
+//! precisa mostrar o resto da configuração sem revelar isso.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use ts_rs::TS;
 
 use crate::models::_entities::storage_destinations::Model;
 use crate::models::storage::explorer::Replica;
@@ -26,9 +33,11 @@ use crate::models::storage::space::SpaceInfo;
 use crate::models::storage::{BucketObject, ListPage};
 
 /// Item de `GET /api/storages`.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
-pub struct Item {
+#[ts(export, export_to = "../../frontend/src/bindings/")]
+pub struct Storage {
+    #[ts(type = "number")]
     pub id: i64,
     pub name: String,
     pub r#type: String,
@@ -41,7 +50,7 @@ pub struct Item {
     pub updated_at: chrono::DateTime<chrono::FixedOffset>,
 }
 
-impl From<&Model> for Item {
+impl From<&Model> for Storage {
     fn from(model: &Model) -> Self {
         Self {
             id: model.id,
@@ -58,28 +67,32 @@ impl From<&Model> for Item {
 }
 
 /// `GET`/`POST`/`PUT` de um storage — o item mais a config mascarada.
-#[derive(Debug, Clone, Serialize)]
-pub struct Detail {
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../frontend/src/bindings/")]
+pub struct StorageDetail {
     #[serde(flatten)]
-    pub storage: Item,
+    pub storage: Storage,
     /// Já passou por `safeConfig`: nenhum segredo sai daqui.
+    #[ts(type = "Record<string, unknown>")]
     pub config: Value,
 }
 
-impl Detail {
+impl StorageDetail {
     #[must_use]
     pub fn new(model: &Model, config: Value) -> Self {
         Self {
-            storage: Item::from(model),
+            storage: Storage::from(model),
             config,
         }
     }
 }
 
 /// Item de `GET /api/storage-destinations` — sem `provider`.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
-pub struct LegacyItem {
+#[ts(export, export_to = "../../frontend/src/bindings/")]
+pub struct StorageDestination {
+    #[ts(type = "number")]
     pub id: i64,
     pub name: String,
     pub r#type: String,
@@ -89,7 +102,7 @@ pub struct LegacyItem {
     pub updated_at: chrono::DateTime<chrono::FixedOffset>,
 }
 
-impl From<&Model> for LegacyItem {
+impl From<&Model> for StorageDestination {
     fn from(model: &Model) -> Self {
         Self {
             id: model.id,
@@ -104,38 +117,42 @@ impl From<&Model> for LegacyItem {
 }
 
 /// Detalhe da rota legada.
-#[derive(Debug, Clone, Serialize)]
-pub struct LegacyDetail {
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../frontend/src/bindings/")]
+pub struct StorageDestinationDetail {
     #[serde(flatten)]
-    pub destination: LegacyItem,
+    pub destination: StorageDestination,
+    #[ts(type = "Record<string, unknown>")]
     pub config: Value,
 }
 
-impl LegacyDetail {
+impl StorageDestinationDetail {
     #[must_use]
     pub fn new(model: &Model, config: Value) -> Self {
         Self {
-            destination: LegacyItem::from(model),
+            destination: StorageDestination::from(model),
             config,
         }
     }
 }
 
 /// Uma cópia do mesmo arquivo em outro destino.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
-pub struct ReplicaItem {
-    pub location_type: &'static str,
+#[ts(export, export_to = "../../frontend/src/bindings/")]
+pub struct StorageReplica {
+    pub location_type: String,
+    #[ts(type = "number | null")]
     pub storage_id: Option<i64>,
     pub storage_name: String,
     pub provider: String,
     pub path: String,
 }
 
-impl From<Replica> for ReplicaItem {
+impl From<Replica> for StorageReplica {
     fn from(replica: Replica) -> Self {
         Self {
-            location_type: replica.location_type,
+            location_type: replica.location_type.to_string(),
             storage_id: replica.storage_id,
             storage_name: replica.storage_name,
             provider: replica.provider,
@@ -146,23 +163,22 @@ impl From<Replica> for ReplicaItem {
 
 /// Um objeto na resposta de `browse`.
 ///
-/// `etag` e `replicas` são **omitidos** quando ausentes, e não emitidos como
-/// `null`: é o que o `BucketObject` do TypeScript faz (`etag?`, `replicas?`), e
-/// um `replicas: []` faria a interface desenhar o marcador de cópia para
-/// arquivo que só existe aqui.
-#[derive(Debug, Clone, Serialize)]
+/// `replicas` é sempre uma lista, vazia quando o arquivo só existe aqui — a
+/// interface desenha o marcador de cópia a partir do tamanho dela, e uma chave
+/// que às vezes falta obrigaria cada leitura a um teste de presença antes.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "../../frontend/src/bindings/")]
 pub struct BrowseObject {
     pub key: String,
     pub name: String,
     /// `null` em diretório — pasta não tem tamanho próprio.
+    #[ts(type = "number | null")]
     pub size: Option<i64>,
     pub last_modified: Option<String>,
     pub is_directory: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub etag: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub replicas: Option<Vec<ReplicaItem>>,
+    pub replicas: Vec<StorageReplica>,
 }
 
 impl BrowseObject {
@@ -176,15 +192,18 @@ impl BrowseObject {
             is_directory: object.is_directory,
             etag: object.etag,
             replicas: replicas
-                .filter(|list| !list.is_empty())
-                .map(|list| list.into_iter().map(ReplicaItem::from).collect()),
+                .unwrap_or_default()
+                .into_iter()
+                .map(StorageReplica::from)
+                .collect(),
         }
     }
 }
 
 /// Corpo de `GET /api/storages/:id/browse`.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "../../frontend/src/bindings/")]
 pub struct BrowseResult {
     pub objects: Vec<BrowseObject>,
     pub next_cursor: Option<String>,
@@ -212,20 +231,25 @@ impl BrowseResult {
     }
 }
 
-/// Espaço de um destino, no shape do golden `storage-destinations/space-all`.
+/// Espaço usado e livre de um destino.
 ///
 /// `type` sai como texto cru da coluna, e não como enum: o campo alimenta a
 /// legenda da barra de uso, e uma linha com `type` desconhecido continua sendo
 /// exibida em vez de sumir da lista.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
-pub struct SpaceItem {
+#[ts(export, export_to = "../../frontend/src/bindings/")]
+pub struct StorageSpace {
+    #[ts(type = "number | null")]
     pub destination_id: Option<i64>,
     pub destination_name: String,
     pub r#type: String,
     pub space_available: bool,
+    #[ts(type = "number")]
     pub total_bytes: u64,
+    #[ts(type = "number")]
     pub used_bytes: u64,
+    #[ts(type = "number")]
     pub free_bytes: u64,
     pub used_percent: f64,
     pub free_percent: f64,
@@ -233,7 +257,7 @@ pub struct SpaceItem {
     pub low_space_threshold: f64,
 }
 
-impl From<SpaceInfo> for SpaceItem {
+impl From<SpaceInfo> for StorageSpace {
     fn from(info: SpaceInfo) -> Self {
         Self {
             destination_id: info.destination_id,
@@ -283,8 +307,8 @@ mod tests {
     }
 
     #[test]
-    fn the_list_item_has_exactly_the_nine_golden_fields() {
-        let json = serde_json::to_value(Item::from(&model())).expect("serializa");
+    fn the_list_item_has_exactly_nine_fields() {
+        let json = serde_json::to_value(Storage::from(&model())).expect("serializa");
         let object = json.as_object().expect("objeto");
 
         for key in [
@@ -310,7 +334,7 @@ mod tests {
         row.provider = None;
         row.r#type = "local".to_string();
 
-        let json = serde_json::to_value(Item::from(&row)).expect("serializa");
+        let json = serde_json::to_value(Storage::from(&row)).expect("serializa");
 
         assert!(json["provider"].is_null());
         assert_eq!(json["providerLabel"], "Local");
@@ -318,7 +342,7 @@ mod tests {
 
     #[test]
     fn the_legacy_item_has_no_provider_at_all() {
-        let json = serde_json::to_value(LegacyItem::from(&model())).expect("serializa");
+        let json = serde_json::to_value(StorageDestination::from(&model())).expect("serializa");
         let object = json.as_object().expect("objeto");
 
         assert!(!object.contains_key("provider"));
@@ -328,7 +352,7 @@ mod tests {
 
     #[test]
     fn the_detail_flattens_the_item_next_to_the_config() {
-        let json = serde_json::to_value(Detail::new(
+        let json = serde_json::to_value(StorageDetail::new(
             &model(),
             serde_json::json!({ "type": "s3", "secretAccessKey": "***" }),
         ))
@@ -340,29 +364,30 @@ mod tests {
     }
 
     #[test]
-    fn an_object_without_replicas_omits_the_field() {
-        // `replicas: []` faria a interface desenhar o marcador de copia para
-        // arquivo que so' existe aqui.
+    fn an_object_without_replicas_reports_an_empty_list() {
+        // A interface desenha o marcador de copia a partir do tamanho da lista;
+        // uma chave que as vezes falta obrigaria cada leitura a testar presenca
+        // antes de contar.
         let json = serde_json::to_value(BrowseObject::new(
             BucketObject::file("12/a.sql.gz", 10, None),
             None,
         ))
         .expect("serializa");
 
-        assert!(json.get("replicas").is_none());
-        assert!(json.get("etag").is_none());
+        assert_eq!(json["replicas"], serde_json::json!([]));
+        assert!(json["etag"].is_null());
         assert_eq!(json["size"], 10);
     }
 
     #[test]
-    fn an_empty_replica_list_is_treated_as_absent() {
+    fn an_empty_replica_list_stays_empty() {
         let json = serde_json::to_value(BrowseObject::new(
             BucketObject::file("12/a.sql.gz", 10, None),
             Some(Vec::new()),
         ))
         .expect("serializa");
 
-        assert!(json.get("replicas").is_none());
+        assert_eq!(json["replicas"], serde_json::json!([]));
     }
 
     #[test]
@@ -376,7 +401,7 @@ mod tests {
 
     #[test]
     fn the_space_item_has_exactly_the_eleven_golden_fields() {
-        let json = serde_json::to_value(SpaceItem::from(SpaceInfo {
+        let json = serde_json::to_value(StorageSpace::from(SpaceInfo {
             destination_id: Some(3),
             destination_name: "Local".to_string(),
             storage_type: "local".to_string(),
@@ -436,7 +461,7 @@ mod tests {
         let json = serde_json::to_value(BrowseResult::new(page, replicas)).expect("serializa");
 
         assert_eq!(json["objects"][0]["replicas"][0]["storageName"], "Local");
-        assert!(json["objects"][1].get("replicas").is_none());
+        assert_eq!(json["objects"][1]["replicas"], serde_json::json!([]));
         assert_eq!(json["nextCursor"], "12/b.sql.gz");
         assert_eq!(json["isTruncated"], true);
     }

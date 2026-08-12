@@ -108,9 +108,8 @@ async fn lists_backups_with_the_pagination_envelope() {
 
         let item = &body["results"][0];
         assert_eq!(item["databaseName"], "app_fixture");
-        // ACHADO 3: o registro veio do SQLite, entao os booleanos sao `0`/`1`.
-        assert_eq!(item["compressed"], 1);
-        assert_eq!(item["protected"], 0);
+        assert_eq!(item["compressed"], true);
+        assert_eq!(item["protected"], false);
         // O `preload('connection')` da listagem aninha o objeto.
         assert_eq!(item["connection"]["name"], "Conexao Dos Backups");
     })
@@ -223,7 +222,7 @@ async fn lists_the_backups_of_one_connection_without_nesting_it() {
         let body: Value = response.json();
         assert_eq!(body["pagination"]["total_items"], 1);
         // Sem `preload('connection')`: quem chama ja' esta' na tela da conexao.
-        assert!(body["results"][0].get("connection").is_none());
+        assert!(body["results"][0]["connection"].is_null());
     })
     .await;
 }

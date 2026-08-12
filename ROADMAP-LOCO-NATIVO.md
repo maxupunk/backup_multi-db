@@ -23,16 +23,26 @@
 | 5 — Contrato HTTP | ✅ concluída (backend **e** frontend) |
 | 6 — Middlewares | ✅ concluída |
 | 7 — Eventos SSE próprios | ✅ concluída — **nenhum `@adonisjs/*` no repositório** |
-| 8 — Contrato tipado em `dtos/` | ⚠️ parcial — as formas comuns saem geradas e o CI as verifica; as views por recurso, não |
-| 9 — Configuração e limpeza final | ⚠️ parcial — falta a varredura das menções ao Adonis |
-| 10 — Suíte de testes | ⏳ pendente |
+| 8 — Contrato tipado em `dtos/` | ⚠️ backend concluído — **`views/` deixou de existir**, 53 bindings gerados; falta o frontend consumi-los |
+| 9 — Configuração e limpeza final | ⚠️ parcial — 136 → **119** menções ao Adonis, em 40 arquivos |
+| 10 — Suíte de testes | ⚠️ parcial — suíte **100% verde**, inclusive o teste de MinIO/SFTP; falta a auditoria de cobertura rota a rota |
 
 **Portões de qualidade agora:** `cargo fmt`, `cargo clippy --all-targets -- -D
-warnings` e `cargo test` verdes — **414 testes de unidade e 155 de request** —,
-mais `npm run type-check` e `npm run build` do frontend. O único vermelho é
-`minio_and_sftp_adapters_work_against_the_compose_services`, que exige o MinIO e
-o SFTP do `docker-compose.test.yml` de pé; é falha de ambiente, não de código, e
-o novo `.github/workflows/ci.yml` o exclui explicitamente.
+warnings` e `cargo test` verdes — **458 testes de unidade e 156 de request, 0
+falhas** —, mais `npm run type-check` e `npm run build` do frontend.
+
+**Não há mais nenhum teste vermelho.** O
+`minio_and_sftp_adapters_work_against_the_compose_services` passa desde que o
+`docker-compose.test.yml` esteja de pé:
+
+```sh
+docker compose -f docker-compose.test.yml up -d minio minio-init sftp
+cd backend && cargo test
+```
+
+O `minio-init` cria os buckets `backups-primary`, `backups-secondary` e
+`archives` e encerra. O `ci.yml` continua excluindo o teste porque o runner não
+sobe os serviços; excluir por ambiente é diferente de aceitar um vermelho.
 
 **O que quebrou de propósito e precisa de ação operacional:**
 
@@ -54,6 +64,23 @@ o novo `.github/workflows/ci.yml` o exclui explicitamente.
    isso subiu de 5 para 20 por minuto — ver a Fase 6.
 9. **O SSE trocou de endereço e de protocolo:** `GET /api/events?channels=…` no
    lugar de `/__transmit/*` — ver a Fase 7.
+10. **Os booleanos viraram booleanos.** `scheduleEnabled`, `enabled`,
+    `compressed` e `protected` saíam como `0`/`1` porque o Lucid entregava o
+    inteiro cru do SQLite. Agora são `true`/`false`. Qualquer cliente que
+    compare com `=== 1` para de funcionar — ver a Fase 8.
+11. **`connection` é sempre chave em um backup**, valendo `null` quando o
+    registro ficou órfão. Antes a chave sumia nas rotas sem preload.
+12. **`fileSize` e `durationSeconds` de `POST /api/connections/:id/backup` saem
+    em bytes e segundos**, não mais como texto formatado (`1.50 MB`). Formatar é
+    decisão de apresentação, e o mesmo nome de campo não pode ser número numa
+    resposta e texto noutra.
+13. **`GET /api/auth/me` e o usuário do `login`/`register` passaram a devolver o
+    mesmo `User`** de `/api/users` — ganharam `updatedAt`, e o do login ganhou
+    `createdAt`.
+14. **`actionDescription`, `actionIcon` e `statusColor` da auditoria** agora
+    valem `null` para um valor desconhecido, em vez de a chave sumir.
+15. **`replicas` de `browse` é sempre uma lista**, vazia quando o arquivo só
+    existe num destino.
 
 ### Dois defeitos encontrados durante a execução
 

@@ -20,6 +20,7 @@ use loco_rs::prelude::*;
 
 use crate::controllers::Auth;
 use crate::controllers::{page_request, validation_failed, MAX_PAGE_SIZE};
+use crate::dtos::storages as dto;
 use crate::initializers::settings::Settings;
 use crate::models::backup_runner;
 use crate::models::encryption::EncryptionService;
@@ -28,7 +29,6 @@ use crate::models::storage_destinations::{
     self as destinations, CreateDestinationParams, DestinationUpdate, ListQuery, NewDestination,
     UpdateDestinationParams,
 };
-use crate::views::storages as view;
 
 const NOT_FOUND: &str = "Destino de armazenamento não encontrado";
 
@@ -57,7 +57,11 @@ pub async fn index(
     let query = query.without_provider();
 
     let found = destinations::Model::list_page(&ctx.db, &query, &page).await?;
-    let items: Vec<view::LegacyItem> = found.page.iter().map(view::LegacyItem::from).collect();
+    let items: Vec<dto::StorageDestination> = found
+        .page
+        .iter()
+        .map(dto::StorageDestination::from)
+        .collect();
 
     format::json(Pager::new(items, found.meta))
 }
@@ -107,7 +111,7 @@ pub async fn store(
 
     format::render()
         .status(201)
-        .json(view::LegacyDetail::new(&destination, safe))
+        .json(dto::StorageDestinationDetail::new(&destination, safe))
 }
 
 /// `GET /api/storage-destinations/:id`.
@@ -120,7 +124,7 @@ pub async fn show(
     let destination = find_or_404(&ctx, id).await?;
     let safe = safe_config(&destination, &encryption(&ctx)?)?;
 
-    format::json(view::LegacyDetail::new(&destination, safe))
+    format::json(dto::StorageDestinationDetail::new(&destination, safe))
 }
 
 /// `PUT /api/storage-destinations/:id`.
@@ -173,7 +177,7 @@ pub async fn update(
 
     let safe = safe_config(&destination, &encryption)?;
 
-    format::json(view::LegacyDetail::new(&destination, safe))
+    format::json(dto::StorageDestinationDetail::new(&destination, safe))
 }
 
 /// `DELETE /api/storage-destinations/:id`.
@@ -217,7 +221,7 @@ pub async fn space(
         return format::json(serde_json::Value::Null);
     };
 
-    format::json(view::SpaceItem::from(info))
+    format::json(dto::StorageSpace::from(info))
 }
 
 /// `GET /api/storage-destinations-space`.
@@ -235,7 +239,7 @@ pub async fn space_all(State(ctx): State<AppContext>, _session: Auth) -> Result<
     format::json(
         spaces
             .into_iter()
-            .map(view::SpaceItem::from)
+            .map(dto::StorageSpace::from)
             .collect::<Vec<_>>(),
     )
 }
