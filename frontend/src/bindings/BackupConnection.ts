@@ -7,4 +7,4 @@
  * em cada linha, e trazer as credenciais junto exporia dado sensível numa
  * resposta que nem a tela usa.
  */
-export type BackupConnection = { id: number, name: string, type: string, host: string, };
+export type BackupConnection = { id: number, name: string, type: "mysql" | "mariadb" | "postgresql", host: string, };

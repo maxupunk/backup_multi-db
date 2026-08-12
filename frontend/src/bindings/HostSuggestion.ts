@@ -11,4 +11,4 @@ import type { PortOption } from "./PortOption";
  * mesmo objeto campo a campo com `json!` — duas descricoes do mesmo formato,
  * e nada obrigando as duas a concordarem.
  */
-export type HostSuggestion = { containerId: string, containerName: string, databaseTypeHint: string | null, sameNetwork: boolean, suggestedHost: string, hostResolutionSource: HostResolutionSource, networkNames: Array<string>, portOptions: Array<PortOption>, recommendedPort: number | null, hasExternalPort: boolean, connectivityWarning: string | null, };
+export type HostSuggestion = { containerId: string, containerName: string, databaseTypeHint: "mysql" | "mariadb" | "postgresql" | null, sameNetwork: boolean, suggestedHost: string, hostResolutionSource: HostResolutionSource, networkNames: Array<string>, portOptions: Array<PortOption>, recommendedPort: number | null, hasExternalPort: boolean, connectivityWarning: string | null, };

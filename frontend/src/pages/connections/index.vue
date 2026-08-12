@@ -232,7 +232,7 @@
 </template>
 
 <script lang="ts" setup>
-import type { Connection, ConnectionStatus, DatabaseType } from '@/types/api'
+import type { Connection, ConnectionListItem, ConnectionStatus, DatabaseType } from '@/types/api'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useDisplay } from 'vuetify'
 import { connectionsApi } from '@/services/api'
@@ -246,7 +246,7 @@ const notify = useNotifier()
 const { smAndUp, mdAndUp } = useDisplay()
 
 const loading = ref(false)
-const connections = ref<Connection[]>([])
+const connections = ref<ConnectionListItem[]>([])
 const testLoading = reactive<Record<number, boolean>>({})
 const backupLoading = reactive<Record<number, boolean>>({})
 
@@ -356,22 +356,22 @@ async function deleteConnection() {
 }
 
 // Helpers
-function getConnectionStatusColor(status: ConnectionStatus): string {
-  const colors: Record<ConnectionStatus, string> = {
+function getConnectionStatusColor(status: string | null): string {
+  const colors: Record<string, string> = {
     active: 'success',
     inactive: 'grey',
     error: 'error',
   }
-  return colors[status] ?? 'grey'
+  return colors[status ?? ''] ?? 'grey'
 }
 
-function getConnectionStatusLabel(status: ConnectionStatus): string {
-  const labels: Record<ConnectionStatus, string> = {
+function getConnectionStatusLabel(status: string | null): string {
+  const labels: Record<string, string> = {
     active: 'Ativo',
     inactive: 'Inativo',
     error: 'Erro',
   }
-  return labels[status] ?? status
+  return labels[status ?? ''] ?? 'Desconhecido'
 }
 
 function formatDate(dateString: string): string {

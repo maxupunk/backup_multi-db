@@ -8,8 +8,8 @@ export const backupStatusOptions = [
   { title: 'Cancelado', value: 'cancelled' },
 ] as const
 
-export function getBackupStatusColor (status: BackupStatus): string {
-  const colors: Record<BackupStatus, string> = {
+export function getBackupStatusColor (status: string): string {
+  const colors: Record<string, string> = {
     pending: 'warning',
     running: 'info',
     completed: 'success',
@@ -19,8 +19,8 @@ export function getBackupStatusColor (status: BackupStatus): string {
   return colors[status] ?? 'grey'
 }
 
-export function getBackupStatusIcon (status: BackupStatus): string {
-  const icons: Record<BackupStatus, string> = {
+export function getBackupStatusIcon (status: string): string {
+  const icons: Record<string, string> = {
     pending: 'mdi-clock-outline',
     running: 'mdi-loading mdi-spin',
     completed: 'mdi-check',
@@ -30,8 +30,8 @@ export function getBackupStatusIcon (status: BackupStatus): string {
   return icons[status] ?? 'mdi-help'
 }
 
-export function getBackupStatusLabel (status: BackupStatus): string {
-  const labels: Record<BackupStatus, string> = {
+export function getBackupStatusLabel (status: string): string {
+  const labels: Record<string, string> = {
     pending: 'Pendente',
     running: 'Em execução',
     completed: 'Concluído',
@@ -40,4 +40,3 @@ export function getBackupStatusLabel (status: BackupStatus): string {
   }
   return labels[status] ?? status
 }
-

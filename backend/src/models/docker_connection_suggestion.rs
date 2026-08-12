@@ -101,6 +101,7 @@ pub struct PortOption {
 pub struct HostSuggestion {
     pub container_id: String,
     pub container_name: String,
+    #[ts(type = "\"mysql\" | \"mariadb\" | \"postgresql\" | null")]
     pub database_type_hint: Option<String>,
     pub same_network: bool,
     pub suggested_host: String,

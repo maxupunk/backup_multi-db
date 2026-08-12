@@ -1,12 +1,12 @@
-/**
- * Tipos base para a API
- */
+/** Tipos locais de payload e reexports do contrato gerado no backend. */
+
+import type { Connection as ConnectionDto } from '@/bindings/Connection'
 
 // Status de uma conexão
 export type ConnectionStatus = 'active' | 'inactive' | 'error'
 
 // Tipos de banco de dados suportados
-export type DatabaseType = 'mysql' | 'mariadb' | 'postgresql'
+export type DatabaseType = ConnectionDto['type']
 
 // Frequências de agendamento
 export type ScheduleFrequency = '1h' | '6h' | '12h' | '24h'
@@ -27,38 +27,9 @@ export type BackupTrigger = 'scheduled' | 'manual'
 /**
  * Database associado a uma conexão
  */
-export interface ConnectionDatabase {
-  id: number
-  databaseName: string
-  enabled: boolean
-}
-
-/**
- * Interface de uma conexão de banco de dados
- */
-export interface Connection {
-  id: number
-  name: string
-  type: DatabaseType
-  host: string
-  port: number
-  username: string
-  storageDestinationId?: number | null
-  scheduleFrequency: ScheduleFrequency | null
-  scheduleEnabled: boolean
-  status: ConnectionStatus
-  lastError: string | null
-  lastTestedAt: string | null
-  lastBackupAt: string | null
-  options: {
-    ssl?: boolean
-    charset?: string
-  } | null
-  createdAt: string
-  updatedAt: string
-  databases?: ConnectionDatabase[]
-  backups?: BackupSummary[]
-}
+export type Connection = ConnectionDto
+export type { ConnectionDatabase } from '@/bindings/ConnectionDatabase'
+export type { ConnectionListItem } from '@/bindings/ConnectionListItem'
 
 /**
  * Dados para criação de uma conexão
@@ -100,37 +71,10 @@ export interface UpdateConnectionPayload {
   } | null
 }
 
-export type DockerHostResolutionSource = 'docker_dns' | 'host_ip' | 'fallback'
-
-export interface DockerPortOption {
-  containerPort: number
-  hostPort: number
-  protocol: string
-  display: string
-  /** true = porta publicada no host; false = porta apenas exposta internamente */
-  isExternal: boolean
-}
-
-export interface DockerHostSuggestion {
-  containerId: string
-  containerName: string
-  databaseTypeHint: DatabaseType | null
-  sameNetwork: boolean
-  suggestedHost: string
-  hostResolutionSource: DockerHostResolutionSource
-  networkNames: string[]
-  portOptions: DockerPortOption[]
-  recommendedPort: number | null
-  hasExternalPort: boolean
-  connectivityWarning: string | null
-}
-
-export interface DockerHostsResponseData {
-  dockerAvailable: boolean
-  unavailableReason: string | null
-  backendContainerId: string | null
-  hosts: DockerHostSuggestion[]
-}
+export type { HostResolutionSource as DockerHostResolutionSource } from '@/bindings/HostResolutionSource'
+export type { PortOption as DockerPortOption } from '@/bindings/PortOption'
+export type { HostSuggestion as DockerHostSuggestion } from '@/bindings/HostSuggestion'
+export type { DockerHosts as DockerHostsResponseData } from '@/bindings/DockerHosts'
 
 export type StorageDestinationConfigPayload =
   | {
@@ -281,18 +225,7 @@ export interface RestoreResult {
 /**
  * Resumo de um backup (para listagens)
  */
-export interface BackupSummary {
-  id: number
-  status: BackupStatus
-  databaseName?: string
-  fileName?: string
-  fileSize: number | null
-  retentionType?: RetentionType
-  trigger?: BackupTrigger
-  createdAt: string
-  finishedAt?: string | null
-  durationSeconds?: number | null
-}
+export type { ConnectionBackupSummary as BackupSummary } from '@/bindings/ConnectionBackupSummary'
 
 /**
  * Resumo de uma conexão (para listagens)

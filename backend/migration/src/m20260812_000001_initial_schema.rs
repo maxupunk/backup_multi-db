@@ -21,7 +21,9 @@
 //! not a constraint violation surfacing as a 500. `audit_logs.action` proves
 //! the point from the other direction: it lost its `CHECK` long ago precisely
 //! because a failed audit insert was taking down the operation it was supposed
-//! to record.
+//! to record. `connections.type` is the exception: it backs a public tagged
+//! union, so a database-level `CHECK` keeps every read honest even when a row
+//! is written outside the HTTP validation path.
 //!
 //! ## `users` carries the columns the framework's own flows expect
 //!
@@ -176,6 +178,10 @@ async fn create_connections(m: &SchemaManager<'_>) -> Result<(), DbErr> {
             .col(pk_auto(Connections::Id))
             .col(string_len(Connections::Name, 100))
             .col(text(Connections::Type))
+            .check((
+                "chk_connections_type",
+                Expr::col(Connections::Type).is_in(["mysql", "mariadb", "postgresql"]),
+            ))
             .col(string_len(Connections::Host, 255))
             .col(integer(Connections::Port))
             .col(string_len(Connections::Username, 100))

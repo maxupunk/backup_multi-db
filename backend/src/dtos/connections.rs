@@ -122,6 +122,10 @@ pub struct Connection {
     #[ts(type = "number")]
     pub id: i64,
     pub name: String,
+    /// A migration-level `CHECK` limits this column to the three supported
+    /// database engines, so the generated contract can truthfully expose a
+    /// discriminating union instead of an arbitrary string.
+    #[ts(type = "\"mysql\" | \"mariadb\" | \"postgresql\"")]
     pub r#type: String,
     pub host: String,
     #[ts(type = "number")]

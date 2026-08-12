@@ -26,6 +26,7 @@ pub struct BackupConnection {
     #[ts(type = "number")]
     pub id: i64,
     pub name: String,
+    #[ts(type = "\"mysql\" | \"mariadb\" | \"postgresql\"")]
     pub r#type: String,
     pub host: String,
 }

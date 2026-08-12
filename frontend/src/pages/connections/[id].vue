@@ -409,6 +409,10 @@ function onTypeChange(type: DatabaseType) {
   form.port = defaultPorts[type]
 }
 
+function isScheduleFrequency(value: string | null): value is ScheduleFrequency {
+  return value === '1h' || value === '6h' || value === '12h' || value === '24h'
+}
+
 function onDockerSuggestionSelected(suggestion: DockerHostSuggestion | null) {
   selectedDockerSuggestion.value = suggestion
 
@@ -534,7 +538,9 @@ async function loadConnection() {
       form.username = connection.username
       form.storageDestinationId = connection.storageDestinationId ?? null
       form.scheduleEnabled = connection.scheduleEnabled
-      form.scheduleFrequency = connection.scheduleFrequency
+      form.scheduleFrequency = isScheduleFrequency(connection.scheduleFrequency)
+        ? connection.scheduleFrequency
+        : null
     }
   } catch {
     notify('Erro ao carregar conexão', 'error')

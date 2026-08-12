@@ -11,7 +11,13 @@ export type ConnectionListItem = {
  * histórico inteiro de cada linha multiplicaria a resposta pelo número de
  * backups já feitos.
  */
-backups: Array<ConnectionBackupSummary>, id: number, name: string, type: string, host: string, port: number, username: string, scheduleFrequency: string | null, scheduleEnabled: boolean, status: string | null, 
+backups: Array<ConnectionBackupSummary>, id: number, name: string, 
+/**
+ * A migration-level `CHECK` limits this column to the three supported
+ * database engines, so the generated contract can truthfully expose a
+ * discriminating union instead of an arbitrary string.
+ */
+type: "mysql" | "mariadb" | "postgresql", host: string, port: number, username: string, scheduleFrequency: string | null, scheduleEnabled: boolean, status: string | null, 
 /**
  * Motivo da última falha de teste. `null` quando o último teste passou.
  */

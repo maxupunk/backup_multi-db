@@ -17,6 +17,7 @@ import type {
   BackupResult,
   BrowseResult,
   Connection,
+  ConnectionListItem,
   ConnectionTestResult,
   CopyJob,
   CopyStoragePayload,
@@ -172,7 +173,7 @@ export const connectionsApi = {
     type?: string
     status?: string
     search?: string
-  }): Promise<Paginated<Connection>> {
+  }): Promise<Paginated<ConnectionListItem>> {
     const searchParams = new URLSearchParams()
 
     if (params?.page) {
@@ -192,7 +193,7 @@ export const connectionsApi = {
     }
 
     const query = searchParams.toString()
-    return request<Paginated<Connection>>(
+    return request<Paginated<ConnectionListItem>>(
       `/connections${query ? `?${query}` : ''}`,
     )
   },
