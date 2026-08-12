@@ -115,7 +115,7 @@ pub fn build_file_paths(
     base: &Path,
     connection_id: i64,
     database_name: &str,
-    now: chrono::NaiveDateTime,
+    now: chrono::DateTime<chrono::FixedOffset>,
 ) -> (String, String, PathBuf) {
     let prefix = if database_name == ALL_DATABASES_MARKER {
         ALL_DATABASES_PREFIX
@@ -234,7 +234,7 @@ pub async fn execute<F>(
     base: &Path,
     connection_id: i64,
     database_name: &str,
-    now: chrono::NaiveDateTime,
+    now: chrono::DateTime<chrono::FixedOffset>,
     on_progress: F,
 ) -> std::result::Result<DumpOutcome, DumpError>
 where
@@ -552,7 +552,9 @@ mod tests {
     fn builds_the_file_name_with_the_timestamp() {
         let now = chrono::NaiveDate::from_ymd_opt(2026, 8, 9)
             .and_then(|date| date.and_hms_opt(14, 3, 7))
-            .expect("data de teste");
+            .expect("data de teste")
+            .and_utc()
+            .fixed_offset();
 
         let (name, relative, full) = build_file_paths(Path::new("/backups"), 12, "vendas", now);
 
@@ -567,7 +569,9 @@ mod tests {
         // com barra invertida em vez de um prefixo.
         let now = chrono::NaiveDate::from_ymd_opt(2026, 8, 9)
             .and_then(|date| date.and_hms_opt(0, 0, 0))
-            .expect("data de teste");
+            .expect("data de teste")
+            .and_utc()
+            .fixed_offset();
 
         let (_, relative, _) = build_file_paths(Path::new("C:\\backups"), 3, "vendas", now);
         assert!(!relative.contains('\\'), "caminho relativo: {relative}");
@@ -577,7 +581,9 @@ mod tests {
     fn a_full_backup_gets_a_descriptive_file_name() {
         let now = chrono::NaiveDate::from_ymd_opt(2026, 8, 9)
             .and_then(|date| date.and_hms_opt(0, 0, 0))
-            .expect("data de teste");
+            .expect("data de teste")
+            .and_utc()
+            .fixed_offset();
 
         let (name, _, _) = build_file_paths(Path::new("/backups"), 1, ALL_DATABASES_MARKER, now);
 

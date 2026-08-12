@@ -19,7 +19,7 @@ impl Task for ScheduledBackupsTask {
 
     async fn run(&self, app_context: &AppContext, _vars: &Vars) -> Result<()> {
         let report =
-            backup_scheduler::dispatch(app_context, chrono::Utc::now().naive_utc()).await?;
+            backup_scheduler::dispatch(app_context, chrono::Utc::now().fixed_offset()).await?;
         tracing::info!(
             eligible_connections = report.eligible_connections,
             due_connections = report.due_connections,

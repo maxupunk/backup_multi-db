@@ -24,7 +24,6 @@ use crate::models::_entities::storage_destinations::Model;
 use crate::models::storage::explorer::Replica;
 use crate::models::storage::space::SpaceInfo;
 use crate::models::storage::{BucketObject, ListPage};
-use crate::views::timestamp;
 
 /// Item de `GET /api/storages`.
 #[derive(Debug, Clone, Serialize)]
@@ -38,10 +37,8 @@ pub struct Item {
     pub provider_label: String,
     pub status: String,
     pub is_default: bool,
-    #[serde(serialize_with = "timestamp::serialize")]
-    pub created_at: chrono::NaiveDateTime,
-    #[serde(serialize_with = "timestamp::serialize")]
-    pub updated_at: chrono::NaiveDateTime,
+    pub created_at: chrono::DateTime<chrono::FixedOffset>,
+    pub updated_at: chrono::DateTime<chrono::FixedOffset>,
 }
 
 impl From<&Model> for Item {
@@ -88,10 +85,8 @@ pub struct LegacyItem {
     pub r#type: String,
     pub status: String,
     pub is_default: bool,
-    #[serde(serialize_with = "timestamp::serialize")]
-    pub created_at: chrono::NaiveDateTime,
-    #[serde(serialize_with = "timestamp::serialize")]
-    pub updated_at: chrono::NaiveDateTime,
+    pub created_at: chrono::DateTime<chrono::FixedOffset>,
+    pub updated_at: chrono::DateTime<chrono::FixedOffset>,
 }
 
 impl From<&Model> for LegacyItem {
@@ -273,12 +268,16 @@ mod tests {
                 "2026-08-09 12:00:00",
                 "%Y-%m-%d %H:%M:%S",
             )
-            .expect("data de teste"),
+            .expect("data de teste")
+            .and_utc()
+            .fixed_offset(),
             updated_at: chrono::NaiveDateTime::parse_from_str(
                 "2026-08-09 12:00:00",
                 "%Y-%m-%d %H:%M:%S",
             )
-            .expect("data de teste"),
+            .expect("data de teste")
+            .and_utc()
+            .fixed_offset(),
             provider: Some("minio".to_string()),
         }
     }

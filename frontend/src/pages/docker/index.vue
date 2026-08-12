@@ -219,7 +219,7 @@ watch(systemResources, (event) => {
       platform: '',
       architecture: '',
       uptime: 0,
-      nodeVersion: '',
+      runtimeVersion: '',
       jobs: null,
       resources: { cpu: event.cpu, memory: event.memory },
     } as unknown as SystemStatus

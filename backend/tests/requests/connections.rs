@@ -100,8 +100,8 @@ async fn never_returns_the_encrypted_password() {
 #[tokio::test]
 #[serial]
 async fn stores_the_password_encrypted() {
-    // O ciphertext no formato `iv:tag:dados` e' o que a decisao D3 exige, e e'
-    // o que mantem legivel o que o Adonis gravou antes do cutover.
+    // The password never reaches the column in the clear, and what does reach it
+    // announces the format it was written in.
     request::<App, _, _>(|request, ctx| async move {
         let token = admin_token(&request).await;
         create(&request, &token, "Cifrada").await;
@@ -113,10 +113,10 @@ async fn stores_the_password_encrypted() {
             .expect("conexao gravada");
 
         assert_ne!(row.password_encrypted, "test_pw");
-        assert_eq!(
-            row.password_encrypted.split(':').count(),
-            3,
-            "formato esperado iv:tag:dados"
+        assert!(
+            backend::models::encryption::EncryptionService::is_encrypted(&row.password_encrypted),
+            "formato esperado v1.nonce.dados, veio {}",
+            row.password_encrypted
         );
     })
     .await;

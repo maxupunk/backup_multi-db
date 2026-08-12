@@ -58,7 +58,7 @@ async fn the_overview_keeps_the_adonis_shape() {
             "hostname",
             "platform",
             "architecture",
-            "nodeVersion",
+            "runtimeVersion",
             "uptimeSeconds",
             "resources",
             "jobs",

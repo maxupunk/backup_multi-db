@@ -52,16 +52,15 @@ uuid = { version = "1.6", features = ["v4"] }
 ts-rs = { version = "12", features = ["chrono-impl", "serde-compat"] }
 include_dir = { version = "0.7" }
 aes-gcm = "0.11"
-aes = "0.9"
-typenum = "1"
 base64 = "0.23"
 hex = "0.4"
 getrandom = "0.3"
 thiserror = "2"
 subtle = "2"
-scrypt = { version = "0.12", default-features = false }
+# HKDF-SHA256 stretches `DB_ENCRYPTION_KEY` into the AES key, so the
+# configured value is never the cipher key itself (Fase 4).
+hkdf = "0.13"
 sha2 = "0.11"
-crc32fast = "1"
 sysinfo = "0.39.6"
 sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio", "tls-rustls-ring", "mysql", "postgres", "macros"] }
 # Gzip em streaming (Fase 7). O Loco nao expoe compressao de arquivo, e a
@@ -105,10 +104,6 @@ tower-http = { version = "0.6", default-features = false, features = ["fs"] }
 [[bin]]
 name = "backend-cli"
 path = "src/bin/main.rs"
-required-features = []
-[[bin]]
-name = "migrate_data"
-path = "src/bin/migrate_data.rs"
 required-features = []
 [[bin]]
 name = "tool"

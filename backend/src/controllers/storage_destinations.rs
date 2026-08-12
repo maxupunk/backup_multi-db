@@ -22,7 +22,7 @@ use loco_rs::prelude::*;
 use validator::Validate;
 
 use crate::controllers::json_body;
-use crate::controllers::middlewares::auth::Authenticated;
+use crate::controllers::Auth;
 use crate::initializers::settings::Settings;
 use crate::models::backup_runner;
 use crate::models::encryption::EncryptionService;
@@ -47,7 +47,7 @@ const MAX_PER_PAGE: u64 = 100;
 #[debug_handler]
 pub async fn index(
     State(ctx): State<AppContext>,
-    _session: Authenticated,
+    _session: Auth,
     Query(query): Query<ListQuery>,
 ) -> Reply {
     query
@@ -73,7 +73,7 @@ pub async fn index(
 
 /// `POST /api/storage-destinations`.
 #[debug_handler]
-pub async fn store(State(ctx): State<AppContext>, _session: Authenticated, body: Bytes) -> Reply {
+pub async fn store(State(ctx): State<AppContext>, _session: Auth, body: Bytes) -> Reply {
     let params: CreateDestinationParams = json_body(&body)?;
     Validate::validate(&params).map_err(|errors| ApiError::from_validation_errors(&errors))?;
 
@@ -123,11 +123,7 @@ pub async fn store(State(ctx): State<AppContext>, _session: Authenticated, body:
 
 /// `GET /api/storage-destinations/:id`.
 #[debug_handler]
-pub async fn show(
-    State(ctx): State<AppContext>,
-    _session: Authenticated,
-    Path(id): Path<i64>,
-) -> Reply {
+pub async fn show(State(ctx): State<AppContext>, _session: Auth, Path(id): Path<i64>) -> Reply {
     let destination = find_or_404(&ctx, id).await?;
     let safe = safe_config(&destination, &encryption(&ctx)?)?;
 
@@ -138,7 +134,7 @@ pub async fn show(
 #[debug_handler]
 pub async fn update(
     State(ctx): State<AppContext>,
-    _session: Authenticated,
+    _session: Auth,
     Path(id): Path<i64>,
     body: Bytes,
 ) -> Reply {
@@ -199,11 +195,7 @@ pub async fn update(
 /// conexões órfãos em vez de impedir a remoção. Acrescentar a guarda aqui
 /// mudaria o contrato de uma rota que a interface antiga ainda usa.
 #[debug_handler]
-pub async fn destroy(
-    State(ctx): State<AppContext>,
-    _session: Authenticated,
-    Path(id): Path<i64>,
-) -> Reply {
+pub async fn destroy(State(ctx): State<AppContext>, _session: Auth, Path(id): Path<i64>) -> Reply {
     let destination = find_or_404(&ctx, id).await?;
     destinations::Model::delete_by_id(&ctx.db, destination.id).await?;
 
@@ -219,11 +211,7 @@ pub async fn destroy(
 /// existe e a resposta é "este tipo não sabe informar espaço". Um 404 aqui
 /// faria a interface tratar o destino como inexistente.
 #[debug_handler]
-pub async fn space(
-    State(ctx): State<AppContext>,
-    _session: Authenticated,
-    Path(id): Path<i64>,
-) -> Reply {
+pub async fn space(State(ctx): State<AppContext>, _session: Auth, Path(id): Path<i64>) -> Reply {
     let destination = find_or_404(&ctx, id).await?;
     let settings = settings(&ctx)?;
     let encryption = backup_runner::encryption_service(&settings)?;
@@ -248,7 +236,7 @@ pub async fn space(
 /// Note o hífen: a rota **não** está sob `/api/storage-destinations`, e por isso
 /// tem o seu próprio grupo em [`space_routes`].
 #[debug_handler]
-pub async fn space_all(State(ctx): State<AppContext>, _session: Authenticated) -> Reply {
+pub async fn space_all(State(ctx): State<AppContext>, _session: Auth) -> Reply {
     let settings = settings(&ctx)?;
     let encryption = backup_runner::encryption_service(&settings)?;
 

@@ -17,7 +17,6 @@ use std::str::FromStr;
 
 use crate::models::_entities::audit_logs;
 use crate::models::audit_log::{AuditAction, AuditStatus};
-use crate::views::timestamp;
 
 /// Item da listagem.
 #[derive(Debug, Clone, Serialize)]
@@ -39,8 +38,7 @@ pub struct AuditLogItem {
     pub status_color: Option<&'static str>,
     pub error_message: Option<String>,
     pub ip_address: Option<String>,
-    #[serde(serialize_with = "timestamp::serialize")]
-    pub created_at: chrono::NaiveDateTime,
+    pub created_at: chrono::DateTime<chrono::FixedOffset>,
 }
 
 impl From<audit_logs::Model> for AuditLogItem {
@@ -179,7 +177,7 @@ mod tests {
             user_agent: None,
             status: status.to_string(),
             error_message: None,
-            created_at: chrono::DateTime::UNIX_EPOCH.naive_utc(),
+            created_at: chrono::DateTime::UNIX_EPOCH.fixed_offset(),
         }
     }
 

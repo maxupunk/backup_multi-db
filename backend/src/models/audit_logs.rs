@@ -206,7 +206,7 @@ impl Model {
             user_agent: Set(entry.user_agent),
             status: Set(entry.status.to_string()),
             error_message: Set(entry.error_message),
-            created_at: Set(chrono::Utc::now().naive_utc()),
+            created_at: Set(chrono::Utc::now().fixed_offset()),
             ..Default::default()
         }
         .insert(db)
@@ -257,14 +257,13 @@ impl Model {
 
     /// Estatisticas agregadas.
     ///
-    /// `now` entra como parametro para que o corte de "hoje" seja testavel sem
-    /// depender do relogio da maquina — e o teste que prova o corte e' o que
-    /// impede alguem de trocar `Local` por `Utc` aqui sem perceber. Os
-    /// timestamps gravados sao **hora local ingenua**, entao comparar contra
-    /// meia-noite em UTC jogaria as tres primeiras horas do dia para fora.
+    /// `now` is a parameter so the "today" cut is testable without depending on
+    /// the machine clock — and the test that proves the cut is what stops
+    /// somebody swapping `Local` for `Utc` here unnoticed. The caller passes
+    /// local time on purpose: "today" is the operator's day, not UTC's.
     pub async fn stats(
         db: &impl ConnectionTrait,
-        now: chrono::NaiveDateTime,
+        now: chrono::DateTime<chrono::FixedOffset>,
     ) -> Result<AuditStats> {
         let today = start_of_day(now);
         let last_week = start_of_day(now - chrono::Duration::days(7));
@@ -295,7 +294,10 @@ impl Model {
         })
     }
 
-    async fn count_since(db: &impl ConnectionTrait, since: chrono::NaiveDateTime) -> Result<u64> {
+    async fn count_since(
+        db: &impl ConnectionTrait,
+        since: chrono::DateTime<chrono::FixedOffset>,
+    ) -> Result<u64> {
         Ok(Entity::find()
             .filter(Column::CreatedAt.gte(since))
             .count(db)
@@ -313,7 +315,7 @@ impl Model {
     /// `0` desliga explicitamente a política e não toca no banco.
     pub async fn prune_expired(
         ctx: &AppContext,
-        now: chrono::NaiveDateTime,
+        now: chrono::DateTime<chrono::FixedOffset>,
     ) -> Result<RetentionResult> {
         let settings = Settings::from_json(ctx.config.settings.as_ref())?;
         let retention_days = settings.audit_retention_days;
@@ -354,17 +356,30 @@ impl Model {
     }
 }
 
-/// Meia-noite do dia de `moment`.
-fn start_of_day(moment: chrono::NaiveDateTime) -> chrono::NaiveDateTime {
-    moment.date().and_hms_opt(0, 0, 0).unwrap_or(moment)
+/// Midnight of `moment`'s day, in `moment`'s own offset.
+///
+/// Keeping the offset is the whole point: the caller passes local time so that
+/// "today" is the operator's day, and rebuilding the instant in UTC would push
+/// the first hours of the day out of the count.
+fn start_of_day(
+    moment: chrono::DateTime<chrono::FixedOffset>,
+) -> chrono::DateTime<chrono::FixedOffset> {
+    moment
+        .date_naive()
+        .and_hms_opt(0, 0, 0)
+        .and_then(|naive| naive.and_local_timezone(*moment.offset()).single())
+        .unwrap_or(moment)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn at(text: &str) -> chrono::NaiveDateTime {
-        chrono::NaiveDateTime::parse_from_str(text, "%Y-%m-%d %H:%M:%S").expect("data de teste")
+    fn at(text: &str) -> chrono::DateTime<chrono::FixedOffset> {
+        chrono::NaiveDateTime::parse_from_str(text, "%Y-%m-%d %H:%M:%S")
+            .expect("data de teste")
+            .and_utc()
+            .fixed_offset()
     }
 
     #[test]

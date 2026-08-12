@@ -8,8 +8,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::controllers::json_body;
-use crate::controllers::middlewares::auth::Authenticated;
 use crate::controllers::middlewares::limiters::{enforce, Limiters};
+use crate::controllers::Auth;
 use crate::models::docker::{self, ContainerAction, DockerError, LogFilters};
 use crate::models::docker_diagnostics;
 use crate::models::storage_destinations::Model as StorageDestination;
@@ -110,7 +110,7 @@ async fn list_or_empty(
 
 /// `GET /api/docker/status`.
 #[debug_handler]
-pub async fn status(State(_ctx): State<AppContext>, _session: Authenticated) -> Reply {
+pub async fn status(State(_ctx): State<AppContext>, _session: Auth) -> Reply {
     let status = docker::status().await;
     Ok(axum::Json(StatusEnvelope {
         success: true,
@@ -124,7 +124,7 @@ pub async fn status(State(_ctx): State<AppContext>, _session: Authenticated) -> 
 
 /// `GET /api/docker/environment`, used internally by discovery and useful to diagnose socket mounting.
 #[debug_handler]
-pub async fn environment(State(_ctx): State<AppContext>, _session: Authenticated) -> Reply {
+pub async fn environment(State(_ctx): State<AppContext>, _session: Auth) -> Reply {
     Ok(axum::Json(DataEnvelope {
         success: true,
         data: docker::environment().await,
@@ -133,26 +133,26 @@ pub async fn environment(State(_ctx): State<AppContext>, _session: Authenticated
 }
 
 #[debug_handler]
-pub async fn list_containers(State(_ctx): State<AppContext>, _session: Authenticated) -> Reply {
+pub async fn list_containers(State(_ctx): State<AppContext>, _session: Auth) -> Reply {
     list_or_empty(docker::list_containers()).await
 }
 #[debug_handler]
-pub async fn list_volumes(State(_ctx): State<AppContext>, _session: Authenticated) -> Reply {
+pub async fn list_volumes(State(_ctx): State<AppContext>, _session: Auth) -> Reply {
     list_or_empty(docker::list_volumes()).await
 }
 #[debug_handler]
-pub async fn list_networks(State(_ctx): State<AppContext>, _session: Authenticated) -> Reply {
+pub async fn list_networks(State(_ctx): State<AppContext>, _session: Auth) -> Reply {
     list_or_empty(docker::list_networks()).await
 }
 #[debug_handler]
-pub async fn list_images(State(_ctx): State<AppContext>, _session: Authenticated) -> Reply {
+pub async fn list_images(State(_ctx): State<AppContext>, _session: Auth) -> Reply {
     list_or_empty(docker::list_images()).await
 }
 
 #[debug_handler]
 pub async fn inspect_container(
     State(_ctx): State<AppContext>,
-    _session: Authenticated,
+    _session: Auth,
     Path(id): Path<String>,
 ) -> Reply {
     Ok(axum::Json(DataEnvelope {
@@ -164,7 +164,7 @@ pub async fn inspect_container(
 #[debug_handler]
 pub async fn inspect_volume(
     State(_ctx): State<AppContext>,
-    _session: Authenticated,
+    _session: Auth,
     Path(name): Path<String>,
 ) -> Reply {
     Ok(axum::Json(DataEnvelope {
@@ -176,7 +176,7 @@ pub async fn inspect_volume(
 #[debug_handler]
 pub async fn inspect_network(
     State(_ctx): State<AppContext>,
-    _session: Authenticated,
+    _session: Auth,
     Path(id): Path<String>,
 ) -> Reply {
     Ok(axum::Json(DataEnvelope {
@@ -188,7 +188,7 @@ pub async fn inspect_network(
 #[debug_handler]
 pub async fn inspect_image(
     State(_ctx): State<AppContext>,
-    _session: Authenticated,
+    _session: Auth,
     Path(id): Path<String>,
 ) -> Reply {
     Ok(axum::Json(DataEnvelope {
@@ -210,7 +210,7 @@ async fn container_action(id: String, action: ContainerAction) -> Reply {
 #[debug_handler]
 pub async fn start_container(
     State(_ctx): State<AppContext>,
-    _session: Authenticated,
+    _session: Auth,
     Path(id): Path<String>,
 ) -> Reply {
     container_action(id, ContainerAction::Start).await
@@ -218,7 +218,7 @@ pub async fn start_container(
 #[debug_handler]
 pub async fn stop_container(
     State(_ctx): State<AppContext>,
-    _session: Authenticated,
+    _session: Auth,
     Path(id): Path<String>,
 ) -> Reply {
     container_action(id, ContainerAction::Stop).await
@@ -226,7 +226,7 @@ pub async fn stop_container(
 #[debug_handler]
 pub async fn restart_container(
     State(_ctx): State<AppContext>,
-    _session: Authenticated,
+    _session: Auth,
     Path(id): Path<String>,
 ) -> Reply {
     container_action(id, ContainerAction::Restart).await
@@ -234,7 +234,7 @@ pub async fn restart_container(
 #[debug_handler]
 pub async fn remove_container(
     State(_ctx): State<AppContext>,
-    _session: Authenticated,
+    _session: Auth,
     Path(id): Path<String>,
     Query(query): Query<ForceQuery>,
 ) -> Reply {
@@ -250,7 +250,7 @@ pub async fn remove_container(
 #[debug_handler]
 pub async fn container_logs(
     State(_ctx): State<AppContext>,
-    _session: Authenticated,
+    _session: Auth,
     Path(id): Path<String>,
     Query(query): Query<LogsQuery>,
 ) -> Reply {
@@ -278,7 +278,7 @@ pub async fn container_logs(
 #[debug_handler]
 pub async fn clear_container_logs(
     State(_ctx): State<AppContext>,
-    _session: Authenticated,
+    _session: Auth,
     Path(id): Path<String>,
 ) -> Reply {
     Ok(axum::Json(DataEnvelope {
@@ -293,7 +293,7 @@ pub async fn clear_container_logs(
 #[debug_handler]
 pub async fn remove_volume(
     State(_ctx): State<AppContext>,
-    _session: Authenticated,
+    _session: Auth,
     Path(name): Path<String>,
     Query(query): Query<ForceQuery>,
 ) -> Reply {
@@ -339,7 +339,7 @@ impl Drop for DeletingFile {
 #[debug_handler]
 pub async fn export_volume(
     State(_ctx): State<AppContext>,
-    _session: Authenticated,
+    _session: Auth,
     Path(name): Path<String>,
 ) -> Reply {
     let (temp_path, file_name) = crate::models::docker_volume::export_to_temp_file(&name)
@@ -377,7 +377,7 @@ struct BackupVolumeBody {
 #[debug_handler]
 pub async fn backup_volume(
     State(ctx): State<AppContext>,
-    _session: Authenticated,
+    _session: Auth,
     Path(name): Path<String>,
     body: Bytes,
 ) -> Reply {
@@ -405,11 +405,7 @@ pub async fn backup_volume(
 }
 
 #[debug_handler]
-pub async fn create_network(
-    State(_ctx): State<AppContext>,
-    _session: Authenticated,
-    body: Bytes,
-) -> Reply {
+pub async fn create_network(State(_ctx): State<AppContext>, _session: Auth, body: Bytes) -> Reply {
     let params: NetworkParams = json_body(&body)?;
     let name = params
         .name
@@ -446,7 +442,7 @@ async fn network_connection(id: String, body: Bytes, disconnect: bool) -> Reply 
 #[debug_handler]
 pub async fn connect_network(
     State(_ctx): State<AppContext>,
-    _session: Authenticated,
+    _session: Auth,
     Path(id): Path<String>,
     body: Bytes,
 ) -> Reply {
@@ -455,7 +451,7 @@ pub async fn connect_network(
 #[debug_handler]
 pub async fn disconnect_network(
     State(_ctx): State<AppContext>,
-    _session: Authenticated,
+    _session: Auth,
     Path(id): Path<String>,
     body: Bytes,
 ) -> Reply {
@@ -465,7 +461,7 @@ pub async fn disconnect_network(
 #[debug_handler]
 pub async fn remove_image(
     State(_ctx): State<AppContext>,
-    _session: Authenticated,
+    _session: Auth,
     Path(id): Path<String>,
     Query(query): Query<ForceQuery>,
 ) -> Reply {
@@ -478,7 +474,7 @@ pub async fn remove_image(
     .into_response())
 }
 #[debug_handler]
-pub async fn prune_images(State(_ctx): State<AppContext>, _session: Authenticated) -> Reply {
+pub async fn prune_images(State(_ctx): State<AppContext>, _session: Auth) -> Reply {
     Ok(axum::Json(DataEnvelope {
         success: true,
         data: docker::prune_images().await.map_err(engine_error)?,
@@ -487,11 +483,7 @@ pub async fn prune_images(State(_ctx): State<AppContext>, _session: Authenticate
 }
 
 #[debug_handler]
-pub async fn start_diagnostic(
-    State(ctx): State<AppContext>,
-    _session: Authenticated,
-    body: Bytes,
-) -> Reply {
+pub async fn start_diagnostic(State(ctx): State<AppContext>, _session: Auth, body: Bytes) -> Reply {
     use validator::ValidationErrors;
 
     let params: DiagnosticParams = json_body(&body)?;
@@ -560,7 +552,7 @@ pub async fn start_diagnostic(
 #[debug_handler]
 pub async fn diagnostic_status(
     State(ctx): State<AppContext>,
-    _session: Authenticated,
+    _session: Auth,
     Path(id): Path<String>,
 ) -> Reply {
     let job = docker_diagnostics::get(&ctx, &id)

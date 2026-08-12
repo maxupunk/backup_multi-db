@@ -16,7 +16,7 @@ use axum::response::{IntoResponse, Response};
 use loco_rs::prelude::*;
 use serde::Deserialize;
 
-use crate::controllers::middlewares::auth::Authenticated;
+use crate::controllers::Auth;
 use crate::models::audit_logs::{AuditFilters, Model as AuditLog};
 use crate::views::audit_logs as view;
 use crate::views::envelope::Data;
@@ -85,7 +85,7 @@ struct ListResponse {
 #[debug_handler]
 pub async fn index(
     State(ctx): State<AppContext>,
-    _session: Authenticated,
+    _session: Auth,
     Query(query): Query<ListQuery>,
 ) -> Reply {
     let page = PageRequest::from_query(
@@ -107,10 +107,10 @@ pub async fn index(
 
 /// `GET /api/audit-logs/stats`.
 #[debug_handler]
-pub async fn stats(State(ctx): State<AppContext>, _session: Authenticated) -> Reply {
-    // Hora **local**: os timestamps gravados sao hora local ingenua, e cortar o
-    // dia em UTC jogaria as primeiras horas para fora de "hoje".
-    let now = chrono::Local::now().naive_local();
+pub async fn stats(State(ctx): State<AppContext>, _session: Auth) -> Reply {
+    // Local time: "today" is the operator's day. Cutting the day in UTC would
+    // push its first hours out of the count.
+    let now = chrono::Local::now().fixed_offset();
     let stats = AuditLog::stats(&ctx.db, now).await?;
 
     Ok(axum::Json(Data::new(view::AuditStats::from(stats))).into_response())
@@ -121,11 +121,7 @@ pub async fn stats(State(ctx): State<AppContext>, _session: Authenticated) -> Re
 /// 404 na familia dos controllers, e nao a do framework: aqui o Adonis usa
 /// `find` e trata o `null` a mao, com mensagem propria.
 #[debug_handler]
-pub async fn show(
-    State(ctx): State<AppContext>,
-    _session: Authenticated,
-    Path(id): Path<i64>,
-) -> Reply {
+pub async fn show(State(ctx): State<AppContext>, _session: Auth, Path(id): Path<i64>) -> Reply {
     let log = AuditLog::find_one(&ctx.db, id)
         .await?
         .ok_or_else(|| ApiError::not_found("Log de auditoria não encontrado"))?;

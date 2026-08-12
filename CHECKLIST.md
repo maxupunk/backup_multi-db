@@ -224,8 +224,6 @@ backup_multi-db/
 │   ├── public/
 │   ├── vite.config.mts          ✅ Proxy + build configurado
 │   └── package.json
-├── contract-tests/              # Suíte de contrato black-box
-├── docs/                        # Spec OpenAPI e baseline de rotas
 ├── CHECKLIST.md                 ✅ Este arquivo
 ├── README.md                    ✅ Documentação
 ├── docker-compose.yml           # Produção

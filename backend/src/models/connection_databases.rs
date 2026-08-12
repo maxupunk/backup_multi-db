@@ -62,7 +62,7 @@ impl Model {
         connection_id: i64,
         names: &[String],
     ) -> loco_rs::Result<()> {
-        let now = chrono::Utc::now().naive_utc();
+        let now = chrono::Utc::now().fixed_offset();
         let rows: Vec<ActiveModel> = names
             .iter()
             .map(|name| ActiveModel {
@@ -141,7 +141,7 @@ async fn set_enabled(
         .col_expr(Column::Enabled, Expr::value(enabled))
         .col_expr(
             Column::UpdatedAt,
-            Expr::value(chrono::Utc::now().naive_utc()),
+            Expr::value(chrono::Utc::now().fixed_offset()),
         )
         .filter(Column::ConnectionId.eq(connection_id))
         .filter(Column::DatabaseName.is_in(names.iter().map(String::as_str)))

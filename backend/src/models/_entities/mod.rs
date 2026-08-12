@@ -3,7 +3,6 @@
 pub mod prelude;
 
 pub mod audit_logs;
-pub mod auth_access_tokens;
 pub mod backups;
 pub mod connection_databases;
 pub mod connections;

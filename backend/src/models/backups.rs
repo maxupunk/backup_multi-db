@@ -234,7 +234,7 @@ impl Model {
 
 impl ActiveModel {
     /// Marca o inicio da execucao.
-    pub fn mark_as_started(&mut self, now: chrono::NaiveDateTime) {
+    pub fn mark_as_started(&mut self, now: chrono::DateTime<chrono::FixedOffset>) {
         self.status = Set(BackupStatus::Running.as_str().to_string());
         self.started_at = Set(Some(now));
     }
@@ -246,8 +246,8 @@ impl ActiveModel {
     /// errado no relatorio e' pior que um campo vazio.
     pub fn mark_as_completed(
         &mut self,
-        now: chrono::NaiveDateTime,
-        started_at: Option<chrono::NaiveDateTime>,
+        now: chrono::DateTime<chrono::FixedOffset>,
+        started_at: Option<chrono::DateTime<chrono::FixedOffset>>,
         file_path: impl Into<String>,
         file_name: impl Into<String>,
         file_size: i64,
@@ -266,8 +266,8 @@ impl ActiveModel {
     /// Marca a falha, preservando o codigo de saida do processo de dump.
     pub fn mark_as_failed(
         &mut self,
-        now: chrono::NaiveDateTime,
-        started_at: Option<chrono::NaiveDateTime>,
+        now: chrono::DateTime<chrono::FixedOffset>,
+        started_at: Option<chrono::DateTime<chrono::FixedOffset>>,
         error_message: impl Into<String>,
         exit_code: Option<i64>,
     ) {
@@ -288,7 +288,7 @@ impl Model {
     /// Quantos backups desde `since` — o corte de "hoje" no painel.
     pub async fn count_since(
         db: &impl ConnectionTrait,
-        since: chrono::NaiveDateTime,
+        since: chrono::DateTime<chrono::FixedOffset>,
     ) -> loco_rs::Result<u64> {
         Ok(Entity::find()
             .filter(Column::CreatedAt.gte(since))
@@ -563,8 +563,8 @@ mod tests {
             exit_code: None,
             metadata: None,
             trigger: "manual".to_string(),
-            created_at: chrono::NaiveDateTime::default(),
-            updated_at: chrono::NaiveDateTime::default(),
+            created_at: chrono::DateTime::UNIX_EPOCH.fixed_offset(),
+            updated_at: chrono::DateTime::UNIX_EPOCH.fixed_offset(),
             storage_destination_id: None,
         }
     }

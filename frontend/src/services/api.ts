@@ -724,6 +724,30 @@ export const authApi = {
   async checkStatus (): Promise<ApiResponse<{ hasUsers: boolean, requiresBootstrapToken: boolean }>> {
     return request<ApiResponse<{ hasUsers: boolean, requiresBootstrapToken: boolean }>>('/auth/status')
   },
+
+  /**
+   * Dispara o envio do e-mail de redefinição de senha.
+   *
+   * Responde sucesso mesmo para um e-mail não cadastrado — de propósito, para
+   * não transformar a tela num diretório de quem tem conta. A interface não
+   * pode prometer que o e-mail foi enviado.
+   */
+  async forgotPassword (email: string): Promise<ApiResponse> {
+    return request<ApiResponse>('/auth/forgot', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    })
+  },
+
+  /**
+   * Conclui a redefinição com o token recebido por e-mail.
+   */
+  async resetPassword (token: string, password: string): Promise<ApiResponse> {
+    return request<ApiResponse>('/auth/reset', {
+      method: 'POST',
+      body: JSON.stringify({ token, password }),
+    })
+  },
 }
 
 /**

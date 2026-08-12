@@ -9,7 +9,7 @@ use axum::response::{IntoResponse, Response};
 use loco_rs::prelude::*;
 use serde::Deserialize;
 
-use crate::controllers::middlewares::auth::Authenticated;
+use crate::controllers::Auth;
 use crate::models::_entities::users;
 use crate::views::envelope::MessageWithData;
 use crate::views::errors::ApiError;
@@ -46,10 +46,10 @@ const DEFAULT_PER_PAGE: u64 = 10;
 #[debug_handler]
 pub async fn index(
     State(ctx): State<AppContext>,
-    session: Authenticated,
+    session: Auth,
     Query(query): Query<ListQuery>,
 ) -> Reply {
-    session.require_admin(ADMIN_ONLY)?;
+    crate::controllers::require_admin(&session.user, ADMIN_ONLY)?;
 
     let page = PageRequest::from_query(
         query.page.as_deref(),
@@ -70,10 +70,10 @@ pub async fn index(
 #[debug_handler]
 pub async fn toggle_status(
     State(ctx): State<AppContext>,
-    session: Authenticated,
+    session: Auth,
     Path(id): Path<i64>,
 ) -> Reply {
-    session.require_admin(ADMIN_ONLY)?;
+    crate::controllers::require_admin(&session.user, ADMIN_ONLY)?;
 
     let target = users::Entity::find_by_id(id)
         .one(&ctx.db)

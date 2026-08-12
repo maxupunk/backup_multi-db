@@ -218,7 +218,6 @@ Nenhuma feature está pronta sem teste. Espelhe a estrutura de `src/` em `tests/
 6. Testes novos passando: `cargo test`.
 7. `cargo fmt` + `cargo clippy --all-targets -- -D warnings` limpos.
 8. Nenhum segredo, log sensível ou `unwrap` no diff.
-9. Suíte de contrato passando: `cd contract-tests && pnpm contract:roco`.
 
 ---
 

@@ -1140,7 +1140,7 @@ async fn insert_backup_at(
     use backend::models::_entities::backups;
     use sea_orm::ActiveValue::Set;
 
-    let now = chrono::Utc::now().naive_utc();
+    let now = chrono::Utc::now().fixed_offset();
 
     backups::ActiveModel {
         connection_id: Set(None),
@@ -1567,11 +1567,8 @@ async fn every_route_of_the_resource_demands_a_session() {
 
         for response in unauthenticated {
             assert_eq!(response.status_code(), 401, "{}", response.text());
-            // Familia do framework: quem responde e' o middleware.
-            assert_eq!(
-                response.json::<Value>()["errors"][0]["message"],
-                "Unauthorized access"
-            );
+            // JSON — the extractor answers before any handler runs.
+            assert!(response.json::<Value>().is_object(), "{}", response.text());
         }
     })
     .await;

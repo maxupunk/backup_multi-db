@@ -35,7 +35,8 @@ services:
       # `SqliteError { code: 14, "unable to open database file" }`.
       DATABASE_URL: sqlite:///storage/database/app.sqlite3?mode=rwc
       DB_ENCRYPTION_KEY: ${DB_ENCRYPTION_KEY}
-      AUTH_ACCESS_TOKEN_EXPIRES_IN: ${AUTH_ACCESS_TOKEN_EXPIRES_IN:-7d}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRATION: ${JWT_EXPIRATION:-604800}
       INITIAL_ADMIN_BOOTSTRAP_TOKEN: ${INITIAL_ADMIN_BOOTSTRAP_TOKEN:-}
       BACKUP_DELETE_LOCAL_AFTER_REMOTE_UPLOAD: ${BACKUP_DELETE_LOCAL_AFTER_REMOTE_UPLOAD:-false}
       DIAGNOSTICS_PATH: /storage/diagnostics

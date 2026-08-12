@@ -16,13 +16,11 @@ use serde::Serialize;
 
 use crate::models::_entities::backups;
 use crate::models::system_monitor;
-use crate::views::timestamp;
 
-/// `nodeVersion` no contrato do Adonis.
+/// Cabecalho de `GET /api/system/status`.
 ///
-/// A chave nasceu de `process.version`. Mantive o nome — e' o que o painel le' —
-/// e o valor passou a identificar o runtime real. Renomear seria mudanca de
-/// contrato por cosmetica.
+/// `runtimeVersion` identifica o runtime que esta' respondendo — a versao do
+/// Rust com que o binario foi compilado.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SystemOverview {
@@ -30,7 +28,7 @@ pub struct SystemOverview {
     pub hostname: String,
     pub platform: String,
     pub architecture: &'static str,
-    pub node_version: String,
+    pub runtime_version: String,
     pub uptime_seconds: u64,
     pub resources: Resources,
     pub jobs: Jobs,
@@ -78,7 +76,7 @@ impl From<system_monitor::SystemOverview> for SystemOverview {
             hostname: overview.hostname,
             platform: overview.platform,
             architecture: overview.architecture,
-            node_version: overview.runtime_version,
+            runtime_version: overview.runtime_version,
             uptime_seconds: overview.uptime_seconds,
             resources: Resources {
                 cpu: Cpu {
@@ -131,8 +129,7 @@ pub struct RecentBackup {
     pub connection_name: String,
     pub status: String,
     pub file_size: Option<i64>,
-    #[serde(serialize_with = "timestamp::serialize")]
-    pub created_at: chrono::NaiveDateTime,
+    pub created_at: chrono::DateTime<chrono::FixedOffset>,
 }
 
 impl RecentBackup {
@@ -217,7 +214,7 @@ mod tests {
     }
 
     #[test]
-    fn the_overview_keeps_the_adonis_key_names() {
+    fn the_overview_carries_every_key_the_panel_reads() {
         let json = serde_json::to_value(SystemOverview::from(overview(false))).expect("serializa");
 
         for key in [
@@ -225,7 +222,7 @@ mod tests {
             "hostname",
             "platform",
             "architecture",
-            "nodeVersion",
+            "runtimeVersion",
             "uptimeSeconds",
             "resources",
             "jobs",
@@ -277,8 +274,8 @@ mod tests {
             trigger: "manual".to_string(),
             storage_destination_id: None,
             exit_code: None,
-            created_at: chrono::DateTime::UNIX_EPOCH.naive_utc(),
-            updated_at: chrono::DateTime::UNIX_EPOCH.naive_utc(),
+            created_at: chrono::DateTime::UNIX_EPOCH.fixed_offset(),
+            updated_at: chrono::DateTime::UNIX_EPOCH.fixed_offset(),
         };
 
         let json = serde_json::to_value(RecentBackup::new(backup, None)).expect("serializa");

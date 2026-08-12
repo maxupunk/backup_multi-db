@@ -11,8 +11,8 @@ use axum::response::{IntoResponse, Response};
 use loco_rs::prelude::*;
 use serde::Deserialize;
 
-use crate::controllers::middlewares::auth::Authenticated;
 use crate::controllers::middlewares::origin::RequestOrigin;
+use crate::controllers::Auth;
 use crate::initializers::settings::Settings;
 use crate::models::_entities::{backups, connections};
 use crate::models::audit_log::{AuditAction, AuditEntityType};
@@ -32,13 +32,14 @@ const RECENT_BACKUPS: u64 = 5;
 
 /// `GET /api/stats` — o painel inicial.
 #[debug_handler]
-pub async fn stats(State(ctx): State<AppContext>, _session: Authenticated) -> Reply {
-    // Meia-noite local: os timestamps gravados sao hora local ingenua.
-    let today = chrono::Local::now()
-        .naive_local()
-        .date()
+pub async fn stats(State(ctx): State<AppContext>, _session: Auth) -> Reply {
+    // Local midnight: "today" is the operator's day, not UTC's.
+    let now = chrono::Local::now().fixed_offset();
+    let today = now
+        .date_naive()
         .and_hms_opt(0, 0, 0)
-        .unwrap_or_else(|| chrono::Local::now().naive_local());
+        .and_then(|naive| naive.and_local_timezone(*now.offset()).single())
+        .unwrap_or(now);
 
     let connections_total = connections::Model::count_all(&ctx.db).await?;
     let connections_active = connections::Model::count_active(&ctx.db).await?;
@@ -76,7 +77,7 @@ pub async fn stats(State(ctx): State<AppContext>, _session: Authenticated) -> Re
 
 /// `GET /api/system/status` — CPU, memoria, uptime e estado do agendador.
 #[debug_handler]
-pub async fn status(State(ctx): State<AppContext>, _session: Authenticated) -> Reply {
+pub async fn status(State(ctx): State<AppContext>, _session: Auth) -> Reply {
     let overview = system_monitor::SystemOverview::collect(&ctx).await;
 
     Ok(axum::Json(Data::new(view::SystemOverview::from(overview))).into_response())
@@ -84,7 +85,7 @@ pub async fn status(State(ctx): State<AppContext>, _session: Authenticated) -> R
 
 /// `GET /api/system/containers/resources` — metricas de containers Docker.
 #[debug_handler]
-pub async fn container_resources(State(ctx): State<AppContext>, _session: Authenticated) -> Reply {
+pub async fn container_resources(State(ctx): State<AppContext>, _session: Auth) -> Reply {
     let overview = crate::models::docker_container_monitoring::overview(&ctx).await;
     Ok(axum::Json(Data::new(overview)).into_response())
 }
@@ -103,7 +104,7 @@ fn default_range_hours() -> i64 {
 #[debug_handler]
 pub async fn resources_history(
     State(ctx): State<AppContext>,
-    _session: Authenticated,
+    _session: Auth,
     Query(query): Query<HistoryQuery>,
 ) -> Reply {
     let history = crate::models::resource_metric_history::history(&ctx, query.range_hours).await?;
@@ -112,10 +113,7 @@ pub async fn resources_history(
 
 /// `GET /api/system/backup-retention` — politica GFS atual.
 #[debug_handler]
-pub async fn backup_retention_policy(
-    State(ctx): State<AppContext>,
-    _session: Authenticated,
-) -> Reply {
+pub async fn backup_retention_policy(State(ctx): State<AppContext>, _session: Auth) -> Reply {
     let policy = crate::models::backup_retention_policy::get_policy(&ctx).await?;
     Ok(axum::Json(Data::new(view::BackupRetentionPolicy::from(policy))).into_response())
 }
@@ -124,7 +122,7 @@ pub async fn backup_retention_policy(
 #[debug_handler]
 pub async fn update_backup_retention_policy(
     State(ctx): State<AppContext>,
-    _session: Authenticated,
+    _session: Auth,
     origin: RequestOrigin,
     Json(payload): Json<UpdateBackupRetentionPolicy>,
 ) -> Reply {
@@ -165,10 +163,7 @@ pub async fn update_backup_retention_policy(
 
 /// `POST /api/system/backup-retention/run` — executa o prune de retencao.
 #[debug_handler]
-pub async fn run_backup_retention(
-    State(ctx): State<AppContext>,
-    __session: Authenticated,
-) -> Reply {
+pub async fn run_backup_retention(State(ctx): State<AppContext>, __session: Auth) -> Reply {
     let result = crate::models::retention::prune_backups(&ctx).await?;
     Ok(axum::Json(MessageWithData::new(
         "Prune de backups executado com sucesso",
@@ -179,8 +174,11 @@ pub async fn run_backup_retention(
 
 /// `GET /api/system/diagnostics` — lista artefatos de diagnostico.
 #[debug_handler]
-pub async fn diagnostics(State(ctx): State<AppContext>, session: Authenticated) -> Reply {
-    session.require_admin("Apenas administradores podem acessar artefatos de diagnostico.")?;
+pub async fn diagnostics(State(ctx): State<AppContext>, session: Auth) -> Reply {
+    crate::controllers::require_admin(
+        &session.user,
+        "Apenas administradores podem acessar artefatos de diagnostico.",
+    )?;
 
     let overview = crate::models::diagnostics::list(&ctx).await?;
     Ok(axum::Json(Data::new(overview)).into_response())
@@ -190,11 +188,14 @@ pub async fn diagnostics(State(ctx): State<AppContext>, session: Authenticated) 
 #[debug_handler]
 pub async fn download_diagnostic(
     State(ctx): State<AppContext>,
-    session: Authenticated,
+    session: Auth,
     origin: RequestOrigin,
     axum::extract::Path(name): axum::extract::Path<String>,
 ) -> Reply {
-    session.require_admin("Apenas administradores podem acessar artefatos de diagnostico.")?;
+    crate::controllers::require_admin(
+        &session.user,
+        "Apenas administradores podem acessar artefatos de diagnostico.",
+    )?;
 
     let Some(path) = crate::models::diagnostics::resolve(&ctx, &name)? else {
         return Err(ApiError::not_found(
@@ -239,11 +240,14 @@ pub async fn download_diagnostic(
 #[debug_handler]
 pub async fn destroy_diagnostic(
     State(ctx): State<AppContext>,
-    session: Authenticated,
+    session: Auth,
     origin: RequestOrigin,
     axum::extract::Path(name): axum::extract::Path<String>,
 ) -> Reply {
-    session.require_admin("Apenas administradores podem acessar artefatos de diagnostico.")?;
+    crate::controllers::require_admin(
+        &session.user,
+        "Apenas administradores podem acessar artefatos de diagnostico.",
+    )?;
 
     let Some(path) = crate::models::diagnostics::resolve(&ctx, &name)? else {
         return Err(ApiError::not_found(

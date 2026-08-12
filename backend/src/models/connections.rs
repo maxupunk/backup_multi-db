@@ -185,7 +185,7 @@ impl Model {
 
     /// Indica se este agendamento já venceu. Conexões sem execução anterior
     /// vencem imediatamente na primeira passagem do dispatcher.
-    pub fn is_backup_due(&self, now: chrono::NaiveDateTime) -> bool {
+    pub fn is_backup_due(&self, now: chrono::DateTime<chrono::FixedOffset>) -> bool {
         let Some(interval_ms) = self.schedule_interval_ms() else {
             return false;
         };
@@ -642,7 +642,7 @@ impl Model {
         params: &CreateParams,
         encryption: &EncryptionService,
     ) -> loco_rs::Result<Self> {
-        let now = chrono::Utc::now().naive_utc();
+        let now = chrono::Utc::now().fixed_offset();
 
         Ok(ActiveModel {
             name: Set(trimmed(params.name.as_deref())),
@@ -747,7 +747,7 @@ impl Model {
             active.options = Set(serialize_options(value.as_ref()));
         }
 
-        active.updated_at = Set(chrono::Utc::now().naive_utc());
+        active.updated_at = Set(chrono::Utc::now().fixed_offset());
 
         Ok((active.update(db).await?, changes))
     }
@@ -758,7 +758,7 @@ impl Model {
         db: &impl ConnectionTrait,
         error: Option<&str>,
     ) -> loco_rs::Result<Self> {
-        let now = chrono::Utc::now().naive_utc();
+        let now = chrono::Utc::now().fixed_offset();
         let mut active: ActiveModel = self.into();
 
         active.status = Set(Some(
@@ -906,8 +906,8 @@ mod tests {
             last_tested_at: None,
             last_backup_at: None,
             options: options.map(ToString::to_string),
-            created_at: chrono::Utc::now().naive_utc(),
-            updated_at: chrono::Utc::now().naive_utc(),
+            created_at: chrono::Utc::now().fixed_offset(),
+            updated_at: chrono::Utc::now().fixed_offset(),
             storage_destination_id: None,
         }
     }

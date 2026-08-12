@@ -22,9 +22,9 @@ use loco_rs::prelude::*;
 use validator::Validate;
 
 use crate::controllers::json_body;
-use crate::controllers::middlewares::auth::Authenticated;
 use crate::controllers::middlewares::limiters::{enforce, Limiters};
 use crate::controllers::middlewares::origin::RequestOrigin;
+use crate::controllers::Auth;
 use crate::initializers::settings::Settings;
 use crate::models::_entities::{connection_databases, connections};
 use crate::models::audit_log::AuditAction;
@@ -59,7 +59,7 @@ const DETAIL_BACKUPS: u64 = 10;
 #[debug_handler]
 pub async fn index(
     State(ctx): State<AppContext>,
-    _session: Authenticated,
+    _session: Auth,
     Query(query): Query<ListQuery>,
 ) -> Reply {
     Validate::validate(&query).map_err(|errors| ApiError::from_validation_errors(&errors))?;
@@ -102,7 +102,7 @@ pub async fn index(
 #[debug_handler]
 pub async fn store(
     State(ctx): State<AppContext>,
-    _session: Authenticated,
+    _session: Auth,
     origin: RequestOrigin,
     body: Bytes,
 ) -> Reply {
@@ -148,11 +148,7 @@ pub async fn store(
 
 /// `GET /api/connections/:id`.
 #[debug_handler]
-pub async fn show(
-    State(ctx): State<AppContext>,
-    _session: Authenticated,
-    Path(id): Path<i64>,
-) -> Reply {
+pub async fn show(State(ctx): State<AppContext>, _session: Auth, Path(id): Path<i64>) -> Reply {
     let connection = find_or_404(&ctx, id).await?;
 
     // Aqui a listagem traz **todos** os databases, habilitados ou nao: e' a
@@ -180,7 +176,7 @@ pub async fn show(
 #[debug_handler]
 pub async fn update(
     State(ctx): State<AppContext>,
-    _session: Authenticated,
+    _session: Auth,
     origin: RequestOrigin,
     Path(id): Path<i64>,
     body: Bytes,
@@ -242,7 +238,7 @@ pub async fn update(
 #[debug_handler]
 pub async fn destroy(
     State(ctx): State<AppContext>,
-    _session: Authenticated,
+    _session: Auth,
     origin: RequestOrigin,
     Path(id): Path<i64>,
 ) -> Reply {
@@ -273,7 +269,7 @@ pub async fn destroy(
 #[debug_handler]
 pub async fn test(
     State(ctx): State<AppContext>,
-    _session: Authenticated,
+    _session: Auth,
     origin: RequestOrigin,
     Path(id): Path<i64>,
 ) -> Reply {
@@ -371,7 +367,7 @@ pub async fn test(
 #[debug_handler]
 pub async fn discover_databases(
     State(_ctx): State<AppContext>,
-    _session: Authenticated,
+    _session: Auth,
     body: Bytes,
 ) -> Reply {
     let params: DiscoverParams = json_body(&body)?;
@@ -398,7 +394,7 @@ pub async fn discover_databases(
 #[debug_handler]
 pub async fn create_database(
     State(ctx): State<AppContext>,
-    _session: Authenticated,
+    _session: Auth,
     origin: RequestOrigin,
     Path(id): Path<i64>,
     body: Bytes,
@@ -465,7 +461,7 @@ pub async fn create_database(
 /// devolve numa maquina sem Docker, e o contrato exige 200 tambem nesse caso
 /// (a tela de nova conexao trata a ausencia, nao um erro).
 #[debug_handler]
-pub async fn docker_hosts(State(_ctx): State<AppContext>, _session: Authenticated) -> Reply {
+pub async fn docker_hosts(State(_ctx): State<AppContext>, _session: Auth) -> Reply {
     let environment = crate::models::docker::environment().await;
     let docker_available = environment["dockerAvailable"].as_bool().unwrap_or(false);
     let hosts = if docker_available {
@@ -503,7 +499,7 @@ pub async fn docker_hosts(State(_ctx): State<AppContext>, _session: Authenticate
 #[debug_handler]
 pub async fn backup(
     State(ctx): State<AppContext>,
-    _session: Authenticated,
+    _session: Auth,
     origin: RequestOrigin,
     Path(id): Path<i64>,
 ) -> Reply {

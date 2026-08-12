@@ -80,13 +80,12 @@ database:
   dangerously_recreate: true
 
 # Authentication Configuration
+# Autenticacao. Segredo fixo de proposito: a suite precisa assinar e conferir
+# tokens de forma reproduzivel, e este valor nunca sai do ambiente de teste.
 auth:
-  # JWT authentication
   jwt:
-    # Secret key for token generation and verification
     secret: BaQtKmr3CE13kDGbVCeI
-    # Token expiration time in seconds
-    expiration: 604800 # 7 days
+    expiration: 604800 # 7 dias
 
 # Configuracao especifica da aplicacao (tarefa 3.1 do roadmap).
 #
@@ -98,8 +97,6 @@ settings:
   # `DB_ENCRYPTION_KEY` do Adonis — e' com ela que os ciphertexts ja' gravados
   # continuam legiveis apos o cutover (decisao D3).
   db_encryption_key: "{{ get_env(name="DB_ENCRYPTION_KEY", default="000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f") }}"
-  # TTL do access token. Mesmo formato do Adonis: `7d`, `12h`, `30m`.
-  auth_access_token_expires_in: "{{ get_env(name="AUTH_ACCESS_TOKEN_EXPIRES_IN", default="7d") }}"
   # Token exigido para criar o primeiro administrador.
   initial_admin_bootstrap_token: "{{ get_env(name="INITIAL_ADMIN_BOOTSTRAP_TOKEN", default="") }}"
   backup_storage_path: "{{ get_env(name="BACKUP_STORAGE_PATH", default="/storage/backups") }}"

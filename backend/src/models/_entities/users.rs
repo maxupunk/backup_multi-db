@@ -6,26 +6,26 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize, Deserialize)]
 #[sea_orm(table_name = "users")]
 pub struct Model {
+    pub created_at: DateTimeWithTimeZone,
+    pub updated_at: DateTimeWithTimeZone,
     #[sea_orm(primary_key)]
     pub id: i64,
-    pub full_name: Option<String>,
+    #[sea_orm(unique)]
+    pub pid: Uuid,
     #[sea_orm(unique)]
     pub email: String,
     pub password: String,
+    #[sea_orm(unique)]
+    pub api_key: String,
+    pub full_name: Option<String>,
     pub is_active: bool,
     pub is_admin: bool,
-    pub created_at: DateTime,
-    pub updated_at: Option<DateTime>,
+    pub reset_token: Option<String>,
+    pub reset_sent_at: Option<DateTimeWithTimeZone>,
+    pub email_verification_token: Option<String>,
+    pub email_verification_sent_at: Option<DateTimeWithTimeZone>,
+    pub email_verified_at: Option<DateTimeWithTimeZone>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-pub enum Relation {
-    #[sea_orm(has_many = "super::auth_access_tokens::Entity")]
-    AuthAccessTokens,
-}
-
-impl Related<super::auth_access_tokens::Entity> for Entity {
-    fn to() -> RelationDef {
-        Relation::AuthAccessTokens.def()
-    }
-}
+pub enum Relation {}

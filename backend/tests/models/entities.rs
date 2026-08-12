@@ -1,39 +1,39 @@
-//! Round-trip das entidades contra o schema de verdade (tarefa 4.10).
+//! Round-trip of the entities against the real schema.
 //!
-//! Os testes unitarios em `src/models/*.rs` cobrem a logica pura — formatacao,
-//! mascaramento, promocao de retencao — sem tocar no banco. O que falta provar
-//! e' que as entidades geradas **casam com as migrations**: tipo de coluna,
-//! nulabilidade, chave estrangeira e constraint.
+//! The unit tests in `src/models/*.rs` cover pure logic — formatting, masking,
+//! retention promotion — without touching the database. What is left to prove
+//! is that the generated entities **match the migration**: column type,
+//! nullability, foreign key and index.
 //!
-//! E' um acoplamento que quebra em silencio. Uma migration alterada sem
-//! regenerar as entidades compila normalmente e so' falha na primeira consulta
-//! em producao.
+//! It is a coupling that breaks silently. A migration changed without
+//! regenerating the entities compiles fine and only fails on the first query in
+//! production.
 
 use backend::app::App;
 use backend::models::_entities::{
-    audit_logs, auth_access_tokens, backups, connection_databases, connections,
-    resource_metric_history, storage_destinations, system_settings, users,
+    audit_logs, backups, connection_databases, connections, resource_metric_history,
+    storage_destinations, system_settings, users,
 };
 use loco_rs::testing::prelude::*;
-use sea_orm::{ActiveModelTrait, ActiveValue::Set, EntityTrait, PaginatorTrait};
+use sea_orm::{ActiveModelTrait, ActiveValue::Set, EntityTrait};
 use serial_test::serial;
 
-fn now() -> chrono::NaiveDateTime {
-    chrono::DateTime::parse_from_rfc3339("2026-08-09T12:00:00Z")
-        .unwrap()
-        .naive_utc()
+fn now() -> chrono::DateTime<chrono::FixedOffset> {
+    chrono::DateTime::parse_from_rfc3339("2026-08-09T12:00:00Z").unwrap()
 }
 
-/// Usuario minimo, com os campos que o schema exige.
+/// A minimal user, with the fields the schema demands.
 async fn create_user(db: &sea_orm::DatabaseConnection, email: &str) -> users::Model {
     users::ActiveModel {
+        pid: Set(uuid::Uuid::new_v4()),
+        api_key: Set(format!("bk_{email}")),
         full_name: Set(Some("Teste".to_string())),
         email: Set(email.to_string()),
-        password: Set("$scrypt$n=16384,r=8,p=1$c2FsdA$aGFzaA".to_string()),
+        password: Set("$argon2id$v=19$m=19456,t=2,p=1$c2FsdA$aGFzaA".to_string()),
         is_active: Set(true),
         is_admin: Set(false),
         created_at: Set(now()),
-        updated_at: Set(Some(now())),
+        updated_at: Set(now()),
         ..Default::default()
     }
     .insert(db)
@@ -47,7 +47,7 @@ async fn create_storage(db: &sea_orm::DatabaseConnection) -> storage_destination
         r#type: Set("local".to_string()),
         status: Set("active".to_string()),
         is_default: Set(true),
-        config_encrypted: Set("aWl2:dGFn:Y2lwaGVy".to_string()),
+        config_encrypted: Set("v1.AAAAAAAAAAAAAAAA.Y2lwaGVy".to_string()),
         provider: Set(Some("local".to_string())),
         created_at: Set(now()),
         updated_at: Set(now()),
@@ -68,7 +68,7 @@ async fn create_connection(
         host: Set("127.0.0.1".to_string()),
         port: Set(3306),
         username: Set("root".to_string()),
-        password_encrypted: Set("aWl2:dGFn:Y2lwaGVy".to_string()),
+        password_encrypted: Set("v1.AAAAAAAAAAAAAAAA.Y2lwaGVy".to_string()),
         schedule_enabled: Set(Some(false)),
         status: Set(Some("active".to_string())),
         storage_destination_id: Set(storage_id),
@@ -89,26 +89,10 @@ async fn every_entity_round_trips_through_the_schema() {
 
     let user = create_user(db, "roundtrip@contract.test").await;
     assert_eq!(user.email, "roundtrip@contract.test");
-    // `is_active` e `is_admin` sao booleanos de verdade na entidade, e nao
-    // `0`/`1` — e' a diferenca em relacao ao Adonis registrada como achado da
-    // Fase 2.
     assert!(user.is_active);
     assert!(!user.is_admin);
-
-    auth_access_tokens::ActiveModel {
-        tokenable_id: Set(user.id),
-        r#type: Set("auth_token".to_string()),
-        name: Set(None),
-        hash: Set("a".repeat(64)),
-        abilities: Set("[\"*\"]".to_string()),
-        created_at: Set(Some(now())),
-        updated_at: Set(Some(now())),
-        expires_at: Set(Some(now())),
-        ..Default::default()
-    }
-    .insert(db)
-    .await
-    .expect("insercao de token");
+    // `pid` round-trips as a `Uuid`, not as the text SQLite actually stores.
+    assert!(!user.pid.is_nil());
 
     let storage = create_storage(db).await;
     let connection = create_connection(db, Some(storage.id)).await;
@@ -180,8 +164,8 @@ async fn every_entity_round_trips_through_the_schema() {
     .await
     .expect("insercao de metrica");
 
-    // `bigint` de verdade: um `integer` de 32 bits estouraria nos dois valores
-    // de memoria acima e no `file_size` de 1,5 GB.
+    // A real `bigint`: a 32-bit integer would overflow on both memory values
+    // above and on the 1.5 GB `file_size`.
     let metric = resource_metric_history::Entity::find()
         .one(db)
         .await
@@ -191,6 +175,26 @@ async fn every_entity_round_trips_through_the_schema() {
 
     let backup = backups::Entity::find().one(db).await.unwrap().unwrap();
     assert_eq!(backup.file_size, Some(1_610_612_736));
+}
+
+#[tokio::test]
+#[serial]
+async fn timestamps_keep_their_offset_through_a_round_trip() {
+    // The whole point of `timestamptz`: an instant written as UTC comes back as
+    // the same instant, not as a naive value the reader has to guess an offset
+    // for.
+    let boot = boot_test::<App>().await.unwrap();
+    let db = &boot.app_context.db;
+
+    let user = create_user(db, "tz@contract.test").await;
+    let stored = users::Entity::find_by_id(user.id)
+        .one(db)
+        .await
+        .unwrap()
+        .expect("o usuario foi gravado");
+
+    assert_eq!(stored.created_at, now());
+    assert_eq!(stored.created_at.to_utc(), now().to_utc());
 }
 
 #[tokio::test]
@@ -212,8 +216,8 @@ async fn the_unique_index_blocks_a_duplicated_database_name() {
 
     insert().insert(db).await.expect("primeira insercao");
 
-    // `idx_conn_db_unique`. Sem ele, o `PUT /api/connections/:id` que reativa
-    // databases criaria duplicatas a cada chamada.
+    // `idx_conn_db_unique`. Without it, the `PUT /api/connections/:id` path that
+    // re-enables databases would append a duplicate on every call.
     assert!(
         insert().insert(db).await.is_err(),
         "o indice unico nao impediu a duplicata"
@@ -222,32 +226,27 @@ async fn the_unique_index_blocks_a_duplicated_database_name() {
 
 #[tokio::test]
 #[serial]
-async fn deleting_a_user_cascades_to_the_tokens() {
+async fn the_email_is_unique() {
     let boot = boot_test::<App>().await.unwrap();
     let db = &boot.app_context.db;
 
-    let user = create_user(db, "cascade@contract.test").await;
+    create_user(db, "duplicado@contract.test").await;
 
-    auth_access_tokens::ActiveModel {
-        tokenable_id: Set(user.id),
-        r#type: Set("auth_token".to_string()),
-        hash: Set("b".repeat(64)),
-        abilities: Set("[\"*\"]".to_string()),
-        created_at: Set(Some(now())),
+    let result = users::ActiveModel {
+        pid: Set(uuid::Uuid::new_v4()),
+        api_key: Set("bk_outra".to_string()),
+        email: Set("duplicado@contract.test".to_string()),
+        password: Set("$argon2id$v=19$m=19456,t=2,p=1$c2FsdA$aGFzaA".to_string()),
+        is_active: Set(true),
+        is_admin: Set(false),
+        created_at: Set(now()),
+        updated_at: Set(now()),
         ..Default::default()
     }
     .insert(db)
-    .await
-    .expect("insercao de token");
+    .await;
 
-    users::Entity::delete_by_id(user.id).exec(db).await.unwrap();
-
-    // Um token orfao continuaria autenticando contra um usuario que nao existe
-    // mais — daí o CASCADE na FK.
-    assert_eq!(
-        auth_access_tokens::Entity::find().count(db).await.unwrap(),
-        0
-    );
+    assert!(result.is_err(), "o unique de email aceitou a duplicata");
 }
 
 #[tokio::test]
@@ -264,8 +263,8 @@ async fn deleting_a_storage_only_detaches_the_connection() {
         .await
         .unwrap();
 
-    // SET NULL, e nao CASCADE: apagar um destino de armazenamento nao pode
-    // apagar as conexoes que o usavam.
+    // SET NULL, not CASCADE: deleting a storage destination must not delete the
+    // connections that used it.
     let survivor = connections::Entity::find_by_id(connection.id)
         .one(db)
         .await
@@ -277,25 +276,37 @@ async fn deleting_a_storage_only_detaches_the_connection() {
 
 #[tokio::test]
 #[serial]
-async fn the_check_constraint_rejects_a_value_outside_the_enum() {
+async fn deleting_a_connection_cascades_to_its_backups() {
     let boot = boot_test::<App>().await.unwrap();
     let db = &boot.app_context.db;
 
-    let result = connections::ActiveModel {
-        name: Set("Invalida".to_string()),
-        r#type: Set("oracle".to_string()),
-        host: Set("127.0.0.1".to_string()),
-        port: Set(1521),
-        username: Set("system".to_string()),
-        password_encrypted: Set(String::new()),
+    let connection = create_connection(db, None).await;
+
+    let backup = backups::ActiveModel {
+        connection_id: Set(Some(connection.id)),
+        database_name: Set("app_fixture".to_string()),
+        status: Set("completed".to_string()),
+        retention_type: Set("daily".to_string()),
+        r#trigger: Set("manual".to_string()),
         created_at: Set(now()),
         updated_at: Set(now()),
         ..Default::default()
     }
     .insert(db)
-    .await;
+    .await
+    .expect("insercao de backup");
 
-    // O `CHECK` do schema e' a ultima barreira: mesmo que a validacao da
-    // aplicacao passe batido, o banco recusa.
-    assert!(result.is_err(), "o CHECK aceitou um tipo fora do enum");
+    connections::Entity::delete_by_id(connection.id)
+        .exec(db)
+        .await
+        .unwrap();
+
+    assert!(
+        backups::Entity::find_by_id(backup.id)
+            .one(db)
+            .await
+            .unwrap()
+            .is_none(),
+        "o backup sobreviveu a' conexao apagada"
+    );
 }

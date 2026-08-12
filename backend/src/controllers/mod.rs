@@ -12,9 +12,36 @@ pub mod transmit;
 pub mod users;
 
 use axum::body::Bytes;
+use loco_rs::controller::extractor::auth::JWTWithUser;
 use serde::de::DeserializeOwned;
 
+use crate::models::_entities::users as users_entity;
 use crate::views::errors::ApiError;
+
+/// A request that carries a valid JWT, plus the user it names.
+///
+/// Alias over the framework extractor so handlers do not repeat the generic
+/// argument. It proves **who** the caller is and never **what** they may do:
+/// authorisation stays an explicit call to [`require_admin`] in the handler,
+/// because `users` and `diagnostics` answer 403 with different messages and an
+/// `AdminOnly` extractor would quietly unify them.
+pub type Auth = JWTWithUser<users_entity::Model>;
+
+/// Refuses a caller who is not an administrator, with the resource's own wording.
+///
+/// The message is a parameter because each resource has its own — "Apenas
+/// administradores podem gerenciar usuários." in `users`, another in
+/// `diagnostics`.
+///
+/// # Errors
+/// Returns 403 when `user` is not an administrator.
+pub fn require_admin(user: &users_entity::Model, message: &str) -> Result<(), ApiError> {
+    if user.is_admin {
+        Ok(())
+    } else {
+        Err(ApiError::forbidden(message))
+    }
+}
 
 /// Desserializa o corpo JSON de uma requisicao.
 ///

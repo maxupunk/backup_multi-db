@@ -24,10 +24,8 @@ const ALLOWED_EXTENSIONS: &[&str] = &[".heapsnapshot", ".cpuprofile", ".heapprof
 pub struct DiagnosticFile {
     pub name: String,
     pub size_bytes: u64,
-    #[serde(serialize_with = "crate::views::timestamp::serialize_option")]
-    pub created_at: Option<chrono::NaiveDateTime>,
-    #[serde(serialize_with = "crate::views::timestamp::serialize_option")]
-    pub modified_at: Option<chrono::NaiveDateTime>,
+    pub created_at: Option<chrono::DateTime<chrono::FixedOffset>>,
+    pub modified_at: Option<chrono::DateTime<chrono::FixedOffset>>,
 }
 
 /// Resposta de `GET /api/system/diagnostics`.
@@ -134,10 +132,10 @@ fn has_allowed_extension(file_name: &str) -> bool {
         .any(|extension| lower.ends_with(extension))
 }
 
-fn into_naive(system_time: std::time::SystemTime) -> Option<chrono::NaiveDateTime> {
+fn into_naive(system_time: std::time::SystemTime) -> Option<chrono::DateTime<chrono::FixedOffset>> {
     let duration = system_time.duration_since(std::time::UNIX_EPOCH).ok()?;
     chrono::DateTime::from_timestamp(duration.as_secs() as i64, duration.subsec_nanos())
-        .map(|dt| dt.naive_utc())
+        .map(|dt| dt.fixed_offset())
 }
 
 #[cfg(test)]

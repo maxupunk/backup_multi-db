@@ -49,7 +49,7 @@ async fn insert_backup(
     status: &str,
     protected: bool,
 ) -> backups::Model {
-    let now = chrono::Utc::now().naive_utc();
+    let now = chrono::Utc::now().fixed_offset();
 
     backups::ActiveModel {
         connection_id: Set(connection_id),

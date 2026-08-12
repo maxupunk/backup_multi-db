@@ -6,6 +6,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Serialize, Deserialize)]
 #[sea_orm(table_name = "resource_metric_history")]
 pub struct Model {
+    pub created_at: DateTimeWithTimeZone,
+    pub updated_at: DateTimeWithTimeZone,
     #[sea_orm(primary_key)]
     pub id: i64,
     #[sea_orm(column_type = "Text")]
@@ -18,9 +20,7 @@ pub struct Model {
     pub memory_usage_percent: f32,
     pub memory_used_bytes: i64,
     pub memory_total_bytes: i64,
-    pub collected_at: DateTime,
-    pub created_at: DateTime,
-    pub updated_at: DateTime,
+    pub collected_at: DateTimeWithTimeZone,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

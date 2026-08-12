@@ -6,6 +6,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize, Deserialize)]
 #[sea_orm(table_name = "backups")]
 pub struct Model {
+    pub created_at: DateTimeWithTimeZone,
+    pub updated_at: DateTimeWithTimeZone,
     #[sea_orm(primary_key)]
     pub id: i64,
     pub connection_id: Option<i64>,
@@ -21,8 +23,8 @@ pub struct Model {
     #[sea_orm(column_type = "Text")]
     pub retention_type: String,
     pub protected: Option<bool>,
-    pub started_at: Option<DateTime>,
-    pub finished_at: Option<DateTime>,
+    pub started_at: Option<DateTimeWithTimeZone>,
+    pub finished_at: Option<DateTimeWithTimeZone>,
     pub duration_seconds: Option<i64>,
     #[sea_orm(column_type = "Text", nullable)]
     pub error_message: Option<String>,
@@ -31,8 +33,6 @@ pub struct Model {
     pub metadata: Option<String>,
     #[sea_orm(column_type = "Text")]
     pub trigger: String,
-    pub created_at: DateTime,
-    pub updated_at: DateTime,
     pub storage_destination_id: Option<i64>,
 }
 

@@ -596,7 +596,7 @@ impl Model {
         params: NewDestination<'_>,
         encryption: &EncryptionService,
     ) -> loco_rs::Result<Self> {
-        let now = chrono::Utc::now().naive_utc();
+        let now = chrono::Utc::now().fixed_offset();
 
         Ok(ActiveModel {
             name: Set(params.name.trim().to_string()),
@@ -640,7 +640,7 @@ impl Model {
             active.config_encrypted = Set(encrypt_config(config, encryption)?);
         }
 
-        active.updated_at = Set(chrono::Utc::now().naive_utc());
+        active.updated_at = Set(chrono::Utc::now().fixed_offset());
 
         Ok(active.update(db).await?)
     }

@@ -23,7 +23,6 @@ use serde::Serialize;
 use crate::models::_entities::{backups, connections};
 use crate::models::backup_import::{ImportedFormat, IntegrityResult};
 use crate::views::connections::WireBool;
-use crate::views::timestamp;
 
 /// Conexao aninhada num item de backup.
 #[derive(Debug, Clone, Serialize)]
@@ -63,10 +62,8 @@ pub struct Item {
     pub compressed: WireBool,
     pub retention_type: String,
     pub protected: WireBool,
-    #[serde(serialize_with = "timestamp::serialize_option")]
-    pub started_at: Option<chrono::NaiveDateTime>,
-    #[serde(serialize_with = "timestamp::serialize_option")]
-    pub finished_at: Option<chrono::NaiveDateTime>,
+    pub started_at: Option<chrono::DateTime<chrono::FixedOffset>>,
+    pub finished_at: Option<chrono::DateTime<chrono::FixedOffset>>,
     pub duration_seconds: Option<i64>,
     pub error_message: Option<String>,
     pub exit_code: Option<i64>,
@@ -75,10 +72,8 @@ pub struct Item {
     /// `JSON.parse` que ele nao faz.
     pub metadata: serde_json::Value,
     pub trigger: String,
-    #[serde(serialize_with = "timestamp::serialize")]
-    pub created_at: chrono::NaiveDateTime,
-    #[serde(serialize_with = "timestamp::serialize")]
-    pub updated_at: chrono::NaiveDateTime,
+    pub created_at: chrono::DateTime<chrono::FixedOffset>,
+    pub updated_at: chrono::DateTime<chrono::FixedOffset>,
     /// Tres estados, e nao dois.
     ///
     /// A chave **falta** onde o controller nao faz `preload('connection')`
@@ -220,8 +215,8 @@ mod tests {
             exit_code: Some(0),
             metadata: Some(r#"{"isImported":true}"#.to_string()),
             trigger: "manual".to_string(),
-            created_at: chrono::NaiveDateTime::default(),
-            updated_at: chrono::NaiveDateTime::default(),
+            created_at: chrono::DateTime::UNIX_EPOCH.fixed_offset(),
+            updated_at: chrono::DateTime::UNIX_EPOCH.fixed_offset(),
             storage_destination_id: None,
         }
     }
@@ -242,8 +237,8 @@ mod tests {
             schedule_enabled: Some(false),
             schedule_frequency: None,
             options: None,
-            created_at: chrono::NaiveDateTime::default(),
-            updated_at: chrono::NaiveDateTime::default(),
+            created_at: chrono::DateTime::UNIX_EPOCH.fixed_offset(),
+            updated_at: chrono::DateTime::UNIX_EPOCH.fixed_offset(),
             storage_destination_id: None,
         }
     }

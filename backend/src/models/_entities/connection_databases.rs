@@ -6,6 +6,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize, Deserialize)]
 #[sea_orm(table_name = "connection_databases")]
 pub struct Model {
+    pub created_at: DateTimeWithTimeZone,
+    pub updated_at: DateTimeWithTimeZone,
     #[sea_orm(primary_key)]
     pub id: i64,
     #[sea_orm(unique_key = "idx_conn_db_unique")]
@@ -13,8 +15,6 @@ pub struct Model {
     #[sea_orm(unique_key = "idx_conn_db_unique")]
     pub database_name: String,
     pub enabled: Option<bool>,
-    pub created_at: DateTime,
-    pub updated_at: DateTime,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

@@ -1,8 +1,6 @@
 pub mod _entities;
-pub mod access_token;
 pub mod audit_log;
 pub mod audit_logs;
-pub mod auth_access_tokens;
 pub mod backup_import;
 pub mod backup_retention_planner;
 pub mod backup_retention_policy;
@@ -25,7 +23,6 @@ pub mod email;
 pub mod encryption;
 pub mod memory_watermark;
 pub mod notifications;
-pub mod password;
 pub mod process_output;
 pub mod progress;
 pub mod resource_metric_history;

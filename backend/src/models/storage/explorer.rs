@@ -417,12 +417,16 @@ mod tests {
                 "2026-08-09 12:00:00",
                 "%Y-%m-%d %H:%M:%S",
             )
-            .expect("data de teste"),
+            .expect("data de teste")
+            .and_utc()
+            .fixed_offset(),
             updated_at: chrono::NaiveDateTime::parse_from_str(
                 "2026-08-09 12:00:00",
                 "%Y-%m-%d %H:%M:%S",
             )
-            .expect("data de teste"),
+            .expect("data de teste")
+            .and_utc()
+            .fixed_offset(),
             provider: None,
         }
     }

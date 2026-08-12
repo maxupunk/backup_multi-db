@@ -383,7 +383,7 @@ export interface SystemStatus {
   hostname: string
   platform: string
   architecture: string
-  nodeVersion: string
+  runtimeVersion: string
   uptimeSeconds: number
   resources: SystemResourceMetrics
   jobs: JobsSystemStatus

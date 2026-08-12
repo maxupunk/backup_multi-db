@@ -33,7 +33,8 @@ PORT=5150
 BINDING=127.0.0.1
 DATABASE_URL=sqlite://backend_development.sqlite?mode=rwc
 INITIAL_ADMIN_BOOTSTRAP_TOKEN=seu-token-de-bootstrap
-AUTH_ACCESS_TOKEN_EXPIRES_IN=7d
+JWT_SECRET=<base64; obrigatório em produção>
+JWT_EXPIRATION=604800
 BACKUP_STORAGE_PATH=/storage/backups
 DIAGNOSTICS_PATH=/storage/diagnostics
 AUDIT_RETENTION_DAYS=30
@@ -59,16 +60,6 @@ cargo test
 # Formatação e lint
 cargo fmt
 cargo clippy --all-targets -- -D warnings
-```
-
-## Suíte de contrato
-
-A suíte em `contract-tests/` roda os testes black-box contra o backend:
-
-```sh
-cd contract-tests
-pnpm install
-pnpm contract:roco
 ```
 
 ## Frontend

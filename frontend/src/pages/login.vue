@@ -23,6 +23,12 @@
         Entrar
       </v-btn>
 
+      <div class="text-center mb-2">
+        <router-link class="text-decoration-none text-body-2" to="/forgot">
+          Esqueci minha senha
+        </router-link>
+      </div>
+
       <div class="text-center">
         <router-link class="text-decoration-none text-body-2" to="/register">
           Não tem uma conta? Cadastre-se

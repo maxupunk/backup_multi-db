@@ -1,7 +1,8 @@
-# Conexao MySQL apontando para o `docker-compose.test.yml`.
+# Conexão MySQL apontando para o `docker-compose.test.yml`.
 #
-# `password_encrypted` cifra `test_pw` com a chave de teste (AES-256-GCM, IV de
-# 16 bytes — a decisao D3). Ver `tests/models/encryption.rs` para o formato.
+# `password_encrypted` cifra `test_pw` com a chave de teste, no formato
+# `v1.nonce.dados` — ver `src/models/encryption.rs`. Não é segredo: a chave de
+# teste está no `config/test.yaml`.
 ---
 - id: 1
   name: Contract MySQL
@@ -9,9 +10,9 @@
   host: 127.0.0.1
   port: 13306
   username: tester
-  password_encrypted: "CQkJCQkJCQkJCQkJCQkJCQ==:wgvHOcQin9obuAcKpFDwiQ==:P1BmuxWwIg=="
+  password_encrypted: "v1.6n5svEvFT415685b.AZWoZPatqmmllPQU0HwAE1SKMdNyfAc"
   schedule_enabled: false
   status: active
   storage_destination_id: 1
-  created_at: "2026-08-09T12:00:00"
-  updated_at: "2026-08-09T12:00:00"
+  created_at: "2026-08-09T12:00:00Z"
+  updated_at: "2026-08-09T12:00:00Z"

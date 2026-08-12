@@ -21,8 +21,8 @@ use crate::{
     controllers,
     initializers::{self, resource_metrics},
     models::_entities::{
-        audit_logs, auth_access_tokens, backups, connection_databases, connections,
-        resource_metric_history, storage_destinations, system_settings, users,
+        audit_logs, backups, connection_databases, connections, resource_metric_history,
+        storage_destinations, system_settings, users,
     },
     tasks,
     workers::{
@@ -172,7 +172,6 @@ impl Hooks for App {
         truncate_table(&ctx.db, connection_databases::Entity).await?;
         truncate_table(&ctx.db, connections::Entity).await?;
         truncate_table(&ctx.db, storage_destinations::Entity).await?;
-        truncate_table(&ctx.db, auth_access_tokens::Entity).await?;
         truncate_table(&ctx.db, users::Entity).await?;
         Ok(())
     }

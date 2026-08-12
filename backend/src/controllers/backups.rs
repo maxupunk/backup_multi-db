@@ -23,9 +23,9 @@ use loco_rs::prelude::*;
 use tokio::io::AsyncWriteExt;
 
 use crate::controllers::json_body;
-use crate::controllers::middlewares::auth::Authenticated;
 use crate::controllers::middlewares::limiters::{enforce, Limiters};
 use crate::controllers::middlewares::origin::RequestOrigin;
+use crate::controllers::Auth;
 use crate::initializers::settings::Settings;
 use crate::models::_entities::{backups, connections};
 use crate::models::audit_log::AuditAction;
@@ -58,7 +58,7 @@ const MAX_PER_PAGE: u64 = 100;
 #[debug_handler]
 pub async fn index(
     State(ctx): State<AppContext>,
-    _session: Authenticated,
+    _session: Auth,
     Query(query): Query<ListQuery>,
 ) -> Reply {
     let page = PageRequest::from_query(
@@ -90,7 +90,7 @@ pub async fn index(
 #[debug_handler]
 pub async fn by_connection(
     State(ctx): State<AppContext>,
-    _session: Authenticated,
+    _session: Auth,
     Path(connection_id): Path<i64>,
     Query(query): Query<ListQuery>,
 ) -> Reply {
@@ -116,11 +116,7 @@ pub async fn by_connection(
 
 /// `GET /api/backups/:id`.
 #[debug_handler]
-pub async fn show(
-    State(ctx): State<AppContext>,
-    _session: Authenticated,
-    Path(id): Path<i64>,
-) -> Reply {
+pub async fn show(State(ctx): State<AppContext>, _session: Auth, Path(id): Path<i64>) -> Reply {
     let (backup, connection) = find_with_connection(&ctx, id).await?;
 
     Ok(axum::Json(Data::new(
@@ -137,7 +133,7 @@ pub async fn show(
 #[debug_handler]
 pub async fn download(
     State(ctx): State<AppContext>,
-    _session: Authenticated,
+    _session: Auth,
     origin: RequestOrigin,
     Path(id): Path<i64>,
 ) -> Reply {
@@ -197,7 +193,7 @@ pub async fn download(
 #[debug_handler]
 pub async fn destroy(
     State(ctx): State<AppContext>,
-    _session: Authenticated,
+    _session: Auth,
     origin: RequestOrigin,
     Path(id): Path<i64>,
 ) -> Reply {
@@ -235,7 +231,7 @@ pub async fn destroy(
 #[debug_handler]
 pub async fn restore(
     State(ctx): State<AppContext>,
-    _session: Authenticated,
+    _session: Auth,
     Path(id): Path<i64>,
     body: Bytes,
 ) -> Reply {
@@ -307,7 +303,7 @@ pub async fn restore(
 #[debug_handler]
 pub async fn import(
     State(ctx): State<AppContext>,
-    _session: Authenticated,
+    _session: Auth,
     origin: RequestOrigin,
     // O `Result` e' obrigatorio: a rejeicao do extractor `Multipart` responde
     // `400 text/plain`, e o golden `backups/import-no-file` grava **422** com o
@@ -590,7 +586,7 @@ async fn insert_imported(
 ) -> std::result::Result<backups::Model, ApiError> {
     use sea_orm::ActiveValue::Set;
 
-    let now = chrono::Utc::now().naive_utc();
+    let now = chrono::Utc::now().fixed_offset();
 
     let active = backups::ActiveModel {
         connection_id: Set(record.connection_id),

@@ -197,7 +197,7 @@ fn normalize_cron(value: Option<&serde_json::Value>, fallback: &str) -> String {
 async fn upsert(ctx: &AppContext, policy: &BackupRetentionPolicy) -> Result<()> {
     let value = serde_json::to_string(policy)
         .map_err(|err| Error::Message(format!("falha ao serializar politica: {err}")))?;
-    let now = chrono::Utc::now().naive_utc();
+    let now = chrono::Utc::now().fixed_offset();
 
     let existing = system_settings::Entity::find()
         .filter(system_settings::Column::Name.eq(SETTING_NAME))

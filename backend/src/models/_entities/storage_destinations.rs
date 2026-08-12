@@ -6,6 +6,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize, Deserialize)]
 #[sea_orm(table_name = "storage_destinations")]
 pub struct Model {
+    pub created_at: DateTimeWithTimeZone,
+    pub updated_at: DateTimeWithTimeZone,
     #[sea_orm(primary_key)]
     pub id: i64,
     pub name: String,
@@ -16,8 +18,6 @@ pub struct Model {
     pub is_default: bool,
     #[sea_orm(column_type = "Text")]
     pub config_encrypted: String,
-    pub created_at: DateTime,
-    pub updated_at: DateTime,
     pub provider: Option<String>,
 }
 

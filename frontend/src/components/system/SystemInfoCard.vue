@@ -97,9 +97,9 @@
           <template #prepend>
             <v-icon icon="mdi-language-javascript" />
           </template>
-          <v-list-item-title>Node.js</v-list-item-title>
+          <v-list-item-title>Runtime</v-list-item-title>
           <template #append>
-            <span class="text-medium-emphasis">{{ system?.nodeVersion ?? '-' }}</span>
+            <span class="text-medium-emphasis">{{ system?.runtimeVersion ?? '-' }}</span>
           </template>
         </v-list-item>
 

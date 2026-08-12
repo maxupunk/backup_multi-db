@@ -29,7 +29,7 @@ struct PrunableBackup {
     retention_type: RetentionType,
     file_path: Option<String>,
     file_name: Option<String>,
-    created_at: chrono::NaiveDateTime,
+    created_at: chrono::DateTime<chrono::FixedOffset>,
 }
 
 /// Backup que foi removido, para o relatorio.
@@ -88,7 +88,7 @@ pub async fn prune_backups(ctx: &AppContext) -> Result<RetentionResult> {
                 connection_id: b.connection_id,
                 connection_database_id: b.connection_database_id,
                 database_name: b.database_name.clone(),
-                created_at: b.created_at,
+                created_at: b.created_at.naive_utc(),
                 status: b.status,
                 retention_type: b.retention_type,
             })
@@ -220,7 +220,7 @@ async fn sync_retention_types(
         return Ok(0);
     }
 
-    let now = chrono::Utc::now().naive_utc();
+    let now = chrono::Utc::now().fixed_offset();
 
     for (retention_type, ids) in ids_by_type {
         for chunk in ids.chunks(BATCH_SIZE) {

@@ -1,22 +1,20 @@
-//! Respostas de `/api/auth/*` (tarefa 5.1).
+//! Respostas de `/api/auth/*`.
 //!
-//! Sao tres formas de usuario no contrato, e a diferenca entre elas e'
-//! deliberada, nao descuido do Adonis:
+//! Sao tres formas de usuario, e a diferenca entre elas e' deliberada:
 //!
 //! - [`SessionUser`] — o que sai junto do token em `register` e `login`. **Sem
-//!   `createdAt`.**
+//!   `createdAt`**, porque a tela que recebe o token nao o usa.
 //! - [`CurrentUser`] — o de `GET /api/auth/me`, **com `createdAt`**.
-//! - `UserListItem` (em [`crate::views::users`]) — o da listagem administrativa,
-//!   com todas as colunas serializaveis.
+//! - `UserListItem` (em [`crate::views::users`]) — o da listagem
+//!   administrativa, com todas as colunas serializaveis.
 //!
-//! Unificar as tres numa so' acrescentaria chave em resposta que hoje nao tem —
-//! e o matcher de shape da suite reprova chave a mais tanto quanto chave a
-//! menos.
+//! Nenhuma delas expoe `password`, `api_key`, `pid` ou os campos de
+//! recuperacao. Unificar as tres numa so' resolveria pouco e acrescentaria
+//! campo sensivel em resposta que hoje nao tem.
 
 use serde::Serialize;
 
 use crate::models::_entities::users;
-use crate::views::timestamp;
 
 /// Estado do sistema para a tela de primeiro acesso.
 #[derive(Debug, Clone, Serialize)]
@@ -84,8 +82,7 @@ pub struct CurrentUser {
     pub full_name: Option<String>,
     pub is_active: bool,
     pub is_admin: bool,
-    #[serde(serialize_with = "timestamp::serialize")]
-    pub created_at: chrono::NaiveDateTime,
+    pub created_at: chrono::DateTime<chrono::FixedOffset>,
 }
 
 impl From<&users::Model> for CurrentUser {
@@ -110,15 +107,24 @@ mod tests {
             id: 7,
             full_name: Some("Contract Admin".to_string()),
             email: "admin@contract.test".to_string(),
-            password: "$scrypt$n=16384,r=8,p=1$c2FsdA$aGFzaA".to_string(),
+            password: "$argon2id$v=19$m=19456,t=2,p=1$c2FsdA$aGFzaA".to_string(),
+            api_key: "bk_test".to_string(),
+            pid: uuid::Uuid::nil(),
+            reset_token: None,
+            reset_sent_at: None,
+            email_verification_token: None,
+            email_verification_sent_at: None,
+            email_verified_at: None,
             is_active: true,
             is_admin: true,
             created_at: chrono::NaiveDateTime::parse_from_str(
                 "2026-08-05 08:09:51",
                 "%Y-%m-%d %H:%M:%S",
             )
-            .expect("data de teste"),
-            updated_at: None,
+            .expect("data de teste")
+            .and_utc()
+            .fixed_offset(),
+            updated_at: chrono::DateTime::UNIX_EPOCH.fixed_offset(),
         }
     }
 
@@ -139,34 +145,37 @@ mod tests {
     }
 
     #[test]
-    fn the_current_user_has_created_at() {
+    fn the_current_user_has_created_at_in_rfc_3339() {
+        // With the offset: the value the browser gets is an instant, not a wall
+        // clock it has to guess a zone for.
         let json = serde_json::to_value(CurrentUser::from(&user())).expect("serializa");
 
-        assert_eq!(json["createdAt"], "2026-08-05T08:09:51.000");
+        assert_eq!(json["createdAt"], "2026-08-05T08:09:51Z");
         assert_eq!(json.as_object().map(serde_json::Map::len), Some(6));
     }
 
     #[test]
-    fn no_view_ever_carries_the_password() {
-        // A coluna existe no `Model`; um `#[derive(Serialize)]` na entidade a
-        // levaria junto. As views sao o que impede isso.
+    fn no_view_ever_carries_a_secret() {
+        // The columns exist on the `Model`; a `#[derive(Serialize)]` on the
+        // entity would carry them along. The views are what stops that.
         for json in [
             serde_json::to_value(SessionUser::from(&user())).expect("serializa"),
             serde_json::to_value(CurrentUser::from(&user())).expect("serializa"),
         ] {
             let rendered = json.to_string();
-            assert!(!rendered.contains("password"), "vazou a chave: {rendered}");
-            assert!(!rendered.contains("$scrypt$"), "vazou o hash: {rendered}");
+            for secret in ["password", "$argon2", "apiKey", "api_key", "resetToken"] {
+                assert!(!rendered.contains(secret), "vazou {secret}: {rendered}");
+            }
         }
     }
 
     #[test]
     fn the_token_type_is_the_literal_bearer() {
-        let json =
-            serde_json::to_value(Session::new("oat_MQ.YWJj".to_string(), &user())).expect("ok");
+        let json = serde_json::to_value(Session::new("a.jwt.token".to_string(), &user()))
+            .expect("serializa");
 
         assert_eq!(json["type"], "bearer");
-        assert_eq!(json["token"], "oat_MQ.YWJj");
+        assert_eq!(json["token"], "a.jwt.token");
     }
 
     #[test]

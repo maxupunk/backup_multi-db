@@ -25,7 +25,6 @@
 use serde::Serialize;
 
 use crate::models::_entities::{backups, connection_databases, connections};
-use crate::views::timestamp;
 
 /// Um booleano com o tipo JSON que o contrato exige naquele ponto.
 ///
@@ -80,10 +79,8 @@ pub struct BackupSummary {
     pub status: String,
     pub file_size: Option<i64>,
     pub database_name: String,
-    #[serde(serialize_with = "timestamp::serialize")]
-    pub created_at: chrono::NaiveDateTime,
-    #[serde(serialize_with = "timestamp::serialize_option")]
-    pub finished_at: Option<chrono::NaiveDateTime>,
+    pub created_at: chrono::DateTime<chrono::FixedOffset>,
+    pub finished_at: Option<chrono::DateTime<chrono::FixedOffset>>,
 }
 
 impl From<backups::Model> for BackupSummary {
@@ -110,10 +107,8 @@ pub struct BackupDetail {
     pub database_name: String,
     pub retention_type: String,
     pub trigger: String,
-    #[serde(serialize_with = "timestamp::serialize")]
-    pub created_at: chrono::NaiveDateTime,
-    #[serde(serialize_with = "timestamp::serialize_option")]
-    pub finished_at: Option<chrono::NaiveDateTime>,
+    pub created_at: chrono::DateTime<chrono::FixedOffset>,
+    pub finished_at: Option<chrono::DateTime<chrono::FixedOffset>>,
     pub duration_seconds: Option<i64>,
 }
 
@@ -153,10 +148,8 @@ struct Core {
     status: Option<String>,
     storage_destination_id: Option<i64>,
     options: Option<serde_json::Value>,
-    #[serde(serialize_with = "timestamp::serialize")]
-    created_at: chrono::NaiveDateTime,
-    #[serde(serialize_with = "timestamp::serialize")]
-    updated_at: chrono::NaiveDateTime,
+    created_at: chrono::DateTime<chrono::FixedOffset>,
+    updated_at: chrono::DateTime<chrono::FixedOffset>,
 }
 
 impl Core {
@@ -184,10 +177,8 @@ impl Core {
 #[serde(rename_all = "camelCase")]
 struct TestState {
     last_error: Option<String>,
-    #[serde(serialize_with = "timestamp::serialize_option")]
-    last_tested_at: Option<chrono::NaiveDateTime>,
-    #[serde(serialize_with = "timestamp::serialize_option")]
-    last_backup_at: Option<chrono::NaiveDateTime>,
+    last_tested_at: Option<chrono::DateTime<chrono::FixedOffset>>,
+    last_backup_at: Option<chrono::DateTime<chrono::FixedOffset>>,
 }
 
 impl From<&connections::Model> for TestState {
@@ -348,8 +339,11 @@ fn parse_options(raw: Option<&str>) -> Option<serde_json::Value> {
 mod tests {
     use super::*;
 
-    fn at(text: &str) -> chrono::NaiveDateTime {
-        chrono::NaiveDateTime::parse_from_str(text, "%Y-%m-%d %H:%M:%S").expect("data de teste")
+    fn at(text: &str) -> chrono::DateTime<chrono::FixedOffset> {
+        chrono::NaiveDateTime::parse_from_str(text, "%Y-%m-%d %H:%M:%S")
+            .expect("data de teste")
+            .and_utc()
+            .fixed_offset()
     }
 
     fn connection() -> connections::Model {

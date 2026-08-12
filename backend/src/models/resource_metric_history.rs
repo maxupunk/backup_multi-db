@@ -38,7 +38,7 @@ struct PendingRow {
     memory_usage_percent: f64,
     memory_used_bytes: i64,
     memory_total_bytes: i64,
-    collected_at: chrono::NaiveDateTime,
+    collected_at: chrono::DateTime<chrono::FixedOffset>,
 }
 
 /// Estado em memoria do buffer e controle de cadencia.
@@ -85,8 +85,8 @@ fn state(ctx: &AppContext) -> loco_rs::Result<State> {
         .ok_or_else(|| Error::Message("resource metric history state was not initialized".into()))
 }
 
-fn now() -> chrono::NaiveDateTime {
-    chrono::Utc::now().naive_utc()
+fn now() -> chrono::DateTime<chrono::FixedOffset> {
+    chrono::Utc::now().fixed_offset()
 }
 
 fn persist_key(scope: &str, entity_id: Option<&str>) -> String {
@@ -97,7 +97,7 @@ fn persist_key(scope: &str, entity_id: Option<&str>) -> String {
 pub async fn record_system(ctx: &AppContext, overview: &SystemOverview) -> Result<()> {
     let key = persist_key("system", None);
     let collected_at = now();
-    let collected_at_ms = collected_at.and_utc().timestamp_millis() as u64;
+    let collected_at_ms = collected_at.timestamp_millis() as u64;
     let min_interval_ms = MIN_PERSIST_INTERVAL.as_millis() as u64;
 
     let should = state(ctx)?
@@ -144,7 +144,7 @@ pub async fn record_containers(
     }
 
     let collected_at = now();
-    let collected_at_ms = collected_at.and_utc().timestamp_millis() as u64;
+    let collected_at_ms = collected_at.timestamp_millis() as u64;
     let min_interval_ms = MIN_PERSIST_INTERVAL.as_millis() as u64;
     let mut rows = Vec::with_capacity(overview.containers.len());
 
@@ -394,7 +394,7 @@ fn format_bucket_time(raw: &str) -> String {
 
 fn history_sql(
     backend: sea_orm::DatabaseBackend,
-    start_at: chrono::NaiveDateTime,
+    start_at: chrono::DateTime<chrono::FixedOffset>,
     bucket_seconds: i64,
 ) -> (String, Vec<sea_orm::Value>) {
     match backend {

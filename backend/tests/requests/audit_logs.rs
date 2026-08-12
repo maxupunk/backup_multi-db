@@ -218,7 +218,7 @@ async fn an_unknown_action_omits_the_derived_keys() {
             entity_type: sea_orm::ActiveValue::Set("settings".to_string()),
             description: sea_orm::ActiveValue::Set("Plugin executado".to_string()),
             status: sea_orm::ActiveValue::Set(AuditStatus::Success.as_str().to_string()),
-            created_at: sea_orm::ActiveValue::Set(chrono::Utc::now().naive_utc()),
+            created_at: sea_orm::ActiveValue::Set(chrono::Utc::now().fixed_offset()),
             ..Default::default()
         })
         .exec(&ctx.db)

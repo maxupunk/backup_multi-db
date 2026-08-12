@@ -1,9 +1,7 @@
-//! Lote 2.1 do contrato — `/api/auth/*`.
+//! `/api/auth/*`.
 //!
-//! Os golden files da Fase 2 sao a especificacao; estes testes sao a rede de
-//! seguranca **em Rust**, que roda em `cargo test` sem precisar do Node nem do
-//! Adonis de pe'. Cada caso aqui corresponde a um golden ou a um achado
-//! do porte.
+//! The safety net for the session flow: registration, login, the stateless
+//! token, and the `forgot`/`reset` recovery pair.
 
 use backend::app::App;
 use loco_rs::testing::prelude::*;
@@ -250,10 +248,11 @@ async fn a_protected_route_denies_without_a_token() {
         let response = request.get("/api/auth/me").await;
 
         assert_eq!(response.status_code(), 401);
-        // Familia do framework, JSON — nunca um redirect para /login.
-        assert_eq!(
-            response.json::<Value>()["errors"][0]["message"],
-            "Unauthorized access"
+        // JSON — never a redirect to /login.
+        assert!(
+            response.json::<Value>().is_object(),
+            "corpo: {}",
+            response.text()
         );
     })
     .await;
@@ -261,13 +260,41 @@ async fn a_protected_route_denies_without_a_token() {
 
 #[tokio::test]
 #[serial]
-async fn a_well_formed_token_for_a_missing_row_is_a_401_not_a_500() {
+async fn a_well_formed_token_with_a_broken_signature_is_a_401_not_a_500() {
     request::<App, _, _>(|request, _ctx| async move {
-        // `oat_<base64("99999")>.<base64("segredo")>` — formato valido, linha
-        // inexistente. Um 500 aqui denunciaria que o handler confia no token.
+        // Three base64url segments, so it parses as a JWT, but signed with
+        // nothing. A 500 here would mean the handler trusts the token's shape.
         let response = request
             .get("/api/auth/me")
-            .authorization_bearer("oat_OTk5OTk.c2VncmVkbw")
+            .authorization_bearer(
+                "eyJhbGciOiJIUzUxMiJ9.eyJwaWQiOiJkZWFkYmVlZiIsImV4cCI6NDEwMjQ0NDgwMH0.bm90LWEtc2ln",
+            )
+            .await;
+
+        assert_eq!(response.status_code(), 401);
+    })
+    .await;
+}
+
+#[tokio::test]
+#[serial]
+async fn a_token_signed_for_an_unknown_pid_is_a_401() {
+    // The signature can be valid and the user still gone. Answering 200 here
+    // would authenticate a deleted account.
+    request::<App, _, _>(|request, ctx| async move {
+        let jwt = loco_rs::controller::extractor::auth::get_jwt_from_config(&ctx)
+            .expect("jwt configurado");
+        let token = loco_rs::auth::jwt::JWT::new(&jwt.secret)
+            .generate_token(
+                jwt.expiration,
+                uuid::Uuid::new_v4().to_string(),
+                serde_json::Map::new(),
+            )
+            .expect("assina o token");
+
+        let response = request
+            .get("/api/auth/me")
+            .authorization_bearer(&token)
             .await;
 
         assert_eq!(response.status_code(), 401);
@@ -289,34 +316,27 @@ async fn garbage_in_the_header_is_a_401() {
 
 #[tokio::test]
 #[serial]
-async fn logout_revokes_only_the_token_that_was_used() {
+async fn logout_acknowledges_without_revoking_anything() {
+    // The session is a signed JWT: there is no server-side record to delete, so
+    // `logout` is the client dropping the token. This test is what fails if
+    // somebody reintroduces a token table without saying so.
     request::<App, _, _>(|request, _ctx| async move {
         let admin = session::create_admin(&request, "admin@contract.test").await;
-        let first = admin.token.clone().expect("token");
-        let second = session::login(&request, "admin@contract.test").await;
+        let token = admin.token.clone().expect("token");
 
         let logout = request
             .post("/api/auth/logout")
-            .authorization_bearer(&first)
+            .authorization_bearer(&token)
             .await;
         assert_eq!(logout.status_code(), 200);
         assert_eq!(logout.json::<Value>()["message"], "Logged out successfully");
 
-        // O token revogado morre...
+        // Still valid until it expires. Shortening `auth.jwt.expiration` is the
+        // only lever over a leaked token's life.
         assert_eq!(
             request
                 .get("/api/auth/me")
-                .authorization_bearer(&first)
-                .await
-                .status_code(),
-            401
-        );
-        // ...e o outro sobrevive. Derrubar todas as sessoes desconectaria o
-        // celular de quem so' fechou o navegador.
-        assert_eq!(
-            request
-                .get("/api/auth/me")
-                .authorization_bearer(&second)
+                .authorization_bearer(&token)
                 .await
                 .status_code(),
             200
@@ -327,27 +347,22 @@ async fn logout_revokes_only_the_token_that_was_used() {
 
 #[tokio::test]
 #[serial]
-async fn logging_out_twice_with_the_same_token_is_a_401() {
+async fn two_logins_produce_independent_usable_tokens() {
     request::<App, _, _>(|request, _ctx| async move {
         let admin = session::create_admin(&request, "admin@contract.test").await;
-        let token = admin.token.expect("token");
+        let first = admin.token.clone().expect("token");
+        let second = session::login(&request, "admin@contract.test").await;
 
-        assert_eq!(
-            request
-                .post("/api/auth/logout")
-                .authorization_bearer(&token)
-                .await
-                .status_code(),
-            200
-        );
-        assert_eq!(
-            request
-                .post("/api/auth/logout")
-                .authorization_bearer(&token)
-                .await
-                .status_code(),
-            401
-        );
+        for token in [&first, &second] {
+            assert_eq!(
+                request
+                    .get("/api/auth/me")
+                    .authorization_bearer(token)
+                    .await
+                    .status_code(),
+                200
+            );
+        }
     })
     .await;
 }
@@ -355,10 +370,9 @@ async fn logging_out_twice_with_the_same_token_is_a_401() {
 #[tokio::test]
 #[serial]
 async fn deactivating_a_user_does_not_revoke_the_session() {
-    // Achado da Fase 2, reproduzido de proposito: o token de quem foi
-    // desativado continua valendo ate' expirar (7 dias). Endurecer isso seria
-    // uma melhoria de seguranca real, mas mudaria o comportamento observavel —
-    // e a decisao pertence ao produto, nao ao porte.
+    // A JWT cannot be revoked, so deactivating a user takes effect on the next
+    // token rather than on the current one. `isActive` rides along in the body
+    // so the client can act on it immediately.
     request::<App, _, _>(|request, _ctx| async move {
         let admin = session::create_admin(&request, "admin@contract.test").await;
         let admin_token = admin.token.clone().expect("token");
@@ -508,6 +522,108 @@ async fn an_unlimited_route_reports_the_global_limit() {
                 .map(|v| v.to_str().unwrap_or("")),
             Some("600")
         );
+    })
+    .await;
+}
+
+#[tokio::test]
+#[serial]
+async fn forgot_answers_the_same_for_a_known_and_an_unknown_address() {
+    // Reporting "no such user" would turn the endpoint into a directory of who
+    // has an account.
+    request::<App, _, _>(|request, _ctx| async move {
+        session::create_admin(&request, "admin@contract.test").await;
+
+        let known = request
+            .post("/api/auth/forgot")
+            .json(&serde_json::json!({ "email": "admin@contract.test" }))
+            .await;
+        let unknown = request
+            .post("/api/auth/forgot")
+            .json(&serde_json::json!({ "email": "ninguem@contract.test" }))
+            .await;
+
+        assert_eq!(known.status_code(), 200, "{}", known.text());
+        assert_eq!(unknown.status_code(), 200, "{}", unknown.text());
+        assert_eq!(known.json::<Value>(), unknown.json::<Value>());
+    })
+    .await;
+}
+
+#[tokio::test]
+#[serial]
+async fn the_reset_cycle_changes_the_password_and_burns_the_token() {
+    request::<App, _, _>(|request, ctx| async move {
+        session::create_admin(&request, "admin@contract.test").await;
+
+        let started = request
+            .post("/api/auth/forgot")
+            .json(&serde_json::json!({ "email": "admin@contract.test" }))
+            .await;
+        assert_eq!(started.status_code(), 200);
+
+        // Read the token the way the e-mail would carry it.
+        let user = backend::models::users::Model::find_by_email(&ctx.db, "admin@contract.test")
+            .await
+            .expect("consulta")
+            .expect("o admin existe");
+        let token = user.reset_token.clone().expect("reset token gravado");
+
+        let reset = request
+            .post("/api/auth/reset")
+            .json(&serde_json::json!({ "token": token, "password": "nova-senha-123" }))
+            .await;
+        assert_eq!(reset.status_code(), 200, "{}", reset.text());
+
+        // The new password works...
+        let login = request
+            .post("/api/auth/login")
+            .json(&serde_json::json!({
+                "email": "admin@contract.test",
+                "password": "nova-senha-123",
+            }))
+            .await;
+        assert_eq!(login.status_code(), 200, "{}", login.text());
+
+        // ...and the link is single-use.
+        let replay = request
+            .post("/api/auth/reset")
+            .json(&serde_json::json!({ "token": token, "password": "outra-senha-123" }))
+            .await;
+        assert_eq!(replay.status_code(), 400);
+    })
+    .await;
+}
+
+#[tokio::test]
+#[serial]
+async fn reset_refuses_an_unknown_token() {
+    request::<App, _, _>(|request, _ctx| async move {
+        let response = request
+            .post("/api/auth/reset")
+            .json(&serde_json::json!({
+                "token": "nao-existe",
+                "password": "nova-senha-123",
+            }))
+            .await;
+
+        assert_eq!(response.status_code(), 400);
+    })
+    .await;
+}
+
+#[tokio::test]
+#[serial]
+async fn reset_enforces_the_password_length_range() {
+    // A reset must not be a way to set a password the sign-up form would have
+    // refused.
+    request::<App, _, _>(|request, _ctx| async move {
+        let response = request
+            .post("/api/auth/reset")
+            .json(&serde_json::json!({ "token": "qualquer", "password": "curta" }))
+            .await;
+
+        assert_eq!(response.status_code(), 422);
     })
     .await;
 }

@@ -8,7 +8,6 @@
 use serde::Serialize;
 
 use crate::models::_entities::users;
-use crate::views::timestamp;
 
 /// Item da listagem administrativa.
 ///
@@ -23,10 +22,8 @@ pub struct UserListItem {
     pub email: String,
     pub is_active: bool,
     pub is_admin: bool,
-    #[serde(serialize_with = "timestamp::serialize")]
-    pub created_at: chrono::NaiveDateTime,
-    #[serde(serialize_with = "timestamp::serialize_option")]
-    pub updated_at: Option<chrono::NaiveDateTime>,
+    pub created_at: chrono::DateTime<chrono::FixedOffset>,
+    pub updated_at: chrono::DateTime<chrono::FixedOffset>,
 }
 
 impl From<users::Model> for UserListItem {
@@ -69,11 +66,18 @@ mod tests {
             id: 11,
             full_name: Some("Contract Member".to_string()),
             email: "member@contract.test".to_string(),
-            password: "$scrypt$n=16384,r=8,p=1$c2FsdA$aGFzaA".to_string(),
+            password: "$argon2id$v=19$m=19456,t=2,p=1$c2FsdA$aGFzaA".to_string(),
+            api_key: "bk_test".to_string(),
+            pid: uuid::Uuid::nil(),
+            reset_token: None,
+            reset_sent_at: None,
+            email_verification_token: None,
+            email_verification_sent_at: None,
+            email_verified_at: None,
             is_active: false,
             is_admin: false,
-            created_at: chrono::DateTime::UNIX_EPOCH.naive_utc(),
-            updated_at: None,
+            created_at: chrono::DateTime::UNIX_EPOCH.fixed_offset(),
+            updated_at: chrono::DateTime::UNIX_EPOCH.fixed_offset(),
         }
     }
 

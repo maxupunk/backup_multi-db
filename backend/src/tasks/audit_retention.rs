@@ -17,7 +17,8 @@ impl Task for AuditRetentionTask {
     }
 
     async fn run(&self, app_context: &AppContext, _vars: &Vars) -> Result<()> {
-        let report = AuditLog::prune_expired(app_context, chrono::Utc::now().naive_utc()).await?;
+        let report =
+            AuditLog::prune_expired(app_context, chrono::Utc::now().fixed_offset()).await?;
         tracing::info!(
             retention_days = report.retention_days,
             deleted = report.deleted,

@@ -4,11 +4,10 @@
 //! `serde_json::Value`. Este modulo o transforma numa struct tipada, com uma
 //! regra: **falhar no boot**, nunca em runtime.
 //!
-//! O Adonis valida o `.env` inteiro no `start/env.ts` antes do servidor subir —
-//! `DB_ENCRYPTION_KEY` ausente derruba o processo na hora, e nao na primeira
-//! requisicao que tenta descriptografar uma senha. Reproduzir isso e' o unico
-//! jeito de o backend nao trocar um erro de configuracao evidente por uma
-//! falha intermitente meses depois.
+//! Uma `db_encryption_key` ausente tem que derrubar o processo no boot, e nao
+//! na primeira requisicao que tenta descriptografar uma senha — que pode ser
+//! semanas depois do deploy. E' a diferenca entre um erro de configuracao
+//! evidente e uma falha intermitente.
 //!
 //! Por isso a validacao vive num [`Initializer`] do proprio Loco, e nao numa
 //! funcao avulsa chamada em algum lugar: o framework ja' tem o gancho certo
@@ -18,8 +17,7 @@ use async_trait::async_trait;
 use loco_rs::prelude::*;
 use serde::{Deserialize, Serialize};
 
-/// Quantidade e janela de um limitador, espelhando `LIMITS` do middleware
-/// `app/middleware/rate_limit_middleware.ts`.
+/// Quantidade e janela de um limitador.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RateLimit {
     pub requests: u32,
@@ -33,7 +31,7 @@ impl RateLimit {
     }
 }
 
-/// Os quatro limitadores nomeados do Adonis.
+/// Os quatro limitadores nomeados da aplicacao.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct RateLimits {
@@ -63,10 +61,6 @@ impl Default for RateLimits {
 pub struct Settings {
     /// Chave AES-256-GCM em hex (64 caracteres). Equivale a `DB_ENCRYPTION_KEY`.
     pub db_encryption_key: String,
-
-    /// TTL do access token, no formato do Adonis (`7d`, `12h`, `30m`).
-    #[serde(default = "default_token_ttl")]
-    pub auth_access_token_expires_in: String,
 
     /// Token exigido para criar o primeiro admin. Vazio = sem exigencia fora
     /// de producao, exatamente como `hasValidBootstrapToken` faz.
@@ -99,10 +93,6 @@ pub struct Settings {
     /// economiza disco ao custo de depender do provedor para toda leitura.
     #[serde(default)]
     pub backup_delete_local_after_remote_upload: bool,
-}
-
-fn default_token_ttl() -> String {
-    "7d".to_string()
 }
 
 fn default_backup_storage_path() -> String {
@@ -162,21 +152,7 @@ impl Settings {
             ));
         }
 
-        parse_duration(&self.auth_access_token_expires_in).ok_or_else(|| {
-            Error::Message(format!(
-                "auth_access_token_expires_in invalido: {:?} (use algo como `7d`, `12h`, `30m`)",
-                self.auth_access_token_expires_in
-            ))
-        })?;
-
         Ok(())
-    }
-
-    /// TTL do token em segundos.
-    pub fn token_ttl_seconds(&self) -> u64 {
-        // `validate` ja' garantiu que faz o parse; o `unwrap_or` cobre o caso
-        // de alguem construir a struct a mao sem validar.
-        parse_duration(&self.auth_access_token_expires_in).unwrap_or(7 * 24 * 60 * 60)
     }
 
     /// Chave de criptografia como bytes, pronta para o `EncryptionService`.
@@ -184,31 +160,6 @@ impl Settings {
         hex::decode(&self.db_encryption_key)
             .map_err(|err| Error::Message(format!("db_encryption_key invalida: {err}")))
     }
-}
-
-/// Converte `7d`, `12h`, `30m`, `45s` em segundos.
-///
-/// E' o subconjunto do formato do Adonis que a configuracao usa de fato. Um
-/// sufixo desconhecido devolve `None` em vez de um palpite: interpretar `7x`
-/// como 7 segundos daria a um token uma validade absurdamente curta sem
-/// nenhum aviso.
-pub fn parse_duration(input: &str) -> Option<u64> {
-    let trimmed = input.trim();
-    if trimmed.is_empty() {
-        return None;
-    }
-
-    let (digits, suffix) = trimmed.split_at(trimmed.len() - 1);
-    let multiplier = match suffix {
-        "s" => 1,
-        "m" => 60,
-        "h" => 60 * 60,
-        "d" => 24 * 60 * 60,
-        // Sem sufixo: o valor inteiro ja' esta' em segundos.
-        _ => return trimmed.parse::<u64>().ok(),
-    };
-
-    digits.parse::<u64>().ok().map(|value| value * multiplier)
 }
 
 /// Valida o bloco `settings:` durante o boot.
@@ -232,7 +183,6 @@ impl Initializer for SettingsInitializer {
         // Nunca logue a chave. O `Debug` da struct a renderia inteira, entao
         // aqui so' sai o que e' seguro conferir num log de boot.
         tracing::info!(
-            token_ttl_seconds = settings.token_ttl_seconds(),
             global_limit = settings.rate_limits.global.requests,
             auth_limit = settings.rate_limits.auth.requests,
             "settings validadas"
@@ -265,7 +215,6 @@ mod tests {
         let settings = Settings::from_json(Some(&json(""))).unwrap();
 
         assert_eq!(settings.db_encryption_key, VALID_KEY);
-        assert_eq!(settings.auth_access_token_expires_in, "7d");
         assert_eq!(settings.audit_retention_days, 30);
     }
 
@@ -303,34 +252,6 @@ mod tests {
         .unwrap();
 
         assert!(Settings::from_json(Some(&value)).is_err());
-    }
-
-    #[test]
-    fn rejects_an_unparseable_ttl() {
-        let value = json(r#""auth_access_token_expires_in": "7 semanas""#);
-        assert!(Settings::from_json(Some(&value)).is_err());
-    }
-
-    #[test]
-    fn converts_the_ttl_to_seconds() {
-        for (input, expected) in [
-            ("45s", 45),
-            ("30m", 1_800),
-            ("12h", 43_200),
-            ("7d", 604_800),
-            ("3600", 3_600),
-        ] {
-            assert_eq!(parse_duration(input), Some(expected), "falhou em {input}");
-        }
-    }
-
-    #[test]
-    fn refuses_to_guess_an_unknown_suffix() {
-        // Tratar `7x` como 7 segundos daria ao token uma validade absurda sem
-        // nenhum aviso — melhor recusar.
-        for input in ["7x", "", "  ", "d", "abc"] {
-            assert_eq!(parse_duration(input), None, "aceitou {input:?}");
-        }
     }
 
     #[test]

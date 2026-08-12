@@ -86,7 +86,7 @@ pub async fn run_backup(ctx: &AppContext, request: BackupRequest<'_>) -> Result<
         &settings.backup_storage_path,
     );
 
-    let started_at = chrono::Utc::now().naive_utc();
+    let started_at = chrono::Utc::now().fixed_offset();
     let backup = create_record(
         ctx,
         &request,
@@ -134,7 +134,7 @@ pub async fn run_backup(ctx: &AppContext, request: BackupRequest<'_>) -> Result<
         outcome = Err(message);
     }
 
-    let finished_at = chrono::Utc::now().naive_utc();
+    let finished_at = chrono::Utc::now().fixed_offset();
     let backup = finish_record(ctx, backup, started_at, finished_at, &outcome).await?;
 
     match &outcome {
@@ -223,7 +223,7 @@ async fn perform_dump(
     encryption: &EncryptionService,
     database_name: &str,
     base: &std::path::Path,
-    now: chrono::NaiveDateTime,
+    now: chrono::DateTime<chrono::FixedOffset>,
     emitter: &mut BackupProgressEmitter,
 ) -> std::result::Result<dump::DumpOutcome, String> {
     let target = connection
@@ -272,7 +272,7 @@ async fn create_record(
     ctx: &AppContext,
     request: &BackupRequest<'_>,
     storage_destination_id: Option<i64>,
-    started_at: chrono::NaiveDateTime,
+    started_at: chrono::DateTime<chrono::FixedOffset>,
 ) -> Result<backups::Model> {
     let mut active = backups::ActiveModel {
         connection_id: Set(Some(request.connection.id)),
@@ -299,8 +299,8 @@ async fn create_record(
 async fn finish_record(
     ctx: &AppContext,
     backup: backups::Model,
-    started_at: chrono::NaiveDateTime,
-    finished_at: chrono::NaiveDateTime,
+    started_at: chrono::DateTime<chrono::FixedOffset>,
+    finished_at: chrono::DateTime<chrono::FixedOffset>,
     outcome: &std::result::Result<dump::DumpOutcome, String>,
 ) -> Result<backups::Model> {
     let mut active: backups::ActiveModel = backup.into();
@@ -328,7 +328,7 @@ async fn finish_record(
 /// **uma vez** por chamada de `executeAll`, e nao por database — a coluna
 /// responde "quando esta conexao foi backupeada", nao "quantas vezes".
 pub async fn touch_last_backup(ctx: &AppContext, connection: connections::Model) -> Result<()> {
-    let now = chrono::Utc::now().naive_utc();
+    let now = chrono::Utc::now().fixed_offset();
     let mut active: connections::ActiveModel = connection.into();
     active.last_backup_at = Set(Some(now));
     active.updated_at = Set(now);
@@ -685,8 +685,8 @@ mod tests {
                 exit_code: None,
                 metadata: None,
                 trigger: "manual".to_string(),
-                created_at: chrono::NaiveDateTime::default(),
-                updated_at: chrono::NaiveDateTime::default(),
+                created_at: chrono::DateTime::UNIX_EPOCH.fixed_offset(),
+                updated_at: chrono::DateTime::UNIX_EPOCH.fixed_offset(),
                 storage_destination_id: None,
             },
             outcome: Err("Access denied".to_string()),

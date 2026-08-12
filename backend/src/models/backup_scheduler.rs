@@ -19,7 +19,10 @@ pub struct DispatchReport {
 }
 
 /// Executa os backups que estão vencidos no instante informado.
-pub async fn dispatch(ctx: &AppContext, now: chrono::NaiveDateTime) -> Result<DispatchReport> {
+pub async fn dispatch(
+    ctx: &AppContext,
+    now: chrono::DateTime<chrono::FixedOffset>,
+) -> Result<DispatchReport> {
     let connections = connections::Model::scheduled_active(&ctx.db).await?;
     let mut report = DispatchReport {
         eligible_connections: connections.len(),

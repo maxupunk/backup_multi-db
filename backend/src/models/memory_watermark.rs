@@ -35,13 +35,12 @@ pub struct MemoryWatermark {
     pub observed_since: String,
     pub current: MemoryReading,
     pub peak_rss_bytes: u64,
-    #[serde(serialize_with = "crate::views::timestamp::serialize_option")]
-    pub peak_rss_observed_at: Option<chrono::NaiveDateTime>,
+    pub peak_rss_observed_at: Option<chrono::DateTime<chrono::FixedOffset>>,
 }
 
 struct StateInner {
     peak_rss_bytes: u64,
-    peak_rss_observed_at: Option<chrono::NaiveDateTime>,
+    peak_rss_observed_at: Option<chrono::DateTime<chrono::FixedOffset>>,
     observed_since: String,
     last_pressure_log_at: Option<Instant>,
 }
@@ -79,7 +78,7 @@ fn state(ctx: &AppContext) -> loco_rs::Result<State> {
 /// a cada ciclo de polling.
 pub async fn sample(ctx: &AppContext, context: &str) -> Result<MemoryWatermark> {
     let reading = current_reading();
-    let now = chrono::Utc::now().naive_utc();
+    let now = chrono::Utc::now().fixed_offset();
 
     let state = state(ctx)?;
     let mut guard = state.inner.lock().await;

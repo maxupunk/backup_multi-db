@@ -139,8 +139,6 @@ db-backup-manager/
 │       ├── pages/
 │       ├── services/
 │       └── stores/
-├── contract-tests/       # Suíte de contrato black-box
-├── docs/                 # Spec OpenAPI e baseline de rotas
 ├── docker-compose.yml    # Produção
 ├── docker-compose.dev.yml# Desenvolvimento
 └── README.md

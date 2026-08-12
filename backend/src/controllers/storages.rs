@@ -21,9 +21,9 @@ use loco_rs::prelude::*;
 use validator::Validate;
 
 use crate::controllers::json_body;
-use crate::controllers::middlewares::auth::Authenticated;
 use crate::controllers::middlewares::limiters::{enforce, Limiters};
 use crate::controllers::middlewares::origin::RequestOrigin;
+use crate::controllers::Auth;
 use crate::initializers::settings::Settings;
 use crate::models::audit_log::{AuditAction, AuditEntityType};
 use crate::models::audit_logs::{AuditEntry, Model as AuditLog};
@@ -87,7 +87,7 @@ impl Validate for StartCopyParams {
 #[debug_handler]
 pub async fn index(
     State(ctx): State<AppContext>,
-    _session: Authenticated,
+    _session: Auth,
     Query(query): Query<ListQuery>,
 ) -> Reply {
     Validate::validate(&query).map_err(|errors| ApiError::from_validation_errors(&errors))?;
@@ -109,7 +109,7 @@ pub async fn index(
 #[debug_handler]
 pub async fn store(
     State(ctx): State<AppContext>,
-    _session: Authenticated,
+    _session: Auth,
     origin: RequestOrigin,
     body: Bytes,
 ) -> Reply {
@@ -175,11 +175,7 @@ pub async fn store(
 
 /// `GET /api/storages/:id`.
 #[debug_handler]
-pub async fn show(
-    State(ctx): State<AppContext>,
-    _session: Authenticated,
-    Path(id): Path<i64>,
-) -> Reply {
+pub async fn show(State(ctx): State<AppContext>, _session: Auth, Path(id): Path<i64>) -> Reply {
     let storage = find_or_404(&ctx, id).await?;
     let safe = safe_config(&storage, &encryption(&ctx)?)?;
 
@@ -194,7 +190,7 @@ pub async fn show(
 #[debug_handler]
 pub async fn update(
     State(ctx): State<AppContext>,
-    _session: Authenticated,
+    _session: Auth,
     origin: RequestOrigin,
     Path(id): Path<i64>,
     body: Bytes,
@@ -287,7 +283,7 @@ pub async fn update(
 #[debug_handler]
 pub async fn destroy(
     State(ctx): State<AppContext>,
-    _session: Authenticated,
+    _session: Auth,
     origin: RequestOrigin,
     Path(id): Path<i64>,
 ) -> Reply {
@@ -321,11 +317,7 @@ pub async fn destroy(
 
 /// `POST /api/storages/:id/test`.
 #[debug_handler]
-pub async fn test(
-    State(ctx): State<AppContext>,
-    _session: Authenticated,
-    Path(id): Path<i64>,
-) -> Reply {
+pub async fn test(State(ctx): State<AppContext>, _session: Auth, Path(id): Path<i64>) -> Reply {
     let storage = find_or_404(&ctx, id).await?;
     let (_, adapter) = open(&ctx, &storage).map_err(test_failure)?;
 
@@ -338,7 +330,7 @@ pub async fn test(
 #[debug_handler]
 pub async fn browse(
     State(ctx): State<AppContext>,
-    _session: Authenticated,
+    _session: Auth,
     Path(id): Path<i64>,
     Query(query): Query<BrowseQuery>,
 ) -> Reply {
@@ -369,7 +361,7 @@ pub async fn browse(
 #[debug_handler]
 pub async fn destroy_object(
     State(ctx): State<AppContext>,
-    _session: Authenticated,
+    _session: Auth,
     origin: RequestOrigin,
     Path(id): Path<i64>,
     body: Bytes,
@@ -428,7 +420,7 @@ pub async fn destroy_object(
 #[debug_handler]
 pub async fn start_copy(
     State(ctx): State<AppContext>,
-    _session: Authenticated,
+    _session: Auth,
     origin: RequestOrigin,
     Path(id): Path<i64>,
     body: Bytes,
@@ -502,7 +494,7 @@ pub async fn start_copy(
 #[debug_handler]
 pub async fn copy_status(
     State(_ctx): State<AppContext>,
-    _session: Authenticated,
+    _session: Auth,
     Path(job_id): Path<String>,
 ) -> Reply {
     let job = copy::get(&_ctx, &job_id)
@@ -516,7 +508,7 @@ pub async fn copy_status(
 #[debug_handler]
 pub async fn start_archive(
     State(ctx): State<AppContext>,
-    _session: Authenticated,
+    _session: Auth,
     origin: RequestOrigin,
     Path(id): Path<i64>,
     body: Bytes,
@@ -554,7 +546,7 @@ pub async fn start_archive(
 #[debug_handler]
 pub async fn archive_status(
     State(ctx): State<AppContext>,
-    _session: Authenticated,
+    _session: Auth,
     Path(job_id): Path<String>,
 ) -> Reply {
     let job = archive::get(&ctx, &job_id)
@@ -568,7 +560,7 @@ pub async fn archive_status(
 #[debug_handler]
 pub async fn download_archive(
     State(ctx): State<AppContext>,
-    _session: Authenticated,
+    _session: Auth,
     Path(job_id): Path<String>,
 ) -> Reply {
     let job = archive::get(&ctx, &job_id)
