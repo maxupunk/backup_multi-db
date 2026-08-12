@@ -16,7 +16,9 @@ import Vuetify, { transformAssetUrls } from 'vite-plugin-vuetify'
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
-  const backendUrl = env.VITE_BACKEND_URL || 'http://localhost:3333'
+  // Keep the Vite proxy aligned with docker-compose.dev.yml. The backend is
+  // published on 3355 by default; 3333 only exists inside the Docker network.
+  const backendUrl = env.VITE_BACKEND_URL || 'http://localhost:3355'
 
   return {
     plugins: [

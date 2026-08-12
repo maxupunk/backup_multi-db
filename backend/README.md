@@ -74,7 +74,10 @@ cd ../backend
 cargo loco start                  # / serve o SPA; /api/* permanecem inalterados
 ```
 
-Em desenvolvimento, o Vite proxy ainda aponta para `VITE_BACKEND_URL` (padrão `http://localhost:3333`); ajuste para a porta do backend (`5150`) se quiser testar o modo dev contra o Rust.
+Em desenvolvimento, o proxy do Vite aponta para `VITE_BACKEND_URL` (padrão
+`http://localhost:3355`), a mesma porta publicada por
+`docker-compose.dev.yml`. Se publicar o backend em outra porta, crie
+`frontend/.env.local` com o valor correspondente e reinicie o Vite.
 
 ## Build de produção (Docker)
 
