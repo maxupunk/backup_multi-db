@@ -319,7 +319,7 @@ where
         let message = if stderr_text.trim().is_empty() {
             format!("Processo terminou com código {}", format_exit(exit_code))
         } else {
-            stderr_text
+            explain_failure(command.program, &stderr_text)
         };
 
         return Err(DumpError::Failed { message, exit_code });
@@ -336,6 +336,30 @@ where
 
 fn format_exit(exit_code: Option<i64>) -> String {
     exit_code.map_or_else(|| "desconhecido".to_string(), |code| code.to_string())
+}
+
+/// Traduz falhas conhecidas do cliente para algo acionavel.
+///
+/// O `pg_dump` se recusa a ler um servidor mais novo que ele e diz apenas
+/// "aborting because of server version mismatch". A frase esta' correta e e'
+/// inutil para quem opera: nao diz que a correcao esta na imagem, muito menos
+/// qual. Como esta aplicacao faz dump de bancos de terceiros, a versao do
+/// servidor nao esta sob nosso controle e a falha reaparece a cada major nova
+/// do PostgreSQL — explicar uma vez aqui sai mais barato que explicar a cada
+/// chamado.
+///
+/// O stderr original vai junto, embaixo: e' ele que carrega as duas versoes, e
+/// e' o que permite conferir o diagnostico em vez de acreditar nele.
+fn explain_failure(program: &str, stderr: &str) -> String {
+    if !stderr.contains("server version mismatch") {
+        return stderr.to_string();
+    }
+
+    format!(
+        "O `{program}` embarcado na imagem é mais antigo que o servidor de \
+         destino e por isso se recusa a fazer o dump. Reconstrua a imagem com o \
+         argumento `PG_MAJOR` do Dockerfile na major do servidor.\n\n{stderr}"
+    )
 }
 
 /// Encadeia stdout → hash → gzip → arquivo e devolve (bytes gravados, checksum).
@@ -675,5 +699,31 @@ mod tests {
             exit_code: Some(2),
         };
         assert_eq!(failed.exit_code(), Some(2));
+    }
+
+    #[test]
+    fn a_version_mismatch_says_what_to_do_about_it() {
+        // O texto cru do `pg_dump` nomeia as versoes e para por ai'. Quem le' e'
+        // o operador do container, e a correcao e' na imagem — sem a traducao, o
+        // caminho ate' ela e' um chamado de suporte.
+        let stderr = "pg_dump: error: aborting because of server version mismatch\n\
+                      pg_dump: detail: server version: 18.6; pg_dump version: 17.11\n";
+
+        let message = explain_failure("pg_dump", stderr);
+
+        assert!(message.contains("PG_MAJOR"), "mensagem: {message}");
+        assert!(
+            message.contains("18.6") && message.contains("17.11"),
+            "as versões originais precisam sobreviver: {message}"
+        );
+    }
+
+    #[test]
+    fn an_unrecognized_failure_is_forwarded_untouched() {
+        // Enfeitar um erro que nao se entende so' afasta o operador da causa.
+        let stderr =
+            "pg_dump: error: connection to server failed: FATAL: role \"x\" does not exist";
+
+        assert_eq!(explain_failure("pg_dump", stderr), stderr);
     }
 }

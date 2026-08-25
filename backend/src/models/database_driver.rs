@@ -337,9 +337,11 @@ async fn connect_mysql(target: &DatabaseTarget) -> Result<MySqlConnection, Drive
         .username(&target.username)
         .password(&target.password)
         .database(target.effective_database())
-        // Desligado salvo pedido explicito, igual ao `--skip-ssl` que o model
-        // passa ao `mysqldump`: exigir TLS por default derrubaria as conexoes
-        // com servidores que nao o suportam, que hoje funcionam.
+        // Desligado salvo pedido explicito, igual ao `--skip-ssl` que
+        // `dump::build_mysql_command` passa ao `mysqldump`: exigir TLS por
+        // default derrubaria as conexoes com servidores que nao o suportam,
+        // que hoje funcionam. Os dois caminhos leem o mesmo `target.ssl`, que
+        // vem de `Model::ssl_enabled`.
         .ssl_mode(if target.ssl {
             MySqlSslMode::Required
         } else {

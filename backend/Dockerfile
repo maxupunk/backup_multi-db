@@ -81,14 +81,40 @@ RUN cargo build --release --bin backend-cli
 # -----------------------------------------------------------------------------
 FROM ${RUNTIME_IMAGE} AS runtime
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-        ca-certificates \
-        curl \
+# O cliente PostgreSQL vem do PGDG, nao do Debian. O trixie congela o
+# `postgresql-client` no 17, e o `pg_dump` recusa por design qualquer servidor
+# mais novo que ele ("aborting because of server version mismatch"). Como esta
+# aplicacao faz dump de bancos de terceiros, a versao do servidor nao esta sob
+# nosso controle — o cliente e' que precisa acompanhar.
+#
+# A regra e' unidirecional: `pg_dump` N faz dump de servidor <= N. Por isso
+# instalamos **um** cliente, o mais novo, e nao um leque de versoes com escolha
+# em tempo de execucao: um cliente antigo nao acrescenta alcance nenhum, so'
+# ocupa imagem e um caminho de codigo a mais para manter.
+#
+# Quando sair uma major nova do PostgreSQL, bumpar `PG_MAJOR` e' a unica
+# alteracao necessaria — a 19 tem GA prevista para set/out de 2026.
+ARG PG_MAJOR=18
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl \
+    && install -d /usr/share/postgresql-common/pgdg \
+    && curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+        https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+    && echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(. /etc/os-release && echo "$VERSION_CODENAME")-pgdg main" > /etc/apt/sources.list.d/pgdg.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends \
         default-mysql-client \
-        gnupg \
-        postgresql-client \
+        postgresql-client-${PG_MAJOR} \
         rclone \
     && rm -rf /var/lib/apt/lists/*
+
+# O `/usr/bin/pg_dump` do Debian nao e' o binario: e' o `pg_wrapper`, que
+# escolhe a versao por heuristica de cluster local. Aqui nao ha' cluster local
+# — todo destino e' remoto — e uma heuristica nao e' onde se quer apoiar a
+# escolha do binario que produz o backup. Apontar o PATH para os binarios reais
+# torna a resolucao deterministica e explicita.
+ENV PATH="/usr/lib/postgresql/${PG_MAJOR}/bin:${PATH}"
 
 # Usuário sem privilégios: a aplicação não precisa de root, e um processo que
 # monta comandos de dump é exatamente o que não deveria rodar como root.

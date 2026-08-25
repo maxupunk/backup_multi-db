@@ -58,18 +58,6 @@ impl DatabaseType {
             Self::Postgresql => 5432,
         }
     }
-
-    /// Binario de dump correspondente.
-    ///
-    /// MariaDB tambem usa `mysqldump`. O `mariadb-dump` existe nas versoes
-    /// novas, mas `mysqldump` e' o binario que a imagem entrega para os dois
-    /// motores; trocar exigiria mudar a imagem e o caminho de execucao.
-    pub const fn dump_command(self) -> &'static str {
-        match self {
-            Self::Mysql | Self::Mariadb => "mysqldump",
-            Self::Postgresql => "pg_dump",
-        }
-    }
 }
 
 impl FromStr for DatabaseType {
@@ -212,31 +200,6 @@ impl Model {
             return Ok(String::new());
         }
         encryption.decrypt(&self.password_encrypted)
-    }
-
-    /// Binario de dump deste motor.
-    pub fn dump_command(&self) -> std::result::Result<&'static str, UnknownValue> {
-        Ok(self.database_type()?.dump_command())
-    }
-
-    /// Argumentos de SSL para os clientes MySQL/MariaDB.
-    ///
-    /// SSL fica **desligado** salvo pedido explicito em `options.ssl`. Ligar
-    /// por padrao quebraria toda conexao com servidor sem TLS configurado, que
-    /// e' o caso comum de um banco interno.
-    pub fn mysql_ssl_args(&self) -> Vec<&'static str> {
-        let enabled = self
-            .options
-            .as_deref()
-            .and_then(|raw| serde_json::from_str::<serde_json::Value>(raw).ok())
-            .and_then(|value| value.get("ssl").and_then(serde_json::Value::as_bool))
-            .unwrap_or(false);
-
-        if enabled {
-            vec![]
-        } else {
-            vec!["--skip-ssl"]
-        }
     }
 }
 
@@ -836,16 +799,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn mariadb_shares_the_mysql_port_and_dump_binary() {
+    fn mariadb_shares_the_mysql_port() {
         assert_eq!(DatabaseType::Mariadb.default_port(), 3306);
         assert_eq!(DatabaseType::Mysql.default_port(), 3306);
-        assert_eq!(DatabaseType::Mariadb.dump_command(), "mysqldump");
     }
 
     #[test]
-    fn postgres_has_its_own_port_and_binary() {
+    fn postgres_has_its_own_port() {
         assert_eq!(DatabaseType::Postgresql.default_port(), 5432);
-        assert_eq!(DatabaseType::Postgresql.dump_command(), "pg_dump");
     }
 
     #[test]
@@ -904,32 +865,21 @@ mod tests {
     fn ssl_is_off_unless_explicitly_enabled() {
         // Ligar SSL por padrao quebraria toda conexao com banco interno sem
         // TLS — que e' a maioria.
-        assert_eq!(model_with(None).mysql_ssl_args(), vec!["--skip-ssl"]);
-        assert_eq!(
-            model_with(Some(r#"{"charset":"utf8"}"#)).mysql_ssl_args(),
-            vec!["--skip-ssl"]
-        );
-        assert_eq!(
-            model_with(Some(r#"{"ssl":false}"#)).mysql_ssl_args(),
-            vec!["--skip-ssl"]
-        );
+        assert!(!model_with(None).ssl_enabled());
+        assert!(!model_with(Some(r#"{"charset":"utf8"}"#)).ssl_enabled());
+        assert!(!model_with(Some(r#"{"ssl":false}"#)).ssl_enabled());
     }
 
     #[test]
     fn ssl_is_on_when_requested() {
-        assert!(model_with(Some(r#"{"ssl":true}"#))
-            .mysql_ssl_args()
-            .is_empty());
+        assert!(model_with(Some(r#"{"ssl":true}"#)).ssl_enabled());
     }
 
     #[test]
     fn malformed_options_do_not_enable_ssl_by_accident() {
         // JSON quebrado tem que cair no default seguro, e nao propagar erro
         // nem ligar SSL.
-        assert_eq!(
-            model_with(Some("isso nao e json")).mysql_ssl_args(),
-            vec!["--skip-ssl"]
-        );
+        assert!(!model_with(Some("isso nao e json")).ssl_enabled());
     }
 
     #[test]
