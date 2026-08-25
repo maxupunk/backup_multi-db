@@ -46,7 +46,11 @@ const CHANNEL_CAPACITY: usize = 256;
 /// Sao os nomes que o frontend assina em `GET /api/events?channels=`.
 pub mod channels {
     pub const BACKUP_PROGRESS: &str = "notifications/backup-progress";
-    pub const RESTORE: &str = "notifications/restore";
+    /// Progresso de restauracao. **Nao** e' `notifications::RESTORE`: aquele
+    /// canal leva as notificacoes de dominio ("Restauracao Iniciada"), que tem
+    /// outro formato. Publicar os dois no mesmo canal fazia a tela de progresso
+    /// abrir um cartao vazio e travado para cada notificacao recebida.
+    pub const RESTORE_PROGRESS: &str = "notifications/restore-progress";
 }
 
 /// Estagios de um backup.
@@ -395,7 +399,7 @@ impl RestoreProgressEmitter {
 
     fn emit(&self, stage: RestoreStage, progress: u8, message: impl Into<String>) {
         self.hub.publish(ProgressEvent {
-            channel: channels::RESTORE,
+            channel: channels::RESTORE_PROGRESS,
             payload: serde_json::json!({
                 "restoreId": self.restore_id,
                 "backupId": self.backup_id,
@@ -567,7 +571,7 @@ mod tests {
         RestoreProgressEmitter::new(hub.clone(), "restore-1", 7, "vendas", "Producao").started();
 
         let event = receiver.try_recv().expect("evento");
-        assert_eq!(event.channel, channels::RESTORE);
+        assert_eq!(event.channel, channels::RESTORE_PROGRESS);
         assert_eq!(event.payload["backupId"], 7);
         assert_eq!(event.payload["stage"], "validating");
     }

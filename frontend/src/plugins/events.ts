@@ -32,7 +32,7 @@ export default {
       })
     }
 
-    subscribe('notifications/restore', (payload) => {
+    subscribe('notifications/restore-progress', (payload) => {
       useOperationProgressStore().handleRestoreProgress(payload as RestoreProgressEvent)
     })
 

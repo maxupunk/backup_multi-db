@@ -1,7 +1,7 @@
 /**
  * Store unificado para acompanhamento de progresso de operações (backup e restauração).
  *
- * Recebe eventos SSE dos canais notifications/restore e notifications/backup-progress
+ * Recebe eventos SSE dos canais notifications/restore-progress e notifications/backup-progress
  * e mantém o estado de operações ativas para exibição na UI.
  */
 import { defineStore } from 'pinia'
@@ -150,6 +150,8 @@ export const useOperationProgressStore = defineStore('operation-progress', () =>
    * Processa um evento de progresso de restauração
    */
   function handleRestoreProgress(event: RestoreProgressEvent): void {
+    if (!isProgressEvent(event, 'restoreId')) return
+
     upsertOperation({
       operationId: event.restoreId,
       type: 'restore',
@@ -167,6 +169,8 @@ export const useOperationProgressStore = defineStore('operation-progress', () =>
    * Processa um evento de progresso de backup
    */
   function handleBackupProgress(event: BackupProgressEvent): void {
+    if (!isProgressEvent(event, 'operationId')) return
+
     upsertOperation({
       operationId: event.operationId,
       type: 'backup',
@@ -178,6 +182,18 @@ export const useOperationProgressStore = defineStore('operation-progress', () =>
       bytesWritten: event.bytesWritten,
       timestamp: event.timestamp,
     })
+  }
+
+  /**
+   * Descarta o que chega no canal sem ser um evento de progresso.
+   *
+   * Sem identificador ou estágio o cartão nasce vazio e nunca conclui — foi o
+   * que aconteceu enquanto as notificações de domínio dividiam o canal com o
+   * progresso da restauração.
+   */
+  function isProgressEvent(event: unknown, idField: 'restoreId' | 'operationId'): boolean {
+    const candidate = event as Record<string, unknown> | null
+    return Boolean(candidate && candidate[idField] && candidate.stage)
   }
 
   function upsertOperation(data: {
