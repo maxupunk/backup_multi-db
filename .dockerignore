@@ -29,6 +29,17 @@ backend/storage/backups/
 backend/storage/database/
 backend/storage/diagnostics/
 
+# --- SQLite de desenvolvimento/teste. Sao gitignored, mas o .dockerignore e'
+#     independente: sem estas linhas eles entram no contexto e qualquer
+#     execucao local do backend invalida a camada do `planner`, forcando um
+#     `cargo chef prepare` novo a cada build.
+backend/*.sqlite
+backend/*.sqlite3
+backend/*.sqlite-shm
+backend/*.sqlite-wal
+backend/*.sqlite3-shm
+backend/*.sqlite3-wal
+
 # --- Editores / IDEs
 .vscode/
 .idea/

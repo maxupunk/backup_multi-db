@@ -49,7 +49,14 @@ WORKDIR /app
 # -----------------------------------------------------------------------------
 FROM chef AS planner
 COPY backend/ .
-RUN cargo chef prepare --recipe-path recipe.json
+# O `prepare` nao copia os manifestos: ele os re-serializa para dentro da
+# receita, e nesse round-trip carimba `edition` em cada alvo ([lib], [[bin]],
+# [[test]], [[example]]). O Cargo 1.9x deprecou a chave nesse nivel, entao o
+# `cook` do stage seguinte imprimiria um bloco de warnings que nao vem de
+# nenhum Cargo.toml deste repositorio. Ver o cabecalho do script e o upstream
+# LukeMathWalker/cargo-chef#350.
+RUN cargo chef prepare --recipe-path recipe.json \
+    && python3 docker/strip-target-edition.py recipe.json
 
 # -----------------------------------------------------------------------------
 # Stage: builder
