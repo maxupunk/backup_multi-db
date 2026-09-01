@@ -53,7 +53,12 @@ pub struct LogFilters {
 }
 
 pub fn client() -> Result<Docker, DockerError> {
-    Docker::connect_with_local_defaults().map_err(|_| DockerError::Unavailable)
+    Docker::connect_with_defaults()
+        .or_else(|_| Docker::connect_with_local_defaults())
+        .map_err(|err| {
+            tracing::warn!("Failed to create Docker client: {err}");
+            DockerError::Unavailable
+        })
 }
 
 async fn call<T>(

@@ -51,7 +51,9 @@ fn state(ctx: &AppContext) -> loco_rs::Result<State> {
 }
 
 fn client() -> Option<Docker> {
-    Docker::connect_with_local_defaults().ok()
+    Docker::connect_with_defaults()
+        .or_else(|_| Docker::connect_with_local_defaults())
+        .ok()
 }
 
 /// Uma amostra de metricas de um container.
