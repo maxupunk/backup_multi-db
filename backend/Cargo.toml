@@ -82,6 +82,7 @@ opendal = { version = "0.57", default-features = false, features = [
   "services-s3",
   "services-gcs",
   "services-azblob",
+  "reqwest-rustls-tls",
 ] }
 # SFTP fica de fora do `opendal`: o service dele delega ao binario `ssh` da
 # maquina. `russh` e' Rust puro; o `ssh2` liga no libssh2 em C e exigiria
