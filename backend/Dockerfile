@@ -116,21 +116,14 @@ RUN apt-get update \
 # torna a resolucao deterministica e explicita.
 ENV PATH="/usr/lib/postgresql/${PG_MAJOR}/bin:${PATH}"
 
-# Usuário sem privilégios: a aplicação não precisa de root, e um processo que
-# monta comandos de dump é exatamente o que não deveria rodar como root.
-RUN useradd --create-home --shell /usr/sbin/nologin roco
-
 WORKDIR /app
 
 COPY --from=builder /app/target/release/backend-cli /usr/local/bin/backend
-COPY --chown=roco:roco backend/config ./config
-COPY --chown=roco:roco backend/src/fixtures ./src/fixtures
-COPY --chown=roco:roco --from=builder /app/public ./public
+COPY backend/config ./config
+COPY backend/src/fixtures ./src/fixtures
+COPY --from=builder /app/public ./public
 
-RUN mkdir -p /storage/backups /storage/database /storage/diagnostics \
-    && chown -R roco:roco /storage /app
-
-USER roco
+RUN mkdir -p /storage/backups /storage/database /storage/diagnostics
 
 ENV LOCO_ENV=production \
     LOCO_CONFIG_FOLDER=/app/config \

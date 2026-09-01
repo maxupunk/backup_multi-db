@@ -10,11 +10,6 @@ services:
       dockerfile: backend/Dockerfile
       target: runtime
     restart: unless-stopped
-    # O socket do Docker é montado com o GID do host (geralmente grupo `docker`, ex: 999 ou 998).
-    # Sem pertencer a esse grupo, o usuário não-privilegiado `roco` recebe EACCES (Permission Denied).
-    group_add:
-      - '0'
-      - '${DOCKER_GID:-999}'
     env_file:
       - path: ./.env
         required: false
