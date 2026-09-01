@@ -55,15 +55,12 @@ pub struct DatabaseTarget {
 }
 
 impl DatabaseTarget {
-    /// Banco a usar quando nenhum foi informado.
+    /// Banco a usar para PostgreSQL quando nenhum foi informado.
     ///
-    /// Todo servidor precisa de um banco para autenticar; a implementacao anterior cai em
-    /// `postgres` ou `mysql`, que existem em qualquer instalacao padrao.
-    fn effective_database(&self) -> &str {
-        self.database.as_deref().unwrap_or(match self.kind {
-            DatabaseType::Postgresql => "postgres",
-            DatabaseType::Mysql | DatabaseType::Mariadb => "mysql",
-        })
+    /// O PostgreSQL exige um banco para autenticar (`postgres` e' o padrao).
+    /// MySQL e MariaDB nao exigem banco na conexao inicial (igual a implementacao anterior em AdonisJS).
+    fn effective_postgres_database(&self) -> &str {
+        self.database.as_deref().unwrap_or("postgres")
     }
 
     fn is_postgres(&self) -> bool {
@@ -331,12 +328,11 @@ fn quote_identifier(name: &str, postgres: bool) -> Result<String, DriverError> {
 }
 
 async fn connect_mysql(target: &DatabaseTarget) -> Result<MySqlConnection, DriverError> {
-    let options = MySqlConnectOptions::new()
+    let mut options = MySqlConnectOptions::new()
         .host(&target.host)
         .port(target.port)
         .username(&target.username)
         .password(&target.password)
-        .database(target.effective_database())
         // Desligado salvo pedido explicito, igual ao `--skip-ssl` que
         // `dump::build_mysql_command` passa ao `mysqldump`: exigir TLS por
         // default derrubaria as conexoes com servidores que nao o suportam,
@@ -348,6 +344,13 @@ async fn connect_mysql(target: &DatabaseTarget) -> Result<MySqlConnection, Drive
             MySqlSslMode::Disabled
         });
 
+    // MySQL/MariaDB nao exigem banco na conexao inicial (igual ao AdonisJS com mysql2).
+    // Conectar sem database permite listar bancos (SHOW DATABASES) ou consultar versoes
+    // mesmo para usuarios sem permissao no schema administrativo 'mysql'.
+    if let Some(database) = &target.database {
+        options = options.database(database);
+    }
+
     with_timeout(MySqlConnection::connect_with(&options)).await
 }
 
@@ -357,7 +360,7 @@ async fn connect_postgres(target: &DatabaseTarget) -> Result<PgConnection, Drive
         .port(target.port)
         .username(&target.username)
         .password(&target.password)
-        .database(target.effective_database())
+        .database(target.effective_postgres_database())
         // `Prefer` negocia TLS quando o servidor oferece e cai para texto claro
         // quando nao — o mesmo conjunto de servidores que o `pg` da implementacao anterior
         // aceita, com criptografia onde da'.
@@ -400,21 +403,13 @@ mod tests {
     }
 
     #[test]
-    fn falls_back_to_the_default_database_of_each_engine() {
+    fn falls_back_to_postgres_default_database() {
         assert_eq!(
-            target(DatabaseType::Postgresql, None).effective_database(),
+            target(DatabaseType::Postgresql, None).effective_postgres_database(),
             "postgres"
         );
         assert_eq!(
-            target(DatabaseType::Mysql, None).effective_database(),
-            "mysql"
-        );
-        assert_eq!(
-            target(DatabaseType::Mariadb, None).effective_database(),
-            "mysql"
-        );
-        assert_eq!(
-            target(DatabaseType::Mysql, Some("app")).effective_database(),
+            target(DatabaseType::Postgresql, Some("app")).effective_postgres_database(),
             "app"
         );
     }
