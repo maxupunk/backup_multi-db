@@ -10,11 +10,11 @@ services:
       dockerfile: backend/Dockerfile
       target: runtime
     restart: unless-stopped
-    # O socket do Docker é montado como root:root 660 no host; sem acesso ao
-    # grupo root o usuário não-privilegiado `roco` não consegue falar com a
-    # Engine (bollard/Docker::connect_with_local_defaults falha).
+    # O socket do Docker é montado com o GID do host (geralmente grupo `docker`, ex: 999 ou 998).
+    # Sem pertencer a esse grupo, o usuário não-privilegiado `roco` recebe EACCES (Permission Denied).
     group_add:
       - '0'
+      - '${DOCKER_GID:-999}'
     env_file:
       - path: ./.env
         required: false

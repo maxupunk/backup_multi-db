@@ -381,12 +381,20 @@ fn normalize_image_detail(item: &Value) -> Value {
 /// Sonda a Engine local sem transformar sua ausencia em erro HTTP.
 pub async fn status() -> Status {
     let Ok(client) = client() else {
+        tracing::warn!("Docker client could not be initialized from local defaults");
         return Status { available: false };
     };
-    let available = matches!(
-        tokio::time::timeout(PING_TIMEOUT, client.ping()).await,
-        Ok(Ok(_))
-    );
+    let available = match tokio::time::timeout(PING_TIMEOUT, client.ping()).await {
+        Ok(Ok(_)) => true,
+        Ok(Err(err)) => {
+            tracing::warn!("Docker ping failed: {err}");
+            false
+        }
+        Err(_) => {
+            tracing::warn!("Docker ping timed out after {PING_TIMEOUT:?}");
+            false
+        }
+    };
     Status { available }
 }
 
