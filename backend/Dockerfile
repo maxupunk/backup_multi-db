@@ -133,6 +133,7 @@ RUN mkdir -p /storage/backups /storage/database /storage/diagnostics \
 USER roco
 
 ENV LOCO_ENV=production \
+    LOCO_CONFIG_FOLDER=/app/config \
     BINDING=0.0.0.0 \
     PORT=3333
 
