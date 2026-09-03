@@ -302,6 +302,12 @@ export const dockerNetworksApi = {
     })
   },
 
+  remove(id: string): Promise<DockerActionResult> {
+    return apiFetch<DockerActionResult>(`${BASE}/networks/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    })
+  },
+
   connect(networkId: string, containerId: string): Promise<DockerActionResult> {
     return apiFetch<DockerActionResult>(
       `${BASE}/networks/${encodeURIComponent(networkId)}/connect`,

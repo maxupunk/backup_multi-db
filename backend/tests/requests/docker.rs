@@ -174,6 +174,7 @@ async fn every_docker_operation_requires_a_session() {
             "/api/docker/containers/example",
             "/api/docker/containers/example/logs",
             "/api/docker/images/example",
+            "/api/docker/networks/example",
             "/api/docker/volumes/example",
         ] {
             let response = request.delete(path).await;

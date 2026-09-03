@@ -208,7 +208,9 @@ GET    /api/docker/volumes/:name
 DELETE /api/docker/volumes/:name
 
 GET    /api/docker/networks
+POST   /api/docker/networks
 GET    /api/docker/networks/:id
+DELETE /api/docker/networks/:id
 
 GET    /api/docker/images
 GET    /api/docker/images/:id

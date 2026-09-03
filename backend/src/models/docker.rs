@@ -41,6 +41,11 @@ pub enum DockerError {
         message: String,
         container_names: Vec<String>,
     },
+    #[error("Rede em uso")]
+    NetworkInUse {
+        message: String,
+        container_names: Vec<String>,
+    },
 }
 
 /// Filtros aceitos pela rota de logs.
@@ -344,6 +349,57 @@ fn normalize_network(item: &Value, include_detail: bool) -> Value {
         );
     }
     Value::Object(network)
+}
+
+fn container_display_name(container: &bollard::models::ContainerSummary) -> String {
+    container
+        .names
+        .as_ref()
+        .and_then(|names| names.first())
+        .map(|name| name.trim_start_matches('/').to_string())
+        .filter(|name| !name.is_empty())
+        .or_else(|| container.id.as_deref().map(short_id))
+        .unwrap_or_else(|| "container desconhecido".into())
+}
+
+fn running_containers_for_network(
+    network_id: &str,
+    network_name: &str,
+    containers: &[bollard::models::ContainerSummary],
+) -> Vec<String> {
+    let mut names = containers
+        .iter()
+        .filter(|container| container.state.as_deref() == Some("running"))
+        .filter(|container| {
+            container
+                .network_settings
+                .as_ref()
+                .and_then(|settings| settings.networks.as_ref())
+                .is_some_and(|networks| {
+                    networks.iter().any(|(name, endpoint)| {
+                        name == network_name || endpoint.network_id.as_deref() == Some(network_id)
+                    })
+                })
+        })
+        .map(container_display_name)
+        .collect::<Vec<_>>();
+    names.sort();
+    names.dedup();
+    names
+}
+
+fn add_network_runtime_usage(
+    network: &mut Value,
+    running_containers: &[bollard::models::ContainerSummary],
+) {
+    let network_id = network["id"].as_str().unwrap_or_default();
+    let network_name = network["name"].as_str().unwrap_or_default();
+    let names = running_containers_for_network(network_id, network_name, running_containers);
+
+    if let Some(fields) = network.as_object_mut() {
+        fields.insert("runningContainers".into(), json!(names.len()));
+        fields.insert("runningContainerNames".into(), json!(names));
+    }
 }
 
 fn normalize_image_summary(item: &Value) -> Value {
@@ -780,24 +836,41 @@ fn short_id(id: &str) -> String {
 }
 
 pub async fn list_networks() -> Result<Value, DockerError> {
-    let networks = value(
-        call(client()?.list_networks(Some(ListNetworksOptions::<String>::default()))).await?,
-    )?;
+    let client = client()?;
+    let networks =
+        call(client.list_networks(Some(ListNetworksOptions::<String>::default()))).await?;
+    let running_containers = call(
+        client.list_containers(Some(ListContainersOptions::<String> {
+            all: false,
+            ..Default::default()
+        })),
+    )
+    .await?;
+
     Ok(Value::Array(
         networks
-            .as_array()
-            .map(|networks| {
-                networks
-                    .iter()
-                    .map(|network| normalize_network(network, false))
-                    .collect()
+            .into_iter()
+            .map(|network| {
+                let mut network = normalize_network(&value(network)?, false);
+                add_network_runtime_usage(&mut network, &running_containers);
+                Ok(network)
             })
-            .unwrap_or_default(),
+            .collect::<Result<Vec<_>, DockerError>>()?,
     ))
 }
 pub async fn inspect_network(id: &str) -> Result<Value, DockerError> {
-    let network = value(call(client()?.inspect_network::<String>(id, None)).await?)?;
-    Ok(normalize_network(&network, true))
+    let client = client()?;
+    let network = value(call(client.inspect_network::<String>(id, None)).await?)?;
+    let running_containers = call(
+        client.list_containers(Some(ListContainersOptions::<String> {
+            all: false,
+            ..Default::default()
+        })),
+    )
+    .await?;
+    let mut network = normalize_network(&network, true);
+    add_network_runtime_usage(&mut network, &running_containers);
+    Ok(network)
 }
 pub async fn create_network(name: String, driver: String) -> Result<Value, DockerError> {
     call(client()?.create_network(CreateNetworkOptions {
@@ -808,6 +881,45 @@ pub async fn create_network(name: String, driver: String) -> Result<Value, Docke
     }))
     .await?;
     Ok(json!({ "success": true, "message": format!("Rede \"{name}\" criada com sucesso.") }))
+}
+pub async fn remove_network(id: &str) -> Result<Value, DockerError> {
+    let client = client()?;
+    let network = call(client.inspect_network::<String>(id, None)).await?;
+    let network_name = network.name.as_deref().unwrap_or(id);
+    let containers = call(
+        client.list_containers(Some(ListContainersOptions::<String> {
+            all: true,
+            ..Default::default()
+        })),
+    )
+    .await?;
+    let running = running_containers_for_network(id, network_name, &containers);
+
+    if !running.is_empty() {
+        return Err(DockerError::NetworkInUse {
+            message: format!(
+                "A rede está em uso por contêineres em execução: {}. Pare-os antes de remover a rede.",
+                running.join(", ")
+            ),
+            container_names: running,
+        });
+    }
+
+    // A Engine também mantém endpoints de contêineres parados. A regra desta
+    // operação permite a remoção nesse caso, então eles são desconectados antes.
+    for container_id in network.containers.unwrap_or_default().keys() {
+        call(client.disconnect_network(
+            id,
+            DisconnectNetworkOptions {
+                container: container_id.clone(),
+                force: true,
+            },
+        ))
+        .await?;
+    }
+
+    call(client.remove_network(id)).await?;
+    Ok(json!({ "success": true, "message": "Rede removida com sucesso." }))
 }
 pub async fn connect_network(network: &str, container: String) -> Result<Value, DockerError> {
     call(client()?.connect_network(
@@ -921,5 +1033,36 @@ mod tests {
         assert_eq!(network["ipam"]["config"][0]["subnet"], "172.18.0.0/16");
         assert_eq!(network["connectedContainers"], 1);
         assert_eq!(network["containers"]["container-id"]["name"], "database");
+    }
+
+    #[test]
+    fn only_running_containers_block_network_removal() {
+        let containers = serde_json::from_value::<Vec<bollard::models::ContainerSummary>>(json!([
+            {
+                "Id": "running-id",
+                "Names": ["/database"],
+                "State": "running",
+                "NetworkSettings": {
+                    "Networks": {
+                        "sample_default": { "NetworkID": "network-id" }
+                    }
+                }
+            },
+            {
+                "Id": "stopped-id",
+                "Names": ["/worker"],
+                "State": "exited",
+                "NetworkSettings": {
+                    "Networks": {
+                        "sample_default": { "NetworkID": "network-id" }
+                    }
+                }
+            }
+        ]))
+        .expect("resumo de containers válido");
+
+        let running = running_containers_for_network("network-id", "sample_default", &containers);
+
+        assert_eq!(running, vec!["database"]);
     }
 }

@@ -669,6 +669,8 @@ export interface DockerNetworkSummary {
   }
   internal: boolean
   connectedContainers: number
+  runningContainers: number
+  runningContainerNames: string[]
   labels: Record<string, string>
   created: string
 }

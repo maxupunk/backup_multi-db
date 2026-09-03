@@ -66,7 +66,9 @@ pub struct DiagnosticParams {
 fn engine_error(error: DockerError) -> Error {
     match error {
         DockerError::Validation(message) => bad_request(message),
-        DockerError::VolumeInUse { message, .. } => conflict(message),
+        DockerError::VolumeInUse { message, .. } | DockerError::NetworkInUse { message, .. } => {
+            conflict(message)
+        }
         DockerError::Unavailable | DockerError::Engine => Error::Message(error.to_string()),
     }
 }
@@ -363,6 +365,14 @@ pub async fn create_network(
         .map_err(engine_error)?,
     )
 }
+#[debug_handler]
+pub async fn remove_network(
+    State(_ctx): State<AppContext>,
+    _session: Auth,
+    Path(id): Path<String>,
+) -> Result<Response> {
+    format::json(docker::remove_network(&id).await.map_err(engine_error)?)
+}
 async fn network_connection(
     id: String,
     params: NetworkParams,
@@ -533,6 +543,10 @@ pub fn routes(limiters: &Limiters) -> Routes {
             post(disconnect_network).layer(strict.clone()),
         )
         .add("/networks/{id}", get(inspect_network))
+        .add(
+            "/networks/{id}",
+            delete(remove_network).layer(strict.clone()),
+        )
         .add("/images/prune", post(prune_images).layer(strict.clone()))
         .add("/images", get(list_images))
         .add("/images/{id}", get(inspect_image))

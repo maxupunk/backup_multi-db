@@ -16,7 +16,7 @@
 
       <div class="text-caption text-medium-emphasis mb-3">
         <v-icon icon="mdi-server-outline" size="14" />
-        {{ containerCount }} container(s) conectado(s)
+        {{ containerCount }} conectado(s) · {{ runningCount }} em execução
       </div>
 
       <div class="d-flex justify-end">
@@ -29,6 +29,19 @@
         >
           Detalhes
         </v-btn>
+        <v-btn
+          class="ml-1"
+          color="error"
+          density="compact"
+          :disabled="loading || runningCount > 0"
+          icon="mdi-delete-outline"
+          size="small"
+          :title="removeTitle"
+          variant="text"
+          @click="emit('remove', network)"
+        >
+          <v-icon />
+        </v-btn>
       </div>
     </v-card-text>
   </v-card>
@@ -38,9 +51,20 @@
 import { computed } from 'vue'
 import type { DockerNetworkSummary } from '@/types/api'
 
-const props = defineProps<{ network: DockerNetworkSummary }>()
-const emit = defineEmits<{ (e: 'detail', n: DockerNetworkSummary): void }>()
+const props = defineProps<{ network: DockerNetworkSummary; loading?: boolean }>()
+const emit = defineEmits<{
+  (e: 'detail', n: DockerNetworkSummary): void
+  (e: 'remove', n: DockerNetworkSummary): void
+}>()
 
 const subnet = computed(() => props.network.ipam.config[0]?.subnet ?? null)
 const containerCount = computed(() => props.network.connectedContainers)
+const runningCount = computed(() => props.network.runningContainers ?? containerCount.value)
+const removeTitle = computed(() => {
+  if (runningCount.value === 0) return 'Remover rede'
+  const names = props.network.runningContainerNames?.join(', ')
+  return names
+    ? `Em uso por contêineres em execução: ${names}`
+    : 'Pare os contêineres em execução antes de remover a rede'
+})
 </script>
