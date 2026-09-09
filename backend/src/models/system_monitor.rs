@@ -187,24 +187,21 @@ fn memory_metrics(system: &System) -> MemoryMetrics {
 
 /// Estado do agendador.
 ///
-/// O Loco gerencia o scheduler nativamente quando `config.scheduler` existe e o
-/// processo inicia em modo que o inclui (por exemplo `--scheduler` ou `--all`).
-/// Como o `AppContext` não expõe o `StartMode` atual, usamos a presença da
-/// configuração como proxy: se ela existe, o sistema está preparado para
-/// executar jobs agendados; se não existe, o painel mostra `down` — a verdade,
-/// e não um `ok` otimista que esconderia a ausência do agendador.
+/// Lê o executor de [`scheduled_jobs`](crate::initializers::scheduled_jobs), que
+/// roda dentro deste processo. A versão anterior usava a presença do bloco
+/// `scheduler:` no YAML como proxy — e esse proxy mentia: a configuração existia
+/// enquanto nenhum processo de scheduler era iniciado, então o painel mostrava
+/// `ok` com zero backup agendado acontecendo.
 fn jobs_status(ctx: &AppContext) -> JobsStatus {
-    let is_running = ctx.config.scheduler.is_some();
-    let active_jobs = ctx
-        .config
-        .scheduler
-        .as_ref()
-        .map(|cfg| cfg.jobs.len() as u32)
-        .unwrap_or(0);
+    let is_running = crate::initializers::scheduled_jobs::is_running(ctx);
 
     JobsStatus {
         is_running,
-        active_jobs,
+        active_jobs: if is_running {
+            crate::initializers::scheduled_jobs::JOB_COUNT
+        } else {
+            0
+        },
     }
 }
 
@@ -292,9 +289,9 @@ mod tests {
             .unwrap()
             .app_context;
 
-        // A configuração de teste do projeto não define scheduler, então o
-        // status deve refletir isso honestamente (`down`) em vez de inventar um
-        // `ok` otimista.
+        // Sob `ForegroundBlocking` (modo dos testes) o executor não sobe, então
+        // o status deve refletir isso honestamente (`down`) em vez de inventar
+        // um `ok` otimista.
         let jobs = jobs_status(&ctx);
         assert!(!jobs.is_running);
         assert_eq!(jobs.active_jobs, 0);

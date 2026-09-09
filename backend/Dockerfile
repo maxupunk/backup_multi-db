@@ -107,7 +107,15 @@ RUN apt-get update \
         default-mysql-client \
         postgresql-client-${PG_MAJOR} \
         rclone \
+        tzdata \
     && rm -rf /var/lib/apt/lists/*
+
+# O `TZ` do compose (`America/Sao_Paulo`) so' tem efeito com o zoneinfo
+# instalado. Sem o `tzdata`, o `chrono::Local` nao acha a tabela e cai
+# silenciosamente para UTC: a poda diaria da auditoria rodaria as 23:00
+# locais em vez das 02:00, e todo horario formatado com fuso local sairia
+# tres horas adiantado. O agendamento de backups nao depende disto — ele
+# compara instantes absolutos.
 
 # O `/usr/bin/pg_dump` do Debian nao e' o binario: e' o `pg_wrapper`, que
 # escolhe a versao por heuristica de cluster local. Aqui nao ha' cluster local

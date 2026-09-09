@@ -143,11 +143,20 @@ pub async fn update_policy(
 /// espera 6 (`seg min hora dom mes dow`). Normalizamos adicionando `0` no
 /// inicio quando a entrada tem exatamente 5 campos.
 pub fn is_valid_cron(expression: &str) -> bool {
-    let normalized = match normalize_cron_fields(expression.trim()) {
-        Some(value) => value,
-        None => return false,
-    };
-    cron::Schedule::from_str(&normalized).is_ok()
+    parse_cron(expression).is_some()
+}
+
+/// A expressao compilada, para quem precisa do **proximo disparo** e nao so' de
+/// saber se ela e' valida — hoje, o executor em
+/// [`scheduled_jobs`](crate::initializers::scheduled_jobs).
+///
+/// Compartilha a normalizacao de 5 para 6 campos com [`is_valid_cron`]: se cada
+/// chamador reimplementasse a sua, a interface aceitaria uma expressao que o
+/// agendador depois nao saberia interpretar.
+#[must_use]
+pub fn parse_cron(expression: &str) -> Option<cron::Schedule> {
+    let normalized = normalize_cron_fields(expression.trim())?;
+    cron::Schedule::from_str(&normalized).ok()
 }
 
 fn normalize_cron_fields(expression: &str) -> Option<String> {
@@ -289,6 +298,19 @@ mod tests {
     fn recognizes_valid_cron() {
         assert!(is_valid_cron("0 2 * * *"));
         assert!(is_valid_cron("*/5 * * * *"));
+    }
+
+    #[test]
+    fn the_default_cron_fires_at_two_in_the_morning() {
+        // Fixa a normalizacao de 5 para 6 campos: `"0 2 * * *"` e' `min hora`,
+        // e virar `0 0 2 * * *` (seg min hora). Se a ordem escorregasse, a
+        // retencao passaria a rodar 00:02 em vez de 02:00 sem nenhum teste
+        // reclamar.
+        let schedule = parse_cron(DEFAULT_PRUNE_CRON).expect("cron padrao valido");
+        let now = chrono::DateTime::parse_from_rfc3339("2026-09-08T09:00:00-03:00").unwrap();
+        let next = schedule.after(&now).next().expect("proxima ocorrencia");
+
+        assert_eq!(next.to_rfc3339(), "2026-09-09T02:00:00-03:00");
     }
 
     #[test]

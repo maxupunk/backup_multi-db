@@ -89,6 +89,7 @@ impl Hooks for App {
             Box::new(initializers::settings::SettingsInitializer),
             Box::new(initializers::default_storage::DefaultStorageInitializer),
             Box::new(initializers::resource_metrics::ResourceMetricsInitializer),
+            Box::new(initializers::scheduled_jobs::ScheduledJobsInitializer),
         ])
     }
 
@@ -163,6 +164,7 @@ impl Hooks for App {
 
     async fn on_shutdown(ctx: &AppContext) {
         resource_metrics::stop(ctx);
+        initializers::scheduled_jobs::stop(ctx);
     }
 
     fn register_tasks(tasks: &mut Tasks) {

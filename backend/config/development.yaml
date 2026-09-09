@@ -59,19 +59,12 @@ workers:
   #   - BackgroundAsync - Workers operate asynchronously in the background, processing tasks with async capabilities.
   mode: BackgroundAsync
 
-# Jobs nativos do Loco. A tarefa de backup lê as conexões a cada execução, por
-# isso um CRUD de agendamento entra em vigor sem reiniciar o processo.
-scheduler:
-  output: stdout
-  jobs:
-    scheduled_backups:
-      run: scheduled_backups
-      schedule: "0 0 * * * * *"
-      tags: ["backups"]
-    audit_retention:
-      run: audit_retention
-      schedule: "0 0 2 * * * *"
-      tags: ["maintenance"]
+# As tarefas periodicas (dispatcher de backups e poda da auditoria) rodam
+# dentro do processo do servidor, em `initializers::scheduled_jobs`. O bloco
+# `scheduler:` do Loco nao e' usado: ele so' sobe com `backend start
+# --scheduler` e executaria cada job num subprocesso, sem o registro de SSE
+# criado em `Hooks::before_run` e disputando o lock do SQLite com o servidor.
+# Ver a documentacao do modulo para o raciocinio completo.
 
   
 
