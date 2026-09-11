@@ -57,7 +57,7 @@ pub struct LogFilters {
     pub timestamps: bool,
 }
 
-pub fn client() -> Result<Docker, DockerError> {
+fn init_client() -> Result<Docker, DockerError> {
     Docker::connect_with_defaults()
         .or_else(|_| Docker::connect_with_local_defaults())
         .map_err(|err| {
@@ -66,10 +66,23 @@ pub fn client() -> Result<Docker, DockerError> {
         })
 }
 
+pub fn client() -> Result<Docker, DockerError> {
+    static SHARED_CLIENT: std::sync::OnceLock<Docker> = std::sync::OnceLock::new();
+    if let Some(c) = SHARED_CLIENT.get() {
+        return Ok(c.clone());
+    }
+    let c = init_client()?;
+    let _ = SHARED_CLIENT.set(c.clone());
+    Ok(c)
+}
+
 async fn call<T>(
     future: impl std::future::Future<Output = Result<T, bollard::errors::Error>>,
 ) -> Result<T, DockerError> {
-    future.await.map_err(|_| DockerError::Engine)
+    future.await.map_err(|err| {
+        tracing::error!("Docker Engine call failed: {err}");
+        DockerError::Engine
+    })
 }
 
 fn value<T: Serialize>(item: T) -> Result<Value, DockerError> {
@@ -463,7 +476,10 @@ pub async fn status() -> Status {
         return Status { available: false };
     };
     let available = match tokio::time::timeout(PING_TIMEOUT, client.ping()).await {
-        Ok(Ok(_)) => true,
+        Ok(Ok(_)) => {
+            let _ = client.negotiate_version().await;
+            true
+        }
         Ok(Err(err)) => {
             tracing::warn!("Docker ping failed: {err}");
             false
@@ -538,9 +554,6 @@ async fn inspect_container_networks(
 ) -> Result<Vec<crate::models::docker_connection_suggestion::NetworkAttachment>, DockerError> {
     let client = client()?;
     let inspect = call(client.inspect_container(container_id, None)).await?;
-    let inspect: bollard::models::ContainerInspectResponse =
-        serde_json::from_value(serde_json::to_value(inspect).map_err(|_| DockerError::Engine)?)
-            .map_err(|_| DockerError::Engine)?;
     Ok(inspect
         .network_settings
         .as_ref()
@@ -622,8 +635,6 @@ pub async fn discover_database_hosts(
             continue;
         }
         let inspect = call(client.inspect_container(id, None)).await?;
-        let inspect: bollard::models::ContainerInspectResponse =
-            serde_json::from_value(value(inspect)?).map_err(|_| DockerError::Engine)?;
         if let Some(descriptor) = suggestion::descriptor_from_bollard(&summary, &inspect) {
             descriptors.push(descriptor);
         }
@@ -698,6 +709,7 @@ pub async fn container_logs(id: &str, filters: LogFilters) -> Result<Value, Dock
         let (stream_name, bytes) = match output {
             bollard::container::LogOutput::StdOut { message } => ("stdout", message),
             bollard::container::LogOutput::StdErr { message } => ("stderr", message),
+            bollard::container::LogOutput::Console { message } => ("stdout", message),
             _ => continue,
         };
         let mut message = String::from_utf8_lossy(&bytes).trim_end().to_string();
@@ -836,6 +848,7 @@ pub async fn remove_volume(name: &str, force: bool) -> Result<Value, DockerError
                     container_names,
                 });
             }
+            tracing::error!("Docker remove_volume failed for {name}: {err}");
             Err(DockerError::Engine)
         }
     }
