@@ -1,217 +1,262 @@
 <template>
   <div>
-    <v-row align="center" class="mb-6">
-      <v-col>
+    <v-row align="center" class="mb-4">
+      <v-col cols="12" md="6">
         <h1 class="font-weight-bold mb-1 text-h4">Docker Manager</h1>
-        <p class="text-body-2 text-medium-emphasis">
-          Visão geral do ambiente Docker
-        </p>
+        <div class="d-flex align-center ga-2 flex-wrap text-body-2 text-medium-emphasis">
+          <span>Visão geral do ambiente Docker</span>
+          <template v-if="dfData">
+            <span class="text-disabled">•</span>
+            <v-chip color="primary" size="small" variant="tonal">
+              Ocupado: <strong class="ml-1">{{ formatBytes(dfData.totalSize) }}</strong>
+            </v-chip>
+            <v-chip v-if="dfData.totalReclaimable > 0" color="warning" size="small" variant="tonal">
+              Liberável: <strong class="ml-1">{{ formatBytes(dfData.totalReclaimable) }}</strong>
+            </v-chip>
+          </template>
+        </div>
       </v-col>
-      <v-col cols="auto">
-        <v-btn :loading="loading" prepend-icon="mdi-refresh" variant="tonal" @click="load">
-          Atualizar
-        </v-btn>
+      <v-col cols="12" md="6">
+        <div class="d-flex align-center justify-start justify-md-end ga-2 flex-wrap">
+          <v-btn
+            color="warning"
+            :disabled="pruneLoading"
+            :loading="pruneLoading && !pruneAllSelected"
+            prepend-icon="mdi-broom"
+            variant="tonal"
+            @click="openPruneDialog(false)"
+          >
+            Limpar Cache
+          </v-btn>
+          <v-btn
+            color="error"
+            :disabled="pruneLoading"
+            :loading="pruneLoading && pruneAllSelected"
+            prepend-icon="mdi-delete-sweep"
+            variant="tonal"
+            @click="openPruneDialog(true)"
+          >
+            Limpeza Completa
+          </v-btn>
+          <v-btn :loading="loading" prepend-icon="mdi-refresh" variant="tonal" @click="load">
+            Atualizar
+          </v-btn>
+        </div>
       </v-col>
     </v-row>
 
     <DockerUnavailableBanner v-if="unavailable" />
 
     <template v-else>
-    <v-row class="mb-4">
-      <v-col cols="12" md="3" sm="6">
-        <v-card to="/docker/containers" variant="outlined">
-          <v-card-text class="d-flex align-center ga-4 pa-5">
-            <v-avatar color="success" rounded="lg" size="48">
-              <v-icon icon="mdi-cube-outline" />
-            </v-avatar>
-            <div class="overflow-hidden">
-              <div class="text-h5 font-weight-bold">{{ running }}</div>
-              <div class="text-caption text-medium-emphasis text-truncate">Containers em execução</div>
-              <div v-if="dfData?.containers" class="text-caption text-success mt-1 font-weight-medium">
-                {{ formatBytes(dfData.containers.totalSize) }} gravados (RW)
-              </div>
-            </div>
-          </v-card-text>
-        </v-card>
-      </v-col>
-
-      <v-col cols="12" md="3" sm="6">
-        <v-card to="/docker/containers" variant="outlined">
-          <v-card-text class="d-flex align-center ga-4 pa-5">
-            <v-avatar color="error" rounded="lg" size="48">
-              <v-icon icon="mdi-stop-circle-outline" />
-            </v-avatar>
-            <div class="overflow-hidden">
-              <div class="text-h5 font-weight-bold">{{ stopped }}</div>
-              <div class="text-caption text-medium-emphasis text-truncate">Containers parados</div>
-              <div v-if="dfData?.containers?.reclaimableSize" class="text-caption text-error mt-1 font-weight-medium">
-                {{ formatBytes(dfData.containers.reclaimableSize) }} liberável
-              </div>
-            </div>
-          </v-card-text>
-        </v-card>
-      </v-col>
-
-      <v-col cols="12" md="3" sm="6">
-        <v-card to="/docker/volumes" variant="outlined">
-          <v-card-text class="d-flex align-center ga-4 pa-5">
-            <v-avatar color="primary" rounded="lg" size="48">
-              <v-icon icon="mdi-database-outline" />
-            </v-avatar>
-            <div class="overflow-hidden">
-              <div class="text-h5 font-weight-bold">{{ volumes }}</div>
-              <div class="text-caption text-medium-emphasis text-truncate">Volumes</div>
-              <div v-if="dfData?.volumes" class="text-caption text-primary mt-1 font-weight-medium">
-                {{ formatBytes(dfData.volumes.totalSize) }} em disco
-              </div>
-            </div>
-          </v-card-text>
-        </v-card>
-      </v-col>
-
-      <v-col cols="12" md="3" sm="6">
-        <v-card to="/docker/images" variant="outlined">
-          <v-card-text class="d-flex align-center ga-4 pa-5">
-            <v-avatar color="info" rounded="lg" size="48">
-              <v-icon icon="mdi-layers-outline" />
-            </v-avatar>
-            <div class="overflow-hidden">
-              <div class="text-h5 font-weight-bold">{{ images }}</div>
-              <div class="text-caption text-medium-emphasis text-truncate">Imagens</div>
-              <div v-if="dfData?.images" class="text-caption text-info mt-1 font-weight-medium">
-                {{ formatBytes(dfData.images.totalSize) }} em disco
-              </div>
-            </div>
-          </v-card-text>
-        </v-card>
-      </v-col>
-    </v-row>
-
-    <!-- Docker Disk Usage Section -->
-    <v-row v-if="dfData" class="mb-4">
-      <v-col cols="12">
-        <v-card variant="outlined" class="docker-df-card">
-          <v-card-text class="pa-5">
-            <div class="d-flex flex-column flex-md-row align-md-center justify-space-between ga-3 mb-4">
-              <div class="d-flex align-center ga-3">
-                <v-avatar color="primary" rounded="lg" size="44" variant="tonal">
-                  <v-icon icon="mdi-harddisk" size="24" />
-                </v-avatar>
-                <div>
-                  <div class="text-subtitle-1 font-weight-bold">Uso de Espaço em Disco do Docker</div>
-                  <div class="text-caption text-medium-emphasis">
-                    Detalhamento do armazenamento ocupado por imagens, volumes, contêineres e build cache
+      <!-- Unified Docker Overview Cards -->
+      <v-row class="mb-4">
+        <!-- Containers -->
+        <v-col cols="12" md="3" sm="6">
+          <v-card
+            class="docker-overview-card h-100 cursor-pointer"
+            to="/docker/containers"
+            variant="outlined"
+          >
+            <v-card-text class="d-flex flex-column h-100 pa-5">
+              <div class="d-flex align-center justify-space-between mb-3">
+                <div class="d-flex align-center ga-3">
+                  <v-avatar color="success" rounded="lg" size="44" variant="tonal">
+                    <v-icon icon="mdi-cube-outline" size="24" />
+                  </v-avatar>
+                  <div>
+                    <div class="text-subtitle-1 font-weight-bold line-height-1">Contêineres</div>
+                    <div class="text-caption text-medium-emphasis">
+                      {{ allContainers.length }} {{ allContainers.length === 1 ? 'total' : 'totais' }}
+                    </div>
                   </div>
                 </div>
+                <v-icon class="card-arrow text-medium-emphasis" icon="mdi-arrow-right" size="18" />
               </div>
 
-              <div class="d-flex align-center ga-2 flex-wrap">
-                <v-chip color="primary" variant="tonal">
-                  Total Ocupado: <strong>{{ formatBytes(dfData.totalSize) }}</strong>
-                </v-chip>
-                <v-chip v-if="dfData.totalReclaimable > 0" color="warning" variant="tonal">
-                  Recuperável: <strong>{{ formatBytes(dfData.totalReclaimable) }}</strong>
+              <div class="d-flex align-baseline ga-2 mb-2">
+                <span class="text-h5 font-weight-bold text-success">{{ running }}</span>
+                <span class="text-caption text-medium-emphasis">em execução</span>
+                <span class="text-caption text-medium-emphasis">•</span>
+                <span
+                  class="text-caption font-weight-medium"
+                  :class="stopped > 0 ? 'text-error' : 'text-medium-emphasis'"
+                >
+                  {{ stopped }} {{ stopped === 1 ? 'parado' : 'parados' }}
+                </span>
+              </div>
+
+              <v-divider class="my-2 border-opacity-25" />
+
+              <div class="d-flex align-center justify-space-between text-caption mt-auto pt-1">
+                <div class="d-flex align-center ga-1 text-medium-emphasis">
+                  <v-icon icon="mdi-harddisk" size="14" />
+                  <span>{{ formatBytes(dfData?.containers?.totalSize ?? 0) }} (RW)</span>
+                </div>
+                <v-chip
+                  v-if="(dfData?.containers?.reclaimableSize ?? 0) > 0"
+                  class="font-weight-medium"
+                  color="warning"
+                  size="x-small"
+                  variant="tonal"
+                >
+                  {{ formatBytes(dfData!.containers.reclaimableSize) }} liberável
                 </v-chip>
               </div>
-            </div>
+            </v-card-text>
+          </v-card>
+        </v-col>
 
-            <v-row dense>
-              <!-- Imagens -->
-              <v-col cols="12" sm="6" md="3">
-                <v-card class="pa-3 df-item-card" variant="tonal" color="info">
-                  <div class="d-flex align-center justify-space-between mb-1">
-                    <span class="text-subtitle-2 font-weight-bold d-flex align-center ga-1">
-                      <v-icon icon="mdi-layers-outline" size="16" /> Imagens
-                    </span>
-                    <v-chip size="x-small" label color="info" variant="flat">
-                      {{ dfData.images.totalCount }} itens
-                    </v-chip>
+        <!-- Imagens -->
+        <v-col cols="12" md="3" sm="6">
+          <v-card
+            class="docker-overview-card h-100 cursor-pointer"
+            to="/docker/images"
+            variant="outlined"
+          >
+            <v-card-text class="d-flex flex-column h-100 pa-5">
+              <div class="d-flex align-center justify-space-between mb-3">
+                <div class="d-flex align-center ga-3">
+                  <v-avatar color="info" rounded="lg" size="44" variant="tonal">
+                    <v-icon icon="mdi-layers-outline" size="24" />
+                  </v-avatar>
+                  <div>
+                    <div class="text-subtitle-1 font-weight-bold line-height-1">Imagens</div>
+                    <div class="text-caption text-medium-emphasis">
+                      {{ dfData?.images?.totalCount ?? images }} {{ (dfData?.images?.totalCount ?? images) === 1 ? 'imagem' : 'imagens' }}
+                    </div>
                   </div>
-                  <div class="text-h6 font-weight-bold text-info">
-                    {{ formatBytes(dfData.images.totalSize) }}
-                  </div>
-                  <div class="text-caption text-medium-emphasis d-flex justify-space-between mt-1">
-                    <span>Ativas: {{ dfData.images.activeCount }}</span>
-                    <span v-if="dfData.images.reclaimableSize > 0" class="text-warning font-weight-medium">
-                      {{ formatBytes(dfData.images.reclaimableSize) }} liberável
-                    </span>
-                  </div>
-                </v-card>
-              </v-col>
+                </div>
+                <v-icon class="card-arrow text-medium-emphasis" icon="mdi-arrow-right" size="18" />
+              </div>
 
-              <!-- Volumes -->
-              <v-col cols="12" sm="6" md="3">
-                <v-card class="pa-3 df-item-card" variant="tonal" color="primary">
-                  <div class="d-flex align-center justify-space-between mb-1">
-                    <span class="text-subtitle-2 font-weight-bold d-flex align-center ga-1">
-                      <v-icon icon="mdi-database-outline" size="16" /> Volumes
-                    </span>
-                    <v-chip size="x-small" label color="primary" variant="flat">
-                      {{ dfData.volumes.totalCount }} itens
-                    </v-chip>
-                  </div>
-                  <div class="text-h6 font-weight-bold text-primary">
-                    {{ formatBytes(dfData.volumes.totalSize) }}
-                  </div>
-                  <div class="text-caption text-medium-emphasis d-flex justify-space-between mt-1">
-                    <span>Em uso: {{ dfData.volumes.activeCount }}</span>
-                    <span v-if="dfData.volumes.reclaimableSize > 0" class="text-warning font-weight-medium">
-                      {{ formatBytes(dfData.volumes.reclaimableSize) }} liberável
-                    </span>
-                  </div>
-                </v-card>
-              </v-col>
+              <div class="d-flex align-baseline ga-2 mb-2">
+                <span class="text-h5 font-weight-bold text-info">
+                  {{ formatBytes(dfData?.images?.totalSize ?? 0) }}
+                </span>
+                <span class="text-caption text-medium-emphasis">em disco</span>
+              </div>
 
-              <!-- Containers -->
-              <v-col cols="12" sm="6" md="3">
-                <v-card class="pa-3 df-item-card" variant="tonal" color="success">
-                  <div class="d-flex align-center justify-space-between mb-1">
-                    <span class="text-subtitle-2 font-weight-bold d-flex align-center ga-1">
-                      <v-icon icon="mdi-cube-outline" size="16" /> Containers (RW)
-                    </span>
-                    <v-chip size="x-small" label color="success" variant="flat">
-                      {{ dfData.containers.totalCount }} itens
-                    </v-chip>
-                  </div>
-                  <div class="text-h6 font-weight-bold text-success">
-                    {{ formatBytes(dfData.containers.totalSize) }}
-                  </div>
-                  <div class="text-caption text-medium-emphasis d-flex justify-space-between mt-1">
-                    <span>Rodando: {{ dfData.containers.activeCount }}</span>
-                    <span v-if="dfData.containers.reclaimableSize > 0" class="text-warning font-weight-medium">
-                      {{ formatBytes(dfData.containers.reclaimableSize) }} liberável
-                    </span>
-                  </div>
-                </v-card>
-              </v-col>
+              <v-divider class="my-2 border-opacity-25" />
 
-              <!-- Build Cache -->
-              <v-col cols="12" sm="6" md="3">
-                <v-card class="pa-3 df-item-card" variant="tonal" color="secondary">
-                  <div class="d-flex align-center justify-space-between mb-1">
-                    <span class="text-subtitle-2 font-weight-bold d-flex align-center ga-1">
-                      <v-icon icon="mdi-cached" size="16" /> Build Cache
-                    </span>
-                    <v-chip size="x-small" label color="secondary" variant="flat">
-                      {{ dfData.buildCache.totalCount }} itens
-                    </v-chip>
+              <div class="d-flex align-center justify-space-between text-caption mt-auto pt-1">
+                <div class="text-medium-emphasis">
+                  {{ dfData?.images?.activeCount ?? 0 }} ativas
+                </div>
+                <v-chip
+                  v-if="(dfData?.images?.reclaimableSize ?? 0) > 0"
+                  class="font-weight-medium"
+                  color="warning"
+                  size="x-small"
+                  variant="tonal"
+                >
+                  {{ formatBytes(dfData!.images.reclaimableSize) }} liberável
+                </v-chip>
+              </div>
+            </v-card-text>
+          </v-card>
+        </v-col>
+
+        <!-- Volumes -->
+        <v-col cols="12" md="3" sm="6">
+          <v-card
+            class="docker-overview-card h-100 cursor-pointer"
+            to="/docker/volumes"
+            variant="outlined"
+          >
+            <v-card-text class="d-flex flex-column h-100 pa-5">
+              <div class="d-flex align-center justify-space-between mb-3">
+                <div class="d-flex align-center ga-3">
+                  <v-avatar color="primary" rounded="lg" size="44" variant="tonal">
+                    <v-icon icon="mdi-database-outline" size="24" />
+                  </v-avatar>
+                  <div>
+                    <div class="text-subtitle-1 font-weight-bold line-height-1">Volumes</div>
+                    <div class="text-caption text-medium-emphasis">
+                      {{ dfData?.volumes?.totalCount ?? volumes }} {{ (dfData?.volumes?.totalCount ?? volumes) === 1 ? 'volume' : 'volumes' }}
+                    </div>
                   </div>
-                  <div class="text-h6 font-weight-bold text-secondary">
-                    {{ formatBytes(dfData.buildCache.totalSize) }}
+                </div>
+                <v-icon class="card-arrow text-medium-emphasis" icon="mdi-arrow-right" size="18" />
+              </div>
+
+              <div class="d-flex align-baseline ga-2 mb-2">
+                <span class="text-h5 font-weight-bold text-primary">
+                  {{ formatBytes(dfData?.volumes?.totalSize ?? 0) }}
+                </span>
+                <span class="text-caption text-medium-emphasis">em disco</span>
+              </div>
+
+              <v-divider class="my-2 border-opacity-25" />
+
+              <div class="d-flex align-center justify-space-between text-caption mt-auto pt-1">
+                <div class="text-medium-emphasis">
+                  {{ dfData?.volumes?.activeCount ?? 0 }} em uso
+                </div>
+                <v-chip
+                  v-if="(dfData?.volumes?.reclaimableSize ?? 0) > 0"
+                  class="font-weight-medium"
+                  color="warning"
+                  size="x-small"
+                  variant="tonal"
+                >
+                  {{ formatBytes(dfData!.volumes.reclaimableSize) }} liberável
+                </v-chip>
+              </div>
+            </v-card-text>
+          </v-card>
+        </v-col>
+
+        <!-- Build Cache -->
+        <v-col cols="12" md="3" sm="6">
+          <v-card
+            class="docker-overview-card h-100 cursor-pointer"
+            variant="outlined"
+            @click="openPruneDialog(false)"
+          >
+            <v-card-text class="d-flex flex-column h-100 pa-5">
+              <div class="d-flex align-center justify-space-between mb-3">
+                <div class="d-flex align-center ga-3">
+                  <v-avatar color="secondary" rounded="lg" size="44" variant="tonal">
+                    <v-icon icon="mdi-cached" size="24" />
+                  </v-avatar>
+                  <div>
+                    <div class="text-subtitle-1 font-weight-bold line-height-1">Build Cache</div>
+                    <div class="text-caption text-medium-emphasis">
+                      {{ dfData?.buildCache?.totalCount ?? 0 }} {{ (dfData?.buildCache?.totalCount ?? 0) === 1 ? 'item' : 'itens' }}
+                    </div>
                   </div>
-                  <div class="text-caption text-medium-emphasis d-flex justify-space-between mt-1">
-                    <span>Ativos: {{ dfData.buildCache.activeCount }}</span>
-                    <span v-if="dfData.buildCache.reclaimableSize > 0" class="text-warning font-weight-medium">
-                      {{ formatBytes(dfData.buildCache.reclaimableSize) }} liberável
-                    </span>
-                  </div>
-                </v-card>
-              </v-col>
-            </v-row>
-          </v-card-text>
-        </v-card>
-      </v-col>
-    </v-row>
+                </div>
+                <v-icon class="card-arrow text-medium-emphasis" icon="mdi-broom" size="18" />
+              </div>
+
+              <div class="d-flex align-baseline ga-2 mb-2">
+                <span class="text-h5 font-weight-bold text-secondary">
+                  {{ formatBytes(dfData?.buildCache?.totalSize ?? 0) }}
+                </span>
+                <span class="text-caption text-medium-emphasis">em disco</span>
+              </div>
+
+              <v-divider class="my-2 border-opacity-25" />
+
+              <div class="d-flex align-center justify-space-between text-caption mt-auto pt-1">
+                <div class="text-medium-emphasis">
+                  {{ dfData?.buildCache?.activeCount ?? 0 }} ativos
+                </div>
+                <v-chip
+                  v-if="(dfData?.buildCache?.reclaimableSize ?? 0) > 0"
+                  class="font-weight-medium"
+                  color="warning"
+                  size="x-small"
+                  variant="tonal"
+                >
+                  {{ formatBytes(dfData!.buildCache.reclaimableSize) }} liberável
+                </v-chip>
+                <span v-else class="text-caption text-secondary font-weight-medium">Limpar cache</span>
+              </div>
+            </v-card-text>
+          </v-card>
+        </v-col>
+      </v-row>
 
     <!-- History range selector -->
     <v-row class="mb-2">
@@ -275,6 +320,62 @@
       :error="dockerError"
     />
 
+    <!-- Prune Confirmation Dialog -->
+    <v-dialog v-model="pruneDialog" max-width="540">
+      <v-card>
+        <v-card-title class="d-flex align-center ga-2 pt-4 px-4">
+          <v-avatar :color="pruneAllSelected ? 'error' : 'warning'" size="36">
+            <v-icon :icon="pruneAllSelected ? 'mdi-delete-sweep' : 'mdi-broom'" />
+          </v-avatar>
+          <span class="text-h6 font-weight-bold">
+            {{ pruneAllSelected ? 'Limpeza Completa (docker system prune -a)' : 'Limpar Cache do Docker' }}
+          </span>
+        </v-card-title>
+
+        <v-card-text class="px-4 py-3">
+          <p class="text-body-2 mb-3">
+            {{
+              pruneAllSelected
+                ? 'Esta ação executará uma limpeza profunda equivalente a "docker system prune -a". Serão removidos todos os containers parados, redes não utilizadas, cache de build (BuildKit) e todas as imagens não associadas a um container em execução.'
+                : 'Esta ação limpará o cache do Docker, removendo containers parados, redes não utilizadas, cache de build temporário e imagens dangling (camadas sem tag).'
+            }}
+          </p>
+
+          <v-checkbox
+            v-model="pruneIncludeVolumes"
+            color="error"
+            density="comfortable"
+            hide-details
+            label="Remover também volumes não utilizados (órfãos)"
+          />
+          <p v-if="pruneIncludeVolumes" class="text-caption text-error mt-1 ml-8">
+            Atenção: volumes órfãos não associados a nenhum container serão excluídos permanentemente.
+          </p>
+        </v-card-text>
+
+        <v-divider />
+
+        <v-card-actions class="pa-3">
+          <v-spacer />
+          <v-btn
+            :disabled="pruneLoading"
+            variant="text"
+            @click="pruneDialog = false"
+          >
+            Cancelar
+          </v-btn>
+          <v-btn
+            :color="pruneAllSelected ? 'error' : 'warning'"
+            :loading="pruneLoading"
+            variant="flat"
+            @click="executePrune"
+          >
+            Confirmar Limpeza
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     </template>
   </div>
 </template>
@@ -291,17 +392,67 @@ import DockerUnavailableBanner from '@/components/docker/DockerUnavailableBanner
 import DockerContainerResourceCharts from '@/components/system/DockerContainerResourceCharts.vue'
 import SystemResourceCharts from '@/components/system/SystemResourceCharts.vue'
 import { useDockerContainerResources } from '@/composables/useDockerContainerResources'
+import { useNotifier } from '@/composables/useNotifier'
 import { useResourceHistory } from '@/composables/useResourceHistory'
 import { useSystemResources } from '@/composables/useSystemResources'
 import { formatBytes } from '@/utils/format'
 import type { DockerContainerGroup, DockerSystemDfResponse, SystemStatus } from '@/types/api'
 
+const notify = useNotifier()
 const loading = ref(false)
 const unavailable = ref(false)
 const groups = ref<DockerContainerGroup[]>([])
 const volumes = ref(0)
 const images = ref(0)
 const dfData = ref<DockerSystemDfResponse | null>(null)
+
+// Prune Dialog State
+const pruneDialog = ref(false)
+const pruneAllSelected = ref(false)
+const pruneIncludeVolumes = ref(false)
+const pruneLoading = ref(false)
+
+function openPruneDialog(all: boolean) {
+  pruneAllSelected.value = all
+  pruneIncludeVolumes.value = false
+  pruneDialog.value = true
+}
+
+async function executePrune() {
+  pruneLoading.value = true
+  try {
+    const res = await dockerSystemApi.prune({
+      all: pruneAllSelected.value,
+      volumes: pruneIncludeVolumes.value,
+    })
+    const freed = formatBytes(res.spaceReclaimed)
+    const counts: string[] = []
+    if (res.containersDeleted && res.containersDeleted.length > 0) {
+      counts.push(`${res.containersDeleted.length} container(s)`)
+    }
+    if (res.imagesDeleted && res.imagesDeleted.length > 0) {
+      counts.push(`${res.imagesDeleted.length} imagem(ns)`)
+    }
+    if (res.networksDeleted && res.networksDeleted.length > 0) {
+      counts.push(`${res.networksDeleted.length} rede(s)`)
+    }
+    if (res.volumesDeleted && res.volumesDeleted.length > 0) {
+      counts.push(`${res.volumesDeleted.length} volume(s)`)
+    }
+    if (res.buildCacheDeleted && res.buildCacheDeleted.length > 0) {
+      counts.push(`${res.buildCacheDeleted.length} cache(s) de build`)
+    }
+
+    const detailMsg = counts.length > 0 ? ` (${counts.join(', ')})` : ''
+    notify(`Limpeza concluída com sucesso! ${freed} liberados${detailMsg}.`, 'success')
+    pruneDialog.value = false
+    await load()
+  } catch (error) {
+    notify(error instanceof Error ? error.message : 'Erro ao executar limpeza.', 'error')
+  } finally {
+    pruneLoading.value = false
+  }
+}
 
 const allContainers = computed(() => groups.value.flatMap((g) => g.containers))
 const running = computed(() => allContainers.value.filter((c) => c.state === 'running').length)
@@ -396,14 +547,25 @@ onMounted(async () => {
 .history-filter-card {
   border: 1px solid rgba(var(--v-border-color), 0.08);
 }
-.docker-df-card {
+.docker-overview-card {
   border: 1px solid rgba(var(--v-border-color), 0.12);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+  position: relative;
+  overflow: hidden;
 }
-.df-item-card {
-  border: 1px solid rgba(var(--v-border-color), 0.08);
-  transition: transform 0.2s, box-shadow 0.2s;
+.docker-overview-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
+  border-color: rgba(var(--v-theme-primary), 0.4);
 }
-.df-item-card:hover {
-  transform: translateY(-2px);
+.docker-overview-card:hover .card-arrow {
+  transform: translateX(3px);
+  color: rgb(var(--v-theme-primary)) !important;
+}
+.card-arrow {
+  transition: transform 0.2s ease, color 0.2s ease;
+}
+.line-height-1 {
+  line-height: 1.2;
 }
 </style>
