@@ -643,6 +643,11 @@ export interface DockerVolumeSummary {
   labels: Record<string, string>
   scope: string
   createdAt?: string
+  size?: number
+  usageData?: {
+    size: number
+    refCount: number
+  }
 }
 
 export interface DockerVolumeDetail extends DockerVolumeSummary {
@@ -777,4 +782,31 @@ export interface DockerLogsParams {
   until?: number
   timestamps?: boolean
 }
+
+export interface DockerSystemDfCategory {
+  totalCount: number
+  activeCount: number
+  totalSize: number
+  reclaimableSize: number
+}
+
+export interface DockerSystemDfResponse {
+  layersSize: number
+  totalSize: number
+  totalReclaimable: number
+  images: DockerSystemDfCategory
+  containers: DockerSystemDfCategory
+  volumes: DockerSystemDfCategory
+  buildCache: DockerSystemDfCategory
+}
+
+export interface DockerSystemPruneResult {
+  spaceReclaimed: number
+  containersDeleted: string[]
+  imagesDeleted: Array<{ untagged?: string; deleted?: string }>
+  networksDeleted: string[]
+  volumesDeleted: string[]
+  buildCacheDeleted?: string[]
+}
+
 

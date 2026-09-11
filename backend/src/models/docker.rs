@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use std::time::Duration;
 
 use bollard::container::{ListContainersOptions, LogsOptions, RemoveContainerOptions};
-use bollard::image::{ListImagesOptions, RemoveImageOptions};
+use bollard::image::{ListImagesOptions, PruneImagesOptions, RemoveImageOptions};
 use bollard::network::{
     ConnectNetworkOptions, CreateNetworkOptions, DisconnectNetworkOptions, ListNetworksOptions,
 };
@@ -246,6 +246,23 @@ fn normalize_volume(item: &Value, include_detail: bool) -> Value {
     );
     if let Some(created_at) = field(item, &["CreatedAt", "createdAt"]).and_then(Value::as_str) {
         volume.insert("createdAt".into(), Value::String(created_at.to_string()));
+    }
+    let usage_data = field(item, &["UsageData", "usageData"]);
+    let size = field(item, &["Size", "size"])
+        .and_then(Value::as_i64)
+        .or_else(|| usage_data.and_then(|u| field(u, &["Size", "size"])).and_then(Value::as_i64));
+    if let Some(size) = size {
+        volume.insert("size".into(), json!(size));
+    }
+    if let Some(usage) = usage_data {
+        let mut usage_obj = Map::new();
+        if let Some(size) = field(usage, &["Size", "size"]).and_then(Value::as_i64) {
+            usage_obj.insert("size".into(), json!(size));
+        }
+        if let Some(ref_count) = field(usage, &["RefCount", "refCount"]).and_then(Value::as_i64) {
+            usage_obj.insert("refCount".into(), json!(ref_count));
+        }
+        volume.insert("usageData".into(), Value::Object(usage_obj));
     }
     if include_detail {
         volume.insert(
@@ -720,10 +737,24 @@ pub async fn clear_container_logs(id: &str) -> Result<Value, DockerError> {
 }
 
 pub async fn list_volumes() -> Result<Value, DockerError> {
-    let response =
-        value(call(client()?.list_volumes(Some(ListVolumesOptions::<String>::default()))).await?)?;
-    // A Engine envolve a lista em `Volumes`; o contrato HTTP expõe apenas a
-    // coleção, como o manager legado.
+    let client = client()?;
+    let list_future = client.list_volumes(Some(ListVolumesOptions::<String>::default()));
+    let df_future = client.df();
+
+    let (list_res, df_res) = tokio::join!(call(list_future), df_future);
+    let response = value(list_res?)?;
+
+    let mut usage_map: HashMap<String, (i64, i64)> = HashMap::new();
+    if let Ok(df) = df_res {
+        if let Some(vols) = df.volumes {
+            for v in vols {
+                if let Some(ud) = v.usage_data {
+                    usage_map.insert(v.name, (ud.size, ud.ref_count));
+                }
+            }
+        }
+    }
+
     let volumes = response
         .get("Volumes")
         .or_else(|| response.get("volumes"))
@@ -735,15 +766,58 @@ pub async fn list_volumes() -> Result<Value, DockerError> {
             .map(|volumes| {
                 volumes
                     .iter()
-                    .map(|volume| normalize_volume(volume, false))
+                    .map(|volume| {
+                        let mut norm = normalize_volume(volume, false);
+                        if let Some(name) = norm["name"].as_str() {
+                            if let Some(&(size, ref_count)) = usage_map.get(name) {
+                                if let Some(obj) = norm.as_object_mut() {
+                                    obj.insert("size".into(), json!(size));
+                                    obj.insert(
+                                        "usageData".into(),
+                                        json!({
+                                            "size": size,
+                                            "refCount": ref_count,
+                                        }),
+                                    );
+                                }
+                            }
+                        }
+                        norm
+                    })
                     .collect()
             })
             .unwrap_or_default(),
     ))
 }
 pub async fn inspect_volume(name: &str) -> Result<Value, DockerError> {
-    let volume = value(call(client()?.inspect_volume(name)).await?)?;
-    Ok(normalize_volume(&volume, true))
+    let client = client()?;
+    let inspect_future = client.inspect_volume(name);
+    let df_future = client.df();
+
+    let (inspect_res, df_res) = tokio::join!(call(inspect_future), df_future);
+    let volume = value(inspect_res?)?;
+    let mut norm = normalize_volume(&volume, true);
+
+    if let Ok(df) = df_res {
+        if let Some(vols) = df.volumes {
+            if let Some(v) = vols.into_iter().find(|v| v.name == name) {
+                if let Some(ud) = v.usage_data {
+                    if let Some(obj) = norm.as_object_mut() {
+                        obj.insert("size".into(), json!(ud.size));
+                        obj.insert(
+                            "usageData".into(),
+                            json!({
+                                "size": ud.size,
+                                "refCount": ud.ref_count,
+                            }),
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(norm)
 }
 pub async fn remove_volume(name: &str, force: bool) -> Result<Value, DockerError> {
     let client = client()?;
@@ -973,6 +1047,277 @@ pub async fn prune_images() -> Result<Value, DockerError> {
     value(call(client()?.prune_images::<String>(None)).await?)
 }
 
+pub async fn system_df() -> Result<Value, DockerError> {
+    let client = client()?;
+    let df = call(client.df()).await?;
+
+    let layers_size = df.layers_size.unwrap_or(0);
+
+    let (img_total, img_active, img_size, img_reclaimable) = match df.images {
+        Some(images) => {
+            let total = images.len();
+            let mut active = 0;
+            let mut size = 0i64;
+            let mut reclaimable = 0i64;
+            for img in images {
+                let s = img.size;
+                size += s;
+                if img.containers > 0 {
+                    active += 1;
+                } else {
+                    reclaimable += s;
+                }
+            }
+            (total, active, size, reclaimable)
+        }
+        None => (0, 0, 0, 0),
+    };
+
+    let (cnt_total, cnt_active, cnt_size, cnt_reclaimable) = match df.containers {
+        Some(containers) => {
+            let total = containers.len();
+            let mut active = 0;
+            let mut size = 0i64;
+            let mut reclaimable = 0i64;
+            for c in containers {
+                let s = c.size_rw.unwrap_or(0);
+                size += s;
+                if c.state.as_deref() == Some("running") {
+                    active += 1;
+                } else {
+                    reclaimable += s;
+                }
+            }
+            (total, active, size, reclaimable)
+        }
+        None => (0, 0, 0, 0),
+    };
+
+    let (vol_total, vol_active, vol_size, vol_reclaimable) = match df.volumes {
+        Some(volumes) => {
+            let total = volumes.len();
+            let mut active = 0;
+            let mut size = 0i64;
+            let mut reclaimable = 0i64;
+            for v in volumes {
+                if let Some(usage) = v.usage_data {
+                    let s = usage.size;
+                    size += s;
+                    if usage.ref_count > 0 {
+                        active += 1;
+                    } else {
+                        reclaimable += s;
+                    }
+                }
+            }
+            (total, active, size, reclaimable)
+        }
+        None => (0, 0, 0, 0),
+    };
+
+    let (bc_total, bc_active, bc_size, bc_reclaimable) = match df.build_cache {
+        Some(caches) => {
+            let total = caches.len();
+            let mut active = 0;
+            let mut size = 0i64;
+            let mut reclaimable = 0i64;
+            for b in caches {
+                let s = b.size.unwrap_or(0);
+                size += s;
+                if b.in_use.unwrap_or(false) {
+                    active += 1;
+                } else {
+                    reclaimable += s;
+                }
+            }
+            (total, active, size, reclaimable)
+        }
+        None => (0, 0, 0, 0),
+    };
+
+    let total_size = img_size + cnt_size + vol_size + bc_size;
+    let total_reclaimable = img_reclaimable + cnt_reclaimable + vol_reclaimable + bc_reclaimable;
+
+    Ok(json!({
+        "layersSize": layers_size,
+        "totalSize": total_size,
+        "totalReclaimable": total_reclaimable,
+        "images": {
+            "totalCount": img_total,
+            "activeCount": img_active,
+            "totalSize": img_size,
+            "reclaimableSize": img_reclaimable,
+        },
+        "containers": {
+            "totalCount": cnt_total,
+            "activeCount": cnt_active,
+            "totalSize": cnt_size,
+            "reclaimableSize": cnt_reclaimable,
+        },
+        "volumes": {
+            "totalCount": vol_total,
+            "activeCount": vol_active,
+            "totalSize": vol_size,
+            "reclaimableSize": vol_reclaimable,
+        },
+        "buildCache": {
+            "totalCount": bc_total,
+            "activeCount": bc_active,
+            "totalSize": bc_size,
+            "reclaimableSize": bc_reclaimable,
+        }
+    }))
+}
+
+async fn prune_build_cache_raw(all: bool) -> (Vec<String>, i64) {
+    let docker_host = std::env::var("DOCKER_HOST").ok();
+    let query = if all { "all=true" } else { "all=false" };
+    let req = format!(
+        "POST /build/prune?{} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\nContent-Length: 0\r\n\r\n",
+        query
+    );
+
+    let res: Option<Vec<u8>> = async {
+        #[cfg(windows)]
+        {
+            if let Some(host) = &docker_host {
+                if host.starts_with("tcp://") {
+                    let addr = host.trim_start_matches("tcp://");
+                    let mut stream = tokio::net::TcpStream::connect(addr).await.ok()?;
+                    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+                    stream.write_all(req.as_bytes()).await.ok()?;
+                    let mut buf = Vec::new();
+                    stream.read_to_end(&mut buf).await.ok()?;
+                    return Some(buf);
+                }
+            }
+            use tokio::io::{AsyncReadExt, AsyncWriteExt};
+            use tokio::net::windows::named_pipe::ClientOptions;
+            let mut client = ClientOptions::new().open(r"\\.\pipe\docker_engine").ok()?;
+            client.write_all(req.as_bytes()).await.ok()?;
+            let mut buf = Vec::new();
+            client.read_to_end(&mut buf).await.ok()?;
+            Some(buf)
+        }
+        #[cfg(unix)]
+        {
+            if let Some(host) = &docker_host {
+                if host.starts_with("tcp://") {
+                    let addr = host.trim_start_matches("tcp://");
+                    let mut stream = tokio::net::TcpStream::connect(addr).await.ok()?;
+                    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+                    stream.write_all(req.as_bytes()).await.ok()?;
+                    let mut buf = Vec::new();
+                    stream.read_to_end(&mut buf).await.ok()?;
+                    return Some(buf);
+                }
+                if host.starts_with("unix://") {
+                    let path = host.trim_start_matches("unix://");
+                    let mut stream = tokio::net::UnixStream::connect(path).await.ok()?;
+                    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+                    stream.write_all(req.as_bytes()).await.ok()?;
+                    let mut buf = Vec::new();
+                    stream.read_to_end(&mut buf).await.ok()?;
+                    return Some(buf);
+                }
+            }
+            use tokio::io::{AsyncReadExt, AsyncWriteExt};
+            use tokio::net::UnixStream;
+            let mut stream = UnixStream::connect("/var/run/docker.sock").await.ok()?;
+            stream.write_all(req.as_bytes()).await.ok()?;
+            let mut buf = Vec::new();
+            stream.read_to_end(&mut buf).await.ok()?;
+            Some(buf)
+        }
+    }
+    .await;
+
+    let Some(bytes) = res else {
+        return (Vec::new(), 0);
+    };
+
+    let text = String::from_utf8_lossy(&bytes);
+    if let Some(start) = text.find('{') {
+        if let Some(end) = text.rfind('}') {
+            if end > start {
+                let json_slice = &text[start..=end];
+                if let Ok(parsed) = serde_json::from_str::<Value>(json_slice) {
+                    let space = parsed.get("SpaceReclaimed").and_then(Value::as_i64).unwrap_or(0);
+                    let caches = parsed
+                        .get("CachesDeleted")
+                        .and_then(Value::as_array)
+                        .map(|arr| {
+                            arr.iter()
+                                .filter_map(Value::as_str)
+                                .map(ToString::to_string)
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    return (caches, space);
+                }
+            }
+        }
+    }
+
+    (Vec::new(), 0)
+}
+
+pub async fn prune_system(all: bool, prune_vols: bool) -> Result<Value, DockerError> {
+    let client = client()?;
+
+    let mut total_space_reclaimed: i64 = 0;
+
+    let container_res = call(client.prune_containers::<String>(None)).await?;
+    let containers_deleted = container_res.containers_deleted.unwrap_or_default();
+    total_space_reclaimed += container_res.space_reclaimed.unwrap_or(0) as i64;
+
+    let network_res = call(client.prune_networks::<String>(None)).await?;
+    let networks_deleted = network_res.networks_deleted.unwrap_or_default();
+
+    let mut image_filters = HashMap::new();
+    image_filters.insert(
+        "dangling".to_string(),
+        vec![if all { "false".to_string() } else { "true".to_string() }],
+    );
+    let image_res = call(client.prune_images(Some(PruneImagesOptions {
+        filters: image_filters,
+    })))
+    .await?;
+    let images_deleted = image_res
+        .images_deleted
+        .unwrap_or_default()
+        .into_iter()
+        .map(|item| {
+            json!({
+                "untagged": item.untagged,
+                "deleted": item.deleted,
+            })
+        })
+        .collect::<Vec<_>>();
+    total_space_reclaimed += image_res.space_reclaimed.unwrap_or(0) as i64;
+
+    let mut volumes_deleted = Vec::new();
+    if prune_vols {
+        if let Ok(vol_res) = client.prune_volumes::<String>(None).await {
+            total_space_reclaimed += vol_res.space_reclaimed.unwrap_or(0) as i64;
+            volumes_deleted = vol_res.volumes_deleted.unwrap_or_default();
+        }
+    }
+
+    // Build Cache (BuildKit / Moby builder)
+    let (build_caches_deleted, build_cache_space) = prune_build_cache_raw(all).await;
+    total_space_reclaimed += build_cache_space;
+
+    Ok(json!({
+        "spaceReclaimed": total_space_reclaimed,
+        "containersDeleted": containers_deleted,
+        "imagesDeleted": images_deleted,
+        "networksDeleted": networks_deleted,
+        "volumesDeleted": volumes_deleted,
+        "buildCacheDeleted": build_caches_deleted,
+    }))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1011,11 +1356,18 @@ mod tests {
                 "Mountpoint": "/var/lib/docker/volumes/database-data/_data",
                 "Labels": { "com.docker.compose.project": "sample" },
                 "Scope": "local",
+                "UsageData": {
+                    "Size": 1048576,
+                    "RefCount": 2
+                }
             }),
             false,
         );
         assert_eq!(volume["name"], "database-data");
         assert_eq!(volume["labels"]["com.docker.compose.project"], "sample");
+        assert_eq!(volume["size"], 1048576);
+        assert_eq!(volume["usageData"]["size"], 1048576);
+        assert_eq!(volume["usageData"]["refCount"], 2);
 
         let network = normalize_network(
             &json!({

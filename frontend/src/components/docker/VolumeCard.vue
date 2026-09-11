@@ -17,6 +17,16 @@
           <v-chip v-if="volume.scope" label size="x-small" variant="tonal">
             {{ volume.scope }}
           </v-chip>
+          <v-chip
+            v-if="volume.size !== undefined && volume.size >= 0"
+            color="info"
+            label
+            size="x-small"
+            variant="tonal"
+          >
+            <v-icon icon="mdi-harddisk" size="10" start />
+            {{ formatBytes(volume.size) }}
+          </v-chip>
           <v-chip v-if="labelCount > 0" color="secondary" label size="x-small" variant="tonal">
             {{ labelCount }} label{{ labelCount > 1 ? 's' : '' }}
           </v-chip>
@@ -28,6 +38,15 @@
 
     <!-- Metadata -->
     <v-card-text class="pa-3">
+      <div v-if="volume.size !== undefined && volume.size >= 0" class="d-flex align-center ga-2 mb-2">
+        <v-icon color="info" icon="mdi-harddisk" size="16" />
+        <span class="text-caption font-weight-medium">
+          Espaço usado: {{ formatBytes(volume.size) }}
+        </span>
+        <span v-if="volume.usageData?.refCount !== undefined" class="text-caption text-medium-emphasis">
+          ({{ volume.usageData.refCount }} {{ volume.usageData.refCount === 1 ? 'container' : 'containers' }})
+        </span>
+      </div>
       <div class="d-flex align-start ga-2 mb-2">
         <v-icon class="mt-0" color="medium-emphasis" icon="mdi-folder-open-outline" size="16" />
         <span class="text-caption text-medium-emphasis mountpoint-text" :title="volume.mountpoint">
@@ -98,6 +117,7 @@
 <script lang="ts" setup>
 import { computed } from 'vue'
 import type { DockerVolumeSummary } from '@/types/api'
+import { formatBytes } from '@/utils/format'
 
 const props = defineProps<{ volume: DockerVolumeSummary; loading?: boolean }>()
 

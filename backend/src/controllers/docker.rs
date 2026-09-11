@@ -55,6 +55,13 @@ pub struct NetworkParams {
 }
 #[derive(Debug, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
+pub struct PruneSystemQuery {
+    pub all: Option<bool>,
+    pub volumes: Option<bool>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
 pub struct DiagnosticParams {
     tool: Option<String>,
     target: Option<String>,
@@ -427,6 +434,32 @@ pub async fn prune_images(State(_ctx): State<AppContext>, _session: Auth) -> Res
 }
 
 #[debug_handler]
+pub async fn system_df(State(_ctx): State<AppContext>, _session: Auth) -> Result<Response> {
+    if !docker::status().await.available {
+        return format::json(Listing {
+            available: false,
+            data: Value::Null,
+        });
+    }
+
+    format::json(Listing {
+        available: true,
+        data: docker::system_df().await.map_err(engine_error)?,
+    })
+}
+
+#[debug_handler]
+pub async fn prune_system(
+    State(_ctx): State<AppContext>,
+    _session: Auth,
+    Query(query): Query<PruneSystemQuery>,
+) -> Result<Response> {
+    let all = query.all.unwrap_or(false);
+    let volumes = query.volumes.unwrap_or(false);
+    format::json(docker::prune_system(all, volumes).await.map_err(engine_error)?)
+}
+
+#[debug_handler]
 pub async fn start_diagnostic(
     State(ctx): State<AppContext>,
     _session: Auth,
@@ -551,6 +584,10 @@ pub fn routes(limiters: &Limiters) -> Routes {
         .add("/images", get(list_images))
         .add("/images/{id}", get(inspect_image))
         .add("/images/{id}", delete(remove_image).layer(strict.clone()))
+        .add("/system/df", get(system_df))
+        .add("/df", get(system_df))
+        .add("/system/prune", post(prune_system).layer(strict.clone()))
+        .add("/prune", post(prune_system).layer(strict.clone()))
         .add("/diagnostics", post(start_diagnostic).layer(strict))
         .add("/diagnostics/{id}", get(diagnostic_status))
 }

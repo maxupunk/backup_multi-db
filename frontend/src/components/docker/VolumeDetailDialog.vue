@@ -12,6 +12,16 @@
           <v-list-item subtitle="Driver" :title="detail?.driver" />
           <v-list-item subtitle="Escopo" :title="detail?.scope" />
           <v-list-item subtitle="Mountpoint" :title="detail?.mountpoint" />
+          <v-list-item
+            v-if="detail?.size !== undefined && detail.size >= 0"
+            subtitle="Espaço usado em disco"
+            :title="formatBytes(detail.size)"
+          />
+          <v-list-item
+            v-if="detail?.usageData?.refCount !== undefined"
+            subtitle="Contêineres utilizando este volume"
+            :title="detail.usageData.refCount.toString()"
+          />
           <v-list-item v-if="detail?.createdAt" subtitle="Criado em" :title="detail.createdAt" />
         </v-list>
 
@@ -53,6 +63,7 @@
 <script lang="ts" setup>
 import { computed } from 'vue'
 import type { DockerVolumeDetail } from '@/types/api'
+import { formatBytes } from '@/utils/format'
 
 const model = defineModel<boolean>({ default: false })
 const props = defineProps<{ detail: DockerVolumeDetail | null }>()

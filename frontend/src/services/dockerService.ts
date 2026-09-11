@@ -11,6 +11,8 @@ import type {
   DockerNetworkDetail,
   DockerNetworkSummary,
   DockerPruneResult,
+  DockerSystemDfResponse,
+  DockerSystemPruneResult,
   DockerVolumeDetail,
   DockerVolumeSummary,
 } from '@/types/api'
@@ -361,3 +363,22 @@ export const dockerImagesApi = {
     return apiFetch<DockerPruneResult>(`${BASE}/images/prune`, { method: 'POST' })
   },
 }
+
+// ============================================================
+// System (DF & Prune)
+// ============================================================
+
+export const dockerSystemApi = {
+  getDf(): Promise<DockerSystemDfResponse> {
+    return apiFetch<DockerSystemDfResponse>(`${BASE}/system/df`)
+  },
+
+  prune(params: { all?: boolean; volumes?: boolean } = {}): Promise<DockerSystemPruneResult> {
+    const qs = new URLSearchParams()
+    if (params.all) qs.set('all', 'true')
+    if (params.volumes) qs.set('volumes', 'true')
+    const query = qs.toString() ? `?${qs.toString()}` : ''
+    return apiFetch<DockerSystemPruneResult>(`${BASE}/system/prune${query}`, { method: 'POST' })
+  },
+}
+
