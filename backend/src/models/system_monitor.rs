@@ -117,15 +117,33 @@ fn store(overview: SystemOverview) {
     *guard = Some((Instant::now(), overview));
 }
 
-async fn measure(ctx: &AppContext) -> SystemOverview {
-    let mut system = System::new();
+static SYSTEM: Mutex<Option<(Instant, System)>> = Mutex::new(None);
 
-    // Duas amostras: a primeira estabelece a linha de base, a segunda mede o
-    // que aconteceu no intervalo. Uma leitura so' devolveria sempre 0%.
-    system.refresh_cpu_usage();
-    tokio::time::sleep(CPU_SAMPLE_INTERVAL).await;
-    system.refresh_cpu_usage();
-    system.refresh_memory();
+async fn measure(ctx: &AppContext) -> SystemOverview {
+    let needs_sleep = {
+        let mut guard = SYSTEM.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        if let Some((last_sample, _)) = guard.as_mut() {
+            last_sample.elapsed() < CPU_SAMPLE_INTERVAL
+        } else {
+            let mut system = System::new();
+            system.refresh_cpu_usage();
+            *guard = Some((Instant::now(), system));
+            true
+        }
+    };
+
+    if needs_sleep {
+        tokio::time::sleep(CPU_SAMPLE_INTERVAL).await;
+    }
+
+    let (cpu, memory) = {
+        let mut guard = SYSTEM.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let (last_sample, system) = guard.as_mut().expect("SYSTEM must be initialized");
+        system.refresh_cpu_usage();
+        system.refresh_memory();
+        *last_sample = Instant::now();
+        (cpu_metrics(system), memory_metrics(system))
+    };
 
     SystemOverview {
         version: REPORTED_VERSION,
@@ -140,8 +158,8 @@ async fn measure(ctx: &AppContext) -> SystemOverview {
         architecture: std::env::consts::ARCH,
         runtime_version: format!("rustc {}", env!("CARGO_PKG_RUST_VERSION")),
         uptime_seconds: System::uptime(),
-        cpu: cpu_metrics(&system),
-        memory: memory_metrics(&system),
+        cpu,
+        memory,
         jobs: jobs_status(ctx),
     }
 }

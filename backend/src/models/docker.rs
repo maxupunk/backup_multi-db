@@ -1312,7 +1312,7 @@ pub async fn prune_system(all: bool, prune_vols: bool) -> Result<Value, DockerEr
     let mut volumes_deleted = Vec::new();
     if prune_vols {
         if let Ok(vol_res) = client.prune_volumes::<String>(None).await {
-            total_space_reclaimed += vol_res.space_reclaimed.unwrap_or(0) as i64;
+            total_space_reclaimed += vol_res.space_reclaimed.unwrap_or(0);
             volumes_deleted = vol_res.volumes_deleted.unwrap_or_default();
         }
     }

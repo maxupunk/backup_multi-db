@@ -22,6 +22,15 @@ pub use super::_entities::resource_metric_history::{ActiveModel, Column, Entity,
 impl ActiveModelBehavior for ActiveModel {}
 
 const RETENTION_DAYS: i64 = 15;
+
+/// Retorna os dias de retenção de métricas, configurável via RESOURCE_METRICS_RETENTION_DAYS.
+pub fn retention_days() -> i64 {
+    std::env::var("RESOURCE_METRICS_RETENTION_DAYS")
+        .ok()
+        .and_then(|v| v.parse::<i64>().ok())
+        .filter(|&days| days > 0)
+        .unwrap_or(RETENTION_DAYS)
+}
 const MIN_PERSIST_INTERVAL: Duration = Duration::from_secs(60);
 const PRUNE_INTERVAL: Duration = Duration::from_secs(6 * 60 * 60);
 const FLUSH_INTERVAL: Duration = Duration::from_secs(5 * 60);
@@ -91,6 +100,26 @@ fn now() -> chrono::DateTime<chrono::FixedOffset> {
 
 fn persist_key(scope: &str, entity_id: Option<&str>) -> String {
     format!("{}:{}", scope, entity_id.unwrap_or("global"))
+}
+
+/// Verifica se o intervalo mínimo de persistência já venceu desde a última gravação.
+/// Permite que tarefas em segundo plano pulem a coleta pesada de métricas de containers quando ninguém estiver ouvindo no SSE.
+pub async fn should_persist(ctx: &AppContext) -> Result<bool> {
+    let key = persist_key("system", None);
+    let collected_at_ms = now().timestamp_millis() as u64;
+    let min_interval_ms = MIN_PERSIST_INTERVAL.as_millis() as u64;
+
+    let should = state(ctx)?
+        .with_lock(|inner| {
+            if let Some(last_ms) = inner.last_persisted_at.get(&key) {
+                collected_at_ms.saturating_sub(*last_ms) >= min_interval_ms
+            } else {
+                true
+            }
+        })
+        .await;
+
+    Ok(should)
 }
 
 /// Grava uma amostra do sistema, respeitando o intervalo minimo.
@@ -266,7 +295,7 @@ async fn insert_rows(db: &DatabaseConnection, rows: &[PendingRow]) -> Result<()>
     Ok(())
 }
 
-/// Remove registros mais antigos que `RETENTION_DAYS`.
+/// Remove registros mais antigos que `retention_days()`.
 pub async fn prune_old(ctx: &AppContext) -> Result<()> {
     let should = state(ctx)?
         .with_lock(|inner| inner.last_prune_at.elapsed() >= PRUNE_INTERVAL)
@@ -276,12 +305,18 @@ pub async fn prune_old(ctx: &AppContext) -> Result<()> {
         return Ok(());
     }
 
-    let cutoff = now() - chrono::Duration::days(RETENTION_DAYS);
+    let cutoff = now() - chrono::Duration::days(retention_days());
 
     Entity::delete_many()
         .filter(Column::CollectedAt.lt(cutoff))
         .exec(&ctx.db)
         .await?;
+
+    if ctx.db.get_database_backend() == sea_orm::DatabaseBackend::Sqlite {
+        use sea_orm::ConnectionTrait;
+        let _ = ctx.db.execute_unprepared("PRAGMA wal_checkpoint(TRUNCATE);").await;
+        let _ = ctx.db.execute_unprepared("PRAGMA optimize;").await;
+    }
 
     state(ctx)?
         .with_lock(|inner| inner.last_prune_at = Instant::now())
@@ -336,7 +371,8 @@ struct RawHistoryRow {
 pub async fn history(ctx: &AppContext, range_hours: i64) -> Result<HistoryResponse> {
     flush(ctx, true).await?;
 
-    let bounded_hours = range_hours.clamp(1, RETENTION_DAYS * 24);
+    let retention = retention_days();
+    let bounded_hours = range_hours.clamp(1, retention * 24);
     let start_at = now() - chrono::Duration::hours(bounded_hours);
 
     let bucket_seconds = ((bounded_hours * 3600) as f64 / MAX_POINTS as f64).ceil() as i64;
@@ -380,7 +416,7 @@ pub async fn history(ctx: &AppContext, range_hours: i64) -> Result<HistoryRespon
     }
 
     Ok(HistoryResponse {
-        retention_days: RETENTION_DAYS,
+        retention_days: retention,
         system,
         containers: container_map.into_values().collect(),
     })

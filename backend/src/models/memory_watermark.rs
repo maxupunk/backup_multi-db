@@ -144,13 +144,21 @@ pub async fn reset(ctx: &AppContext) -> Result<()> {
     Ok(())
 }
 
-fn current_reading() -> MemoryReading {
-    let mut system = System::new();
-    system.refresh_memory();
-    system.refresh_processes(ProcessesToUpdate::All, true);
+static SYSTEM: std::sync::Mutex<Option<System>> = std::sync::Mutex::new(None);
 
-    let rss = system
-        .process(get_current_pid().unwrap())
+fn current_reading() -> MemoryReading {
+    let mut guard = SYSTEM.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let system = guard.get_or_insert_with(System::new);
+
+    system.refresh_memory();
+
+    let pid_opt = get_current_pid().ok();
+    if let Some(pid) = pid_opt {
+        system.refresh_processes(ProcessesToUpdate::Some(&[pid]), true);
+    }
+
+    let rss = pid_opt
+        .and_then(|pid| system.process(pid))
         .map(|p| p.memory())
         .unwrap_or(0);
 

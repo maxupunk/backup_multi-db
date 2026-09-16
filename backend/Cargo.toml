@@ -104,6 +104,8 @@ tower-http = { version = "0.6", default-features = false, features = ["fs"] }
 tower_governor = { version = "0.8", features = ["tracing"] }
 governor = "0.10"
 async-stream = "0.3.6"
+# Alocador de alta performance e baixa fragmentacao de memoria para servicos de longa duracao
+mimalloc = { version = "0.1", default-features = false }
 
 [[bin]]
 name = "backend-cli"

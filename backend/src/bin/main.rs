@@ -2,6 +2,9 @@ use backend::app::App;
 use loco_rs::cli;
 use migration::Migrator;
 
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 #[tokio::main]
 async fn main() -> loco_rs::Result<()> {
     // Se LOCO_CONFIG_FOLDER não foi definido explicitamente, resolve defensivamente

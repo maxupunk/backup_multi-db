@@ -21,7 +21,7 @@ use tokio_util::sync::CancellationToken;
 use crate::initializers::settings::Settings;
 
 const ACTIVE_INTERVAL: Duration = Duration::from_secs(10);
-const IDLE_INTERVAL: Duration = Duration::from_secs(30);
+const IDLE_INTERVAL: Duration = Duration::from_secs(60);
 
 /// Estado compartilhado que indica se o polling já foi iniciado neste processo.
 #[derive(Clone, Default)]
@@ -103,16 +103,29 @@ async fn tick(ctx: &AppContext) -> Result<bool> {
         emitted = true;
     }
 
-    let container_overview = crate::models::docker_container_monitoring::overview(ctx).await;
-    if crate::models::resource_metrics::emit_containers_if_subscribed(ctx, &container_overview)
-        .await?
-    {
-        emitted = true;
-    }
+    let has_container_listeners = crate::models::sse::has_listeners(
+        ctx,
+        crate::models::resource_metrics::DOCKER_CONTAINER_RESOURCES,
+    )?;
+    let should_persist = crate::models::resource_metric_history::should_persist(ctx).await?;
+
+    let container_overview = if has_container_listeners || should_persist {
+        let overview = crate::models::docker_container_monitoring::overview(ctx).await;
+        if has_container_listeners
+            && crate::models::resource_metrics::emit_containers_if_subscribed(ctx, &overview).await?
+        {
+            emitted = true;
+        }
+        Some(overview)
+    } else {
+        None
+    };
 
     let system_overview = crate::models::system_monitor::SystemOverview::collect(ctx).await;
     crate::models::resource_metric_history::record_system(ctx, &system_overview).await?;
-    crate::models::resource_metric_history::record_containers(ctx, &container_overview).await?;
+    if let Some(ref overview) = container_overview {
+        crate::models::resource_metric_history::record_containers(ctx, overview).await?;
+    }
 
     crate::models::memory_watermark::sample(ctx, "resource-metrics").await?;
 

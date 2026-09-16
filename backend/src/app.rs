@@ -70,6 +70,16 @@ impl Hooks for App {
     /// `cargo loco routes` chama `routes` só para listar caminhos e não deveria
     /// instanciar nada.
     async fn before_run(ctx: &AppContext) -> Result<()> {
+        if ctx.db.get_database_backend() == sea_orm::DatabaseBackend::Sqlite {
+            use sea_orm::ConnectionTrait;
+            // Configuracoes de memoria e seguranca para evitar inchaco de RSS e WAL no SQLite
+            let _ = ctx.db.execute_unprepared("PRAGMA journal_mode = WAL;").await;
+            let _ = ctx.db.execute_unprepared("PRAGMA synchronous = NORMAL;").await;
+            let _ = ctx.db.execute_unprepared("PRAGMA cache_size = -2000;").await; // Limite de 2 MB de cache em RAM
+            let _ = ctx.db.execute_unprepared("PRAGMA mmap_size = 0;").await; // Desativa mmap para nao inflar memoria no cgroup Docker
+            let _ = ctx.db.execute_unprepared("PRAGMA wal_autocheckpoint = 1000;").await;
+        }
+
         crate::models::storage::copy::register(ctx);
         crate::models::storage::archive::register(ctx);
         crate::models::docker_diagnostics::register(ctx);

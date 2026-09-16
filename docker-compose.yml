@@ -37,6 +37,10 @@ services:
       BACKUP_DELETE_LOCAL_AFTER_REMOTE_UPLOAD: ${BACKUP_DELETE_LOCAL_AFTER_REMOTE_UPLOAD:-false}
       DIAGNOSTICS_PATH: /storage/diagnostics
       AUDIT_RETENTION_DAYS: ${AUDIT_RETENTION_DAYS:-30}
+      RESOURCE_METRICS_RETENTION_DAYS: ${RESOURCE_METRICS_RETENTION_DAYS:-15}
+      # Otimizacoes de memoria do runtime: limita arenas do glibc e força purga rapida no mimalloc
+      MALLOC_ARENA_MAX: '2'
+      MIMALLOC_PURGE_DELAY: '10'
       # ID deste container, para exclui-lo das metricas do Docker Manager.
       BACKEND_CONTAINER_ID: ${BACKEND_CONTAINER_ID:-}
     volumes:
