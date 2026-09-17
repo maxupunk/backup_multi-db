@@ -25,3 +25,21 @@ export function getDatabaseIcon (_type: DatabaseType): string {
   return 'mdi-database'
 }
 
+export function getConnectionStatusColor(status: string | null | undefined): string {
+  const colors: Record<string, string> = {
+    active: 'success',
+    inactive: 'grey',
+    error: 'error',
+  }
+  return colors[status ?? ''] ?? 'grey'
+}
+
+export function getConnectionStatusLabel(status: string | null | undefined): string {
+  const labels: Record<string, string> = {
+    active: 'Ativo',
+    inactive: 'Inativo',
+    error: 'Erro',
+  }
+  return labels[status ?? ''] ?? 'Desconhecido'
+}
+

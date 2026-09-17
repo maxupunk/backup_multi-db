@@ -77,6 +77,7 @@
 import type { ResourceHistoryPoint, SystemStatus } from '@/types/api'
 import { computed } from 'vue'
 import { formatBytes } from '@/utils/format'
+import { resolveUsageColor, resolveChartColor } from '@/utils/dockerMetrics'
 import UsageLineChart from './UsageLineChart.vue'
 
 type MetricCard = {
@@ -142,12 +143,6 @@ const metricCards = computed<MetricCard[]>(() => {
   ]
 })
 
-function resolveUsageColor(percentage: number): string {
-  if (percentage >= 85) return 'error'
-  if (percentage >= 65) return 'warning'
-  return 'success'
-}
-
 const historyTimestamps = computed(() => props.history.map((p) => p.timestamp))
 
 function resolveHistoryValues(metric: 'cpu' | 'memory'): number[] {
@@ -166,13 +161,6 @@ function resolveRawHistoryValues(): number[] {
   const values = props.history.map((point) => point.memoryUsedBytes)
   if (values.length >= 2) return values
   return [0, props.system?.resources.memory.usedBytes ?? 0]
-}
-
-function resolveChartColor(color: string): string {
-  if (color === 'error') return 'rgb(var(--v-theme-error))'
-  if (color === 'warning') return 'rgb(var(--v-theme-warning))'
-  if (color === 'success') return 'rgb(var(--v-theme-success))'
-  return 'rgb(var(--v-theme-primary))'
 }
 </script>
 

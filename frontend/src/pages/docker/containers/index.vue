@@ -26,8 +26,7 @@
           </v-btn>
           <v-btn
             color="warning"
-            :disabled="actionLoading || pruneLoading"
-            :loading="pruneLoading && !pruneAllSelected"
+            :disabled="actionLoading"
             prepend-icon="mdi-broom"
             variant="tonal"
             @click="openPruneDialog(false)"
@@ -36,8 +35,7 @@
           </v-btn>
           <v-btn
             color="error"
-            :disabled="actionLoading || pruneLoading"
-            :loading="pruneLoading && pruneAllSelected"
+            :disabled="actionLoading"
             prepend-icon="mdi-delete-sweep"
             variant="tonal"
             @click="openPruneDialog(true)"
@@ -81,73 +79,24 @@
       @confirm="executeConfirmed"
     />
 
-    <v-dialog v-model="pruneDialog" max-width="540">
-      <v-card>
-        <v-card-title class="d-flex align-center ga-2 pt-4 px-4">
-          <v-avatar :color="pruneAllSelected ? 'error' : 'warning'" size="36">
-            <v-icon :icon="pruneAllSelected ? 'mdi-delete-sweep' : 'mdi-broom'" />
-          </v-avatar>
-          <span class="text-h6 font-weight-bold">
-            {{ pruneAllSelected ? 'Limpeza Completa (docker system prune -a)' : 'Limpar Cache do Docker' }}
-          </span>
-        </v-card-title>
-
-        <v-card-text class="px-4 py-3">
-          <p class="text-body-2 mb-3">
-            {{
-              pruneAllSelected
-                ? 'Esta ação executará uma limpeza profunda equivalente a "docker system prune -a". Serão removidos todos os containers parados, redes não utilizadas, cache de build (BuildKit) e todas as imagens não associadas a um container em execução.'
-                : 'Esta ação limpará o cache do Docker, removendo containers parados, redes não utilizadas, cache de build temporário e imagens dangling (camadas sem tag).'
-            }}
-          </p>
-
-          <v-checkbox
-            v-model="pruneIncludeVolumes"
-            color="error"
-            density="comfortable"
-            hide-details
-            label="Remover também volumes não utilizados (órfãos)"
-          />
-          <p v-if="pruneIncludeVolumes" class="text-caption text-error mt-1 ml-8">
-            Atenção: volumes órfãos não associados a nenhum container serão excluídos permanentemente.
-          </p>
-        </v-card-text>
-
-        <v-divider />
-
-        <v-card-actions class="pa-3">
-          <v-spacer />
-          <v-btn
-            :disabled="pruneLoading"
-            variant="text"
-            @click="pruneDialog = false"
-          >
-            Cancelar
-          </v-btn>
-          <v-btn
-            :color="pruneAllSelected ? 'error' : 'warning'"
-            :loading="pruneLoading"
-            variant="flat"
-            @click="executePrune"
-          >
-            Confirmar Limpeza
-          </v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
+    <DockerPruneDialog
+      v-model="pruneDialog"
+      :all="pruneAllSelected"
+      @success="load"
+    />
   </div>
 </template>
 
 <script lang="ts" setup>
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import type { DockerContainerGroup, DockerContainerResourceMetrics } from '@/types/api'
-import { dockerContainersApi, dockerSystemApi } from '@/services/dockerService'
+import { dockerContainersApi } from '@/services/dockerService'
 import { useDockerContainerResources } from '@/composables/useDockerContainerResources'
 import { useNotifier } from '@/composables/useNotifier'
-import { formatBytes } from '@/utils/format'
 import ContainerProjectGroup from '@/components/docker/ContainerProjectGroup.vue'
 import DockerUnavailableBanner from '@/components/docker/DockerUnavailableBanner.vue'
 import DockerActionConfirmDialog from '@/components/docker/DockerActionConfirmDialog.vue'
+import DockerPruneDialog from '@/components/docker/DockerPruneDialog.vue'
 
 type StateFilter = 'all' | 'running' | 'stopped'
 type ActionType = 'start' | 'stop' | 'restart'
@@ -270,49 +219,10 @@ async function executeConfirmed() {
 
 const pruneDialog = ref(false)
 const pruneAllSelected = ref(false)
-const pruneIncludeVolumes = ref(false)
-const pruneLoading = ref(false)
 
 function openPruneDialog(all: boolean) {
   pruneAllSelected.value = all
-  pruneIncludeVolumes.value = false
   pruneDialog.value = true
-}
-
-async function executePrune() {
-  pruneLoading.value = true
-  try {
-    const res = await dockerSystemApi.prune({
-      all: pruneAllSelected.value,
-      volumes: pruneIncludeVolumes.value,
-    })
-    const freed = formatBytes(res.spaceReclaimed)
-    const counts: string[] = []
-    if (res.containersDeleted && res.containersDeleted.length > 0) {
-      counts.push(`${res.containersDeleted.length} container(s)`)
-    }
-    if (res.imagesDeleted && res.imagesDeleted.length > 0) {
-      counts.push(`${res.imagesDeleted.length} imagem(ns)`)
-    }
-    if (res.networksDeleted && res.networksDeleted.length > 0) {
-      counts.push(`${res.networksDeleted.length} rede(s)`)
-    }
-    if (res.volumesDeleted && res.volumesDeleted.length > 0) {
-      counts.push(`${res.volumesDeleted.length} volume(s)`)
-    }
-    if (res.buildCacheDeleted && res.buildCacheDeleted.length > 0) {
-      counts.push(`${res.buildCacheDeleted.length} cache(s) de build`)
-    }
-
-    const detailMsg = counts.length > 0 ? ` (${counts.join(', ')})` : ''
-    notify(`Limpeza concluída com sucesso! ${freed} liberados${detailMsg}.`, 'success')
-    pruneDialog.value = false
-    await load()
-  } catch (error) {
-    notify(error instanceof Error ? error.message : 'Erro ao executar limpeza.', 'error')
-  } finally {
-    pruneLoading.value = false
-  }
 }
 
 onMounted(load)

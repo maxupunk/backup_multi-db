@@ -239,7 +239,13 @@ import { connectionsApi } from '@/services/api'
 import { useDebouncedFn } from '@/composables/useDebouncedFn'
 import { useNotifier } from '@/composables/useNotifier'
 import { getBackupStatusColor } from '@/ui/backup'
-import { databaseTypeOptions, getDatabaseColor, getDatabaseIcon } from '@/ui/database'
+import {
+  databaseTypeOptions,
+  getDatabaseColor,
+  getDatabaseIcon,
+  getConnectionStatusColor,
+  getConnectionStatusLabel,
+} from '@/ui/database'
 import { formatDateTimePtBR } from '@/utils/format'
 
 const notify = useNotifier()
@@ -356,24 +362,6 @@ async function deleteConnection() {
 }
 
 // Helpers
-function getConnectionStatusColor(status: string | null): string {
-  const colors: Record<string, string> = {
-    active: 'success',
-    inactive: 'grey',
-    error: 'error',
-  }
-  return colors[status ?? ''] ?? 'grey'
-}
-
-function getConnectionStatusLabel(status: string | null): string {
-  const labels: Record<string, string> = {
-    active: 'Ativo',
-    inactive: 'Inativo',
-    error: 'Erro',
-  }
-  return labels[status ?? ''] ?? 'Desconhecido'
-}
-
 function formatDate(dateString: string): string {
   return formatDateTimePtBR(dateString, { withYear: false })
 }

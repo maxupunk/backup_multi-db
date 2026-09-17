@@ -35,7 +35,7 @@
           </div>
           <v-progress-linear
             :model-value="resources.cpu.usagePercent"
-            :color="resolveColor(resources.cpu.usagePercent)"
+            :color="resolveUsageColor(resources.cpu.usagePercent)"
             bg-color="rgba(var(--v-border-color), 0.12)"
             height="4"
             rounded
@@ -48,7 +48,7 @@
           </div>
           <v-progress-linear
             :model-value="resources.memory.usagePercent"
-            :color="resolveColor(resources.memory.usagePercent)"
+            :color="resolveUsageColor(resources.memory.usagePercent)"
             bg-color="rgba(var(--v-border-color), 0.12)"
             height="4"
             rounded
@@ -105,6 +105,7 @@
 import { computed } from 'vue'
 import type { DockerContainerResourceMetrics, DockerContainerSummary } from '@/types/api'
 import ContainerStatusChip from './ContainerStatusChip.vue'
+import { resolveUsageColor } from '@/utils/dockerMetrics'
 
 const props = defineProps<{
   container: DockerContainerSummary
@@ -120,10 +121,4 @@ const emit = defineEmits<{
 
 const primaryName = computed(() => props.container.names[0] ?? props.container.id.slice(0, 12))
 const visiblePorts = computed(() => props.container.ports.slice(0, 4))
-
-function resolveColor(percent: number): string {
-  if (percent >= 85) return 'error'
-  if (percent >= 65) return 'warning'
-  return 'success'
-}
 </script>
