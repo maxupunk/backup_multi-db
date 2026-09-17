@@ -2,9 +2,19 @@
   <v-card class="resource-card">
     <v-card-text class="pa-5">
       <div class="d-flex align-center justify-space-between ga-3 mb-4">
-        <div>
-          <h3 class="text-subtitle-1 font-weight-bold mb-1">
-            {{ container.containerName }}
+        <div
+          class="container-heading"
+          :class="{ 'cursor-pointer': !hideLink }"
+          @click="!hideLink && goToContainer()"
+        >
+          <h3 class="text-subtitle-1 font-weight-bold mb-1 d-flex align-center ga-1 container-name">
+            <span>{{ container.containerName }}</span>
+            <v-icon
+              v-if="!hideLink"
+              class="link-icon text-medium-emphasis"
+              icon="mdi-open-in-new"
+              size="15"
+            />
           </h3>
           <p class="text-caption text-medium-emphasis mb-0">
             {{ container.imageName }}
@@ -19,8 +29,9 @@
           <v-btn
             class="resource-toggle-btn"
             density="comfortable"
+            title="Exibir histórico de CPU e memória"
             variant="text"
-            @click="toggleExpanded"
+            @click.stop="toggleExpanded"
           >
             <v-icon icon="mdi-information-outline" start />
             <v-icon :icon="expanded ? 'mdi-chevron-up' : 'mdi-chevron-down'" />
@@ -28,7 +39,11 @@
         </div>
       </div>
 
-      <div class="resource-summary">
+      <div
+        class="resource-summary"
+        :class="{ 'cursor-pointer': !hideLink }"
+        @click="!hideLink && goToContainer()"
+      >
         <div class="summary-metric">
           <v-progress-circular
             :color="resolveUsageColor(container.cpu.usagePercent)"
@@ -134,18 +149,33 @@
 <script lang="ts" setup>
 import type { DockerContainerResourceMetrics, ResourceHistoryPoint } from '@/types/api'
 import { computed, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { formatBytes } from '@/utils/format'
 import UsageLineChart from './UsageLineChart.vue'
 
-const props = defineProps<{
-  container: DockerContainerResourceMetrics
-  historyPoints: ResourceHistoryPoint[]
-  rangeHours?: number
-}>()
+const props = withDefaults(
+  defineProps<{
+    container: DockerContainerResourceMetrics
+    historyPoints: ResourceHistoryPoint[]
+    rangeHours?: number
+    initialExpanded?: boolean
+    hideLink?: boolean
+  }>(),
+  {
+    rangeHours: 24,
+    initialExpanded: false,
+    hideLink: false,
+  }
+)
 
-const expanded = ref(false)
+const router = useRouter()
+const expanded = ref(props.initialExpanded)
 const timestamps = computed(() => props.historyPoints.map((point) => point.timestamp))
 const statusColor = computed(() => resolveStatusColor(props.container.status))
+
+function goToContainer(): void {
+  router.push(`/docker/containers/${encodeURIComponent(props.container.containerId)}?tab=processes`)
+}
 
 function toggleExpanded(): void {
   expanded.value = !expanded.value
@@ -197,6 +227,22 @@ function resolveChartColor(color: string): string {
       rgb(var(--v-theme-surface)) 0%,
       rgb(var(--v-theme-surface-bright)) 100%);
   border: 1px solid rgba(var(--v-border-color), 0.08);
+}
+
+.container-heading {
+  transition: opacity 0.15s ease;
+}
+
+.container-heading:hover .container-name {
+  color: rgb(var(--v-theme-primary));
+}
+
+.container-heading:hover .link-icon {
+  color: rgb(var(--v-theme-primary)) !important;
+}
+
+.cursor-pointer {
+  cursor: pointer;
 }
 
 .resource-grid {

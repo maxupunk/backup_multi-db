@@ -115,6 +115,14 @@
                   :title="detail.config.workingDir"
                 />
               </v-list>
+
+              <v-divider class="my-4" />
+
+              <ContainerResourceHistoryCard
+                :container-id="getContainerId()"
+                :container-name="containerName"
+                :is-running="detail.state.running"
+              />
             </v-card-text>
           </v-tabs-window-item>
 
@@ -238,6 +246,7 @@ import ContainerNetworkTable from '@/components/docker/ContainerNetworkTable.vue
 import ContainerPortsTable from '@/components/docker/ContainerPortsTable.vue'
 import ContainerLogsViewer from '@/components/docker/ContainerLogsViewer.vue'
 import ContainerProcessesViewer from '@/components/docker/ContainerProcessesViewer.vue'
+import ContainerResourceHistoryCard from '@/components/docker/ContainerResourceHistoryCard.vue'
 import ContainerNetworkDialog from '@/components/docker/ContainerNetworkDialog.vue'
 import ContainerRemoveDialog from '@/components/docker/ContainerRemoveDialog.vue'
 import DockerUnavailableBanner from '@/components/docker/DockerUnavailableBanner.vue'
@@ -259,7 +268,16 @@ const loading = ref(false)
 const actionLoading = ref(false)
 const removeLoading = ref(false)
 const error = ref<string | null>(null)
-const tab = ref('info')
+const tab = ref(typeof route.query.tab === 'string' ? route.query.tab : 'info')
+
+watch(
+  () => route.query.tab,
+  (newTab) => {
+    if (newTab && typeof newTab === 'string') {
+      tab.value = newTab
+    }
+  }
+)
 
 const confirmDialog = ref(false)
 const confirmMessage = ref('')

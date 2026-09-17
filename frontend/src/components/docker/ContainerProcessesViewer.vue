@@ -123,6 +123,13 @@
       </v-col>
     </v-row>
 
+    <!-- Resource History Charts (CPU & Memory) -->
+    <ContainerResourceHistoryCard
+      class="mb-4"
+      :container-id="containerId"
+      :is-running="isRunning"
+    />
+
     <!-- Toolbar & Filters -->
     <div class="d-flex align-center flex-wrap ga-2 mb-3">
       <!-- Filter text -->
@@ -273,6 +280,7 @@ import type { DockerContainerTop, DockerContainerTopResources } from '@/types/ap
 import { dockerContainersApi } from '@/services/dockerService'
 import { useNotifier } from '@/composables/useNotifier'
 import { formatBytes } from '@/utils/format'
+import ContainerResourceHistoryCard from '@/components/docker/ContainerResourceHistoryCard.vue'
 
 const PS_OPTIONS = [
   { title: 'aux (padrão)', value: 'aux' },
