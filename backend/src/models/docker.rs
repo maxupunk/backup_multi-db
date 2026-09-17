@@ -7,7 +7,9 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
-use bollard::container::{ListContainersOptions, LogsOptions, RemoveContainerOptions};
+use bollard::container::{
+    ListContainersOptions, LogsOptions, RemoveContainerOptions, TopOptions,
+};
 use bollard::image::{ListImagesOptions, PruneImagesOptions, RemoveImageOptions};
 use bollard::network::{
     ConnectNetworkOptions, CreateNetworkOptions, DisconnectNetworkOptions, ListNetworksOptions,
@@ -649,6 +651,60 @@ pub async fn discover_database_hosts(
 pub async fn inspect_container(id: &str) -> Result<Value, DockerError> {
     let container = value(call(client()?.inspect_container(id, None)).await?)?;
     Ok(normalize_container_detail(&container))
+}
+
+pub async fn top_processes(id: &str, ps_args: Option<&str>) -> Result<Value, DockerError> {
+    let client = client()?;
+    let options = Some(TopOptions {
+        ps_args: ps_args.unwrap_or("aux"),
+    });
+
+    let top = match call(client.top_processes(id, options)).await {
+        Ok(t) => t,
+        Err(DockerError::Engine) => {
+            return Ok(json!({
+                "running": false,
+                "titles": Vec::<String>::new(),
+                "processes": Vec::<Vec<String>>::new(),
+                "resources": Value::Null,
+            }));
+        }
+        Err(err) => return Err(err),
+    };
+
+    let titles = top.titles.unwrap_or_default();
+    let processes = top.processes.unwrap_or_default();
+
+    // Snapshot em tempo real de CPU e memória
+    let resources = {
+        let mut stream = client.stats(
+            id,
+            Some(bollard::container::StatsOptions {
+                stream: false,
+                one_shot: true,
+            }),
+        );
+        if let Ok(Some(Ok(stats))) = tokio::time::timeout(Duration::from_secs(3), stream.next()).await {
+            let memory = crate::models::docker_container_monitoring::memory_usage(&stats);
+            let cpu = crate::models::docker_container_monitoring::cpu_usage(&stats);
+            Some(json!({
+                "cpuPercent": cpu,
+                "memoryUsageBytes": memory.usage_bytes,
+                "memoryLimitBytes": memory.limit_bytes,
+                "memoryUsagePercent": memory.usage_percent,
+                "pids": stats.pids_stats.current,
+            }))
+        } else {
+            None
+        }
+    };
+
+    Ok(json!({
+        "running": true,
+        "titles": titles,
+        "processes": processes,
+        "resources": resources,
+    }))
 }
 
 pub async fn container_action(id: &str, action: ContainerAction) -> Result<Value, DockerError> {

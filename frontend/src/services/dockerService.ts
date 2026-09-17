@@ -2,6 +2,7 @@ import type {
   DockerActionResult,
   DockerContainerDetail,
   DockerContainerGroup,
+  DockerContainerTop,
   DockerDiagnosticJob,
   DockerDiagnosticStartPayload,
   DockerImageDetail,
@@ -230,6 +231,11 @@ export const dockerContainersApi = {
       new Blob([serializeDockerLogs(entries)], { type: 'text/plain;charset=utf-8' }),
       filename
     )
+  },
+
+  getTop(id: string, psArgs = 'aux'): Promise<DockerContainerTop> {
+    const qs = psArgs ? `?ps_args=${encodeURIComponent(psArgs)}` : ''
+    return apiFetch<DockerContainerTop>(`${BASE}/containers/${encodeURIComponent(id)}/top${qs}`)
   },
 }
 

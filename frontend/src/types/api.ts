@@ -636,6 +636,21 @@ export interface DockerContainerDetail {
   networks: DockerNetworkEndpoint[]
 }
 
+export interface DockerContainerTopResources {
+  cpuPercent: number
+  memoryUsageBytes: number
+  memoryLimitBytes: number
+  memoryUsagePercent: number
+  pids?: number
+}
+
+export interface DockerContainerTop {
+  running: boolean
+  titles: string[]
+  processes: string[][]
+  resources?: DockerContainerTopResources | null
+}
+
 export interface DockerVolumeSummary {
   name: string
   driver: string

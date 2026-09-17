@@ -70,11 +70,12 @@
       <v-card>
         <v-tabs v-model="tab">
           <v-tab value="info">Informações</v-tab>
+          <v-tab value="processes">Processos</v-tab>
+          <v-tab value="logs">Logs</v-tab>
           <v-tab value="env">Ambiente</v-tab>
           <v-tab value="volumes">Volumes</v-tab>
           <v-tab value="networks">Redes</v-tab>
           <v-tab value="ports">Portas</v-tab>
-          <v-tab value="logs">Logs</v-tab>
         </v-tabs>
         <v-divider />
 
@@ -114,6 +115,16 @@
                   :title="detail.config.workingDir"
                 />
               </v-list>
+            </v-card-text>
+          </v-tabs-window-item>
+
+          <!-- Processos -->
+          <v-tabs-window-item value="processes">
+            <v-card-text>
+              <ContainerProcessesViewer
+                :container-id="getContainerId()"
+                :is-running="detail.state.running"
+              />
             </v-card-text>
           </v-tabs-window-item>
 
@@ -226,6 +237,7 @@ import ContainerMountsTable from '@/components/docker/ContainerMountsTable.vue'
 import ContainerNetworkTable from '@/components/docker/ContainerNetworkTable.vue'
 import ContainerPortsTable from '@/components/docker/ContainerPortsTable.vue'
 import ContainerLogsViewer from '@/components/docker/ContainerLogsViewer.vue'
+import ContainerProcessesViewer from '@/components/docker/ContainerProcessesViewer.vue'
 import ContainerNetworkDialog from '@/components/docker/ContainerNetworkDialog.vue'
 import ContainerRemoveDialog from '@/components/docker/ContainerRemoveDialog.vue'
 import DockerUnavailableBanner from '@/components/docker/DockerUnavailableBanner.vue'

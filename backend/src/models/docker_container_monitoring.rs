@@ -221,14 +221,7 @@ async fn container_metrics(
         cpu: CpuMetrics {
             usage_percent: cpu_usage(&stats),
         },
-        memory: MemoryMetrics {
-            usage_bytes: stats.memory_stats.usage.unwrap_or(0),
-            limit_bytes: stats.memory_stats.limit.unwrap_or(0),
-            usage_percent: percentage(
-                stats.memory_stats.usage.unwrap_or(0),
-                stats.memory_stats.limit.unwrap_or(0),
-            ),
-        },
+        memory: memory_usage(&stats),
         network: network_usage(&stats),
         block_io: block_io_usage(&stats),
         pids: stats.pids_stats.current,
@@ -277,7 +270,7 @@ fn infer_project_name(container_name: &str) -> Option<String> {
         .filter(|candidate| !candidate.is_empty() && candidate != normalized)
 }
 
-fn cpu_usage(stats: &bollard::container::Stats) -> f64 {
+pub fn cpu_usage(stats: &bollard::container::Stats) -> f64 {
     let current_total = stats.cpu_stats.cpu_usage.total_usage;
     let previous_total = stats.precpu_stats.cpu_usage.total_usage;
     let current_system = stats.cpu_stats.system_cpu_usage.unwrap_or(0);
@@ -305,6 +298,35 @@ fn cpu_usage(stats: &bollard::container::Stats) -> f64 {
     }
 
     round_percent((cpu_delta as f64 / system_delta as f64) * online_cpus as f64 * 100.0)
+}
+
+pub fn memory_usage(stats: &bollard::container::Stats) -> MemoryMetrics {
+    let usage = stats.memory_stats.usage.unwrap_or(0);
+    let limit = stats.memory_stats.limit.unwrap_or(0);
+
+    // O Docker Engine inclui o page cache (inactive_file / total_inactive_file)
+    // no `usage`. O Docker CLI oficial (`docker stats`) subtrai esse cache inativo
+    // para exibir a memória real do processo, já que páginas de cache de disco
+    // (criadas em dumps e backups) são liberadas imediatamente pelo kernel quando necessário.
+    let inactive_file = match stats.memory_stats.stats.as_ref() {
+        Some(bollard::container::MemoryStatsStats::V1(v1)) => {
+            if v1.total_inactive_file > 0 {
+                v1.total_inactive_file
+            } else {
+                v1.inactive_file
+            }
+        }
+        Some(bollard::container::MemoryStatsStats::V2(v2)) => v2.inactive_file,
+        None => 0,
+    };
+
+    let effective_usage = usage.saturating_sub(inactive_file);
+
+    MemoryMetrics {
+        usage_bytes: effective_usage,
+        limit_bytes: limit,
+        usage_percent: percentage(effective_usage, limit),
+    }
 }
 
 fn network_usage(stats: &bollard::container::Stats) -> NetworkMetrics {

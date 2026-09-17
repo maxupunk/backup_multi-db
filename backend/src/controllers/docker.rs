@@ -135,6 +135,26 @@ pub async fn inspect_container(
 ) -> Result<Response> {
     format::json(docker::inspect_container(&id).await.map_err(engine_error)?)
 }
+
+#[derive(Debug, Deserialize, Default)]
+pub struct TopQuery {
+    #[serde(rename = "ps_args")]
+    pub ps_args: Option<String>,
+}
+
+#[debug_handler]
+pub async fn container_top(
+    State(_ctx): State<AppContext>,
+    _session: Auth,
+    Path(id): Path<String>,
+    Query(query): Query<TopQuery>,
+) -> Result<Response> {
+    format::json(
+        docker::top_processes(&id, query.ps_args.as_deref())
+            .await
+            .map_err(engine_error)?,
+    )
+}
 #[debug_handler]
 pub async fn inspect_volume(
     State(_ctx): State<AppContext>,
@@ -550,6 +570,7 @@ pub fn routes(limiters: &Limiters) -> Routes {
             post(restart_container).layer(strict.clone()),
         )
         .add("/containers/{id}", get(inspect_container))
+        .add("/containers/{id}/top", get(container_top))
         .add(
             "/containers/{id}",
             delete(remove_container).layer(strict.clone()),
