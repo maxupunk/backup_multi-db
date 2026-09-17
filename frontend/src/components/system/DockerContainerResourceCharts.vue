@@ -95,6 +95,7 @@
 import type { ContainerResourceHistory, DockerContainerResourceMetrics, DockerContainerResourceOverview, ResourceHistoryPoint } from '@/types/api'
 import { computed } from 'vue'
 import { formatBytes } from '@/utils/format'
+import { resolveUsageColor, resolveChartColor } from '@/utils/dockerMetrics'
 import DockerContainerResourceCard from './DockerContainerResourceCard.vue'
 
 const props = defineProps<{
@@ -192,18 +193,8 @@ function formatGroupMemory(group: ContainerGroup): string {
   return formatBytes(group.totalMemoryUsageBytes)
 }
 
-function resolveUsageColor(percentage: number): string {
-  if (percentage >= 85) return 'error'
-  if (percentage >= 65) return 'warning'
-  return 'success'
-}
-
 function resolveThemeColor(percentage: number): string {
-  const color = resolveUsageColor(percentage)
-
-  if (color === 'error') return 'rgb(var(--v-theme-error))'
-  if (color === 'warning') return 'rgb(var(--v-theme-warning))'
-  return 'rgb(var(--v-theme-success))'
+  return resolveChartColor(resolveUsageColor(percentage))
 }
 </script>
 

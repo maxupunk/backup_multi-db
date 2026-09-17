@@ -151,6 +151,11 @@ import type { DockerContainerResourceMetrics, ResourceHistoryPoint } from '@/typ
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { formatBytes } from '@/utils/format'
+import {
+  resolveUsageColor,
+  resolveChartColor,
+  resolveContainerStatusColor,
+} from '@/utils/dockerMetrics'
 import UsageLineChart from './UsageLineChart.vue'
 
 const props = withDefaults(
@@ -171,7 +176,7 @@ const props = withDefaults(
 const router = useRouter()
 const expanded = ref(props.initialExpanded)
 const timestamps = computed(() => props.historyPoints.map((point) => point.timestamp))
-const statusColor = computed(() => resolveStatusColor(props.container.status))
+const statusColor = computed(() => resolveContainerStatusColor(props.container.status))
 
 function goToContainer(): void {
   router.push(`/docker/containers/${encodeURIComponent(props.container.containerId)}?tab=processes`)
@@ -179,20 +184,6 @@ function goToContainer(): void {
 
 function toggleExpanded(): void {
   expanded.value = !expanded.value
-}
-
-function resolveUsageColor(percentage: number): string {
-  if (percentage >= 85) return 'error'
-  if (percentage >= 65) return 'warning'
-  return 'success'
-}
-
-function resolveStatusColor(status: string): string {
-  const normalized = status.toLowerCase()
-  if (normalized.includes('running') || normalized === 'up') return 'success'
-  if (normalized.includes('paused')) return 'warning'
-  if (normalized.includes('exited') || normalized.includes('dead')) return 'error'
-  return 'primary'
 }
 
 function resolveContainerHistory(metric: 'cpu' | 'memory', fallbackValue: number): number[] {
@@ -211,13 +202,6 @@ function resolveContainerRawMemoryHistory(): number[] {
   const values = props.historyPoints.map((point) => point.memoryUsedBytes)
   if (values.length >= 2) return values
   return [0, props.container.memory.usageBytes]
-}
-
-function resolveChartColor(color: string): string {
-  if (color === 'error') return 'rgb(var(--v-theme-error))'
-  if (color === 'warning') return 'rgb(var(--v-theme-warning))'
-  if (color === 'success') return 'rgb(var(--v-theme-success))'
-  return 'rgb(var(--v-theme-primary))'
 }
 </script>
 

@@ -194,6 +194,7 @@ import type {
 import { useDockerContainerResources } from '@/composables/useDockerContainerResources'
 import { useResourceHistory } from '@/composables/useResourceHistory'
 import { formatBytes } from '@/utils/format'
+import { resolveUsageColor, resolveChartColor } from '@/utils/dockerMetrics'
 import UsageLineChart from '@/components/system/UsageLineChart.vue'
 
 const RANGE_OPTIONS = [
@@ -280,19 +281,6 @@ const memoryRawValues = computed(() => {
   if (values.length >= 2) return values
   return [0, currentMemoryUsed.value]
 })
-
-function resolveUsageColor(percentage: number): string {
-  if (percentage >= 85) return 'error'
-  if (percentage >= 65) return 'warning'
-  return 'success'
-}
-
-function resolveChartColor(color: string): string {
-  if (color === 'error') return 'rgb(var(--v-theme-error))'
-  if (color === 'warning') return 'rgb(var(--v-theme-warning))'
-  if (color === 'success') return 'rgb(var(--v-theme-success))'
-  return 'rgb(var(--v-theme-primary))'
-}
 
 async function reloadHistory(): Promise<void> {
   await resourceHistory.load(selectedRangeHours.value)
