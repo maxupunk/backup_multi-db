@@ -57,6 +57,15 @@ pub struct CpuMetrics {
     pub usage_percent: f64,
     pub cores: usize,
     pub model: String,
+    pub host_cores: Option<usize>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct HostMemoryMetrics {
+    pub total_bytes: u64,
+    pub used_bytes: u64,
+    pub free_bytes: u64,
+    pub usage_percent: f64,
 }
 
 #[derive(Debug, Clone)]
@@ -67,6 +76,7 @@ pub struct MemoryMetrics {
     pub usage_percent: f64,
     pub source: MemorySource,
     pub container_limited: bool,
+    pub host: Option<HostMemoryMetrics>,
 }
 
 #[derive(Debug, Clone)]
@@ -118,6 +128,31 @@ fn store(overview: SystemOverview) {
 }
 
 static SYSTEM: Mutex<Option<(Instant, System)>> = Mutex::new(None);
+static DOCKER_HOST_CORES: Mutex<Option<(Instant, Option<usize>)>> = Mutex::new(None);
+
+async fn resolve_host_cores() -> Option<usize> {
+    {
+        let guard = DOCKER_HOST_CORES.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        if let Some((instant, cores)) = *guard {
+            if instant.elapsed() < Duration::from_secs(60) {
+                return cores;
+            }
+        }
+    }
+
+    let cores = if let Ok(docker) = crate::models::docker::client() {
+        match tokio::time::timeout(Duration::from_millis(500), docker.info()).await {
+            Ok(Ok(info)) => info.ncpu.and_then(|n| if n > 0 { Some(n as usize) } else { None }),
+            _ => None,
+        }
+    } else {
+        None
+    };
+
+    let mut guard = DOCKER_HOST_CORES.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    *guard = Some((Instant::now(), cores));
+    cores
+}
 
 async fn measure(ctx: &AppContext) -> SystemOverview {
     let needs_sleep = {
@@ -136,13 +171,15 @@ async fn measure(ctx: &AppContext) -> SystemOverview {
         tokio::time::sleep(CPU_SAMPLE_INTERVAL).await;
     }
 
+    let host_cores = resolve_host_cores().await;
+
     let (cpu, memory) = {
         let mut guard = SYSTEM.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         let (last_sample, system) = guard.as_mut().expect("SYSTEM must be initialized");
         system.refresh_cpu_usage();
         system.refresh_memory();
         *last_sample = Instant::now();
-        (cpu_metrics(system), memory_metrics(system))
+        (cpu_metrics(system, host_cores), memory_metrics(system))
     };
 
     SystemOverview {
@@ -164,7 +201,7 @@ async fn measure(ctx: &AppContext) -> SystemOverview {
     }
 }
 
-fn cpu_metrics(system: &System) -> CpuMetrics {
+fn cpu_metrics(system: &System, host_cores: Option<usize>) -> CpuMetrics {
     CpuMetrics {
         usage_percent: round_percent(f64::from(system.global_cpu_usage())),
         cores: system.cpus().len(),
@@ -172,24 +209,36 @@ fn cpu_metrics(system: &System) -> CpuMetrics {
             .cpus()
             .first()
             .map_or_else(|| "N/A".to_string(), |cpu| cpu.brand().trim().to_string()),
+        host_cores,
     }
 }
 
 fn memory_metrics(system: &System) -> MemoryMetrics {
     // O limite do cgroup vence o total do host quando existe — e' o numero que
     // decide se o processo morre por OOM.
-    let (total, used, source, container_limited) = match system.cgroup_limits() {
-        Some(limits) => (
+    let host_total = system.total_memory();
+    let host_used = system.used_memory();
+    let host_free = system.available_memory();
+
+    let (total, used, source, container_limited, host) = match system.cgroup_limits() {
+        Some(limits) if limits.total_memory < host_total => (
             limits.total_memory,
             limits.total_memory.saturating_sub(limits.free_memory),
             MemorySource::Cgroup,
             true,
+            Some(HostMemoryMetrics {
+                total_bytes: host_total,
+                used_bytes: host_used,
+                free_bytes: host_free,
+                usage_percent: percentage(host_used, host_total),
+            }),
         ),
-        None => (
-            system.total_memory(),
-            system.used_memory(),
+        _ => (
+            host_total,
+            host_used,
             MemorySource::Os,
             false,
+            None,
         ),
     };
 
@@ -200,6 +249,7 @@ fn memory_metrics(system: &System) -> MemoryMetrics {
         usage_percent: percentage(used, total),
         source,
         container_limited,
+        host,
     }
 }
 

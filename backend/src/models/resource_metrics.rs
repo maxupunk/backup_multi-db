@@ -17,6 +17,7 @@ pub async fn emit_if_subscribed(ctx: &AppContext) -> Result<bool> {
             "usagePercent": overview.cpu.usage_percent,
             "cores": overview.cpu.cores,
             "model": overview.cpu.model,
+            "hostCores": overview.cpu.host_cores,
         },
         "memory": {
             "totalBytes": overview.memory.total_bytes,
@@ -25,6 +26,12 @@ pub async fn emit_if_subscribed(ctx: &AppContext) -> Result<bool> {
             "usagePercent": overview.memory.usage_percent,
             "source": overview.memory.source,
             "containerLimited": overview.memory.container_limited,
+            "host": overview.memory.host.as_ref().map(|h| serde_json::json!({
+                "totalBytes": h.total_bytes,
+                "usedBytes": h.used_bytes,
+                "freeBytes": h.free_bytes,
+                "usagePercent": h.usage_percent,
+            })),
         },
         "timestamp": chrono::Utc::now().to_rfc3339(),
     });

@@ -257,6 +257,7 @@ export interface MemoryResourceMetrics {
 }
 
 export type { Resources as SystemResourceMetrics } from '@/bindings/Resources'
+export type { HostMemory } from '@/bindings/HostMemory'
 
 export type SystemStatus = SystemOverviewDto
 

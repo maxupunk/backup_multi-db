@@ -38,11 +38,27 @@ pub struct Resources {
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export, export_to = "../../frontend/src/bindings/")]
+pub struct HostMemory {
+    #[ts(type = "number")]
+    pub total_bytes: u64,
+    #[ts(type = "number")]
+    pub used_bytes: u64,
+    #[ts(type = "number")]
+    pub free_bytes: u64,
+    pub usage_percent: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "../../frontend/src/bindings/")]
 pub struct Cpu {
     pub usage_percent: f64,
     #[ts(type = "number")]
     pub cores: usize,
     pub model: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(type = "number | null")]
+    pub host_cores: Option<usize>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -58,6 +74,8 @@ pub struct Memory {
     pub usage_percent: f64,
     pub source: system_monitor::MemorySource,
     pub container_limited: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub host: Option<HostMemory>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -87,6 +105,7 @@ impl From<system_monitor::SystemOverview> for SystemOverview {
                     usage_percent: overview.cpu.usage_percent,
                     cores: overview.cpu.cores,
                     model: overview.cpu.model,
+                    host_cores: overview.cpu.host_cores,
                 },
                 memory: Memory {
                     total_bytes: overview.memory.total_bytes,
@@ -95,6 +114,12 @@ impl From<system_monitor::SystemOverview> for SystemOverview {
                     usage_percent: overview.memory.usage_percent,
                     source: overview.memory.source,
                     container_limited: overview.memory.container_limited,
+                    host: overview.memory.host.map(|h| HostMemory {
+                        total_bytes: h.total_bytes,
+                        used_bytes: h.used_bytes,
+                        free_bytes: h.free_bytes,
+                        usage_percent: h.usage_percent,
+                    }),
                 },
             },
             jobs: Jobs {
@@ -217,6 +242,7 @@ mod tests {
                 usage_percent: 51.35,
                 cores: 8,
                 model: "Contract CPU".to_string(),
+                host_cores: None,
             },
             memory: system_monitor::MemoryMetrics {
                 total_bytes: 33_895_165_952,
@@ -225,6 +251,7 @@ mod tests {
                 usage_percent: 88.18,
                 source: system_monitor::MemorySource::Os,
                 container_limited: false,
+                host: None,
             },
             jobs: system_monitor::JobsStatus {
                 is_running,
