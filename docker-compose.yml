@@ -64,7 +64,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 512M
+          memory: 1G
         reservations:
           # Alinhado ao RSS ocioso real medido em repouso.
           memory: 128M
